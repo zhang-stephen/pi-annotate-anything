@@ -618,19 +618,19 @@ export default function (pi: ExtensionAPI) {
   (`npm install` / pi package install), usage (`/annotate <path>`, key
   table), payload example, development (`npm test`, `npm run typecheck`).
 
-- [ ] **Step 2: Manual e2e checklist** -- run `pi --extension ./index.ts` and
+- [x] **Step 2: Manual e2e checklist** -- run `pi --extension ./index.ts` and
   verify each item, checking the box after each:
-  - [ ] `/annotate <file>` opens the card; syntax highlight visible; line numbers correct
-  - [ ] `hjkl`/arrows/`gg`/`G`/`0`/`$`/ctrl+d/ctrl+u move as expected; no cursor past line end
-  - [ ] `v` char-wise selection renders inverse; `V` line-wise; `o` swaps; Esc cancels
-  - [ ] `c` opens comment box; Enter submits; ctrl+j and shift+enter insert newlines; Esc cancels
-  - [ ] After submit: pill `[path:lines]` appears in composer (inverse-rendered); card stays open
-  - [ ] Second annotation on the same file works; reopened card shows `*` markers + underlines
-  - [ ] Deleting a pill removes its annotation (send a message and confirm expansion skips it)
-  - [ ] Sending expands pills into quote blocks with exact snapshot text
-  - [ ] Errors: missing file, directory, binary file all notify cleanly
+  - [x] `/annotate <file>` opens the card; syntax highlight visible; line numbers correct
+  - [x] `hjkl`/arrows/`gg`/`G`/`0`/`$`/ctrl+d/ctrl+u move as expected; no cursor past line end
+  - [x] `v` char-wise selection renders inverse; `V` line-wise; `o` swaps; Esc cancels
+  - [x] `c` opens comment box; Enter submits; ctrl+j and shift+enter insert newlines; Esc cancels
+  - [x] After submit: pill `[path:lines]` appears in composer (inverse-rendered); card stays open
+  - [x] Second annotation on the same file works; reopened card shows `*` markers + underlines
+  - [x] Deleting a pill removes its annotation (send a message and confirm expansion skips it)
+  - [x] Sending expands pills into quote blocks with exact snapshot text
+  - [x] Errors: missing file, directory, binary file all notify cleanly
 
-- [ ] **Step 3: Update STATUS.md** (plan done) and commit -- `docs: add readme`
+- [x] **Step 3: Update STATUS.md** (plan done) and commit -- `docs: add readme`
 
 ---
 
