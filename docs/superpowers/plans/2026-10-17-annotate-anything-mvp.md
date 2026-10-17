@@ -334,7 +334,7 @@ export function expandTokens(text: string, store: AnnotationStore): { changed: b
 - Create: `src/editor.ts`
 - Create: `test/editor.test.ts`
 
-- [ ] **Step 1: Write failing tests** for the pure recolor helper:
+- [x] **Step 1: Write failing tests** for the pure recolor helper:
 
 ```ts
 export function recolorTokens(line: string, tokens: string[], style: (s: string) => string): string;
@@ -345,13 +345,13 @@ export function recolorTokens(line: string, tokens: string[], style: (s: string)
   returns input unchanged. Test with a trivial style wrapper
   `(s) => \`<${s}>\``.
 
-- [ ] **Step 2: Run tests, expect failure.**
+- [x] **Step 2: Run tests, expect failure.**
 
-- [ ] **Step 3: Implement `recolorTokens`** (plain string split/join on
+- [x] **Step 3: Implement `recolorTokens`** (plain string split/join on
   exact token occurrences -- the token contains no ANSI, rendered lines are
   the editor's plain text lines).
 
-- [ ] **Step 4: Implement `AnnotateEditor`**:
+- [x] **Step 4: Implement `AnnotateEditor`**:
 
 ```ts
 import { CustomEditor } from "@earendil-works/pi-coding-agent";
@@ -372,7 +372,7 @@ export class AnnotateEditor extends CustomEditor {
   Color-only replacement (inverse video). Known limitation, accepted: a
   token split across wrapped lines is not recolored (stays plain text).
 
-- [ ] **Step 5: Run tests + typecheck. Commit** -- `feat(editor): add pill recoloring composer editor`
+- [x] **Step 5: Run tests + typecheck. Commit** -- `feat(editor): add pill recoloring composer editor`
 
 ---
 
