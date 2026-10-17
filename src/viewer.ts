@@ -261,9 +261,15 @@ export class AnnotateCard implements Component, Focusable {
 
   handleInput(data: string): void {
     // Terminals in kitty keyboard mode deliver the Escape key as a CSI-u
-    // sequence (e.g. "\x1b[27u") instead of a bare "\x1b". Normalize every
-    // escape flavor to the legacy form the reducer understands.
-    const key = matchesKey(data, "escape") ? "\x1b" : data;
+    // sequence (e.g. "\x1b[27u") instead of a bare "\x1b", and modifier
+    // combinations like ctrl+j / shift+enter as CSI-u too. Normalize every
+    // flavor to the legacy bytes the reducer understands.
+    const key = matchesKey(data, "escape")
+      ? "\x1b"
+      : this.state.mode === "comment" &&
+          (matchesKey(data, "ctrl+j") || matchesKey(data, "shift+enter"))
+        ? "\n"
+        : data;
     const result = reduceViewer(this.state, key, this.file.lines, { height: this.viewportHeight() }, this.pendingDrafts());
     this.state = result.state;
     if (!result.effect) return;

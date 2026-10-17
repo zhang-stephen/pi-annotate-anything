@@ -668,3 +668,25 @@ test("hover preview: c on the pending line replaces it with the pre-filled edito
   bare = h.card.render(40).map(strip);
   assert.ok(bare[2].includes("╭─ Comment"));
 });
+
+// Kitty keyboard protocol normalization ---------------------------------------
+
+test("kitty CSI-u ctrl+j and shift+enter insert a newline in comment mode", () => {
+  const h = makeCard({ lines: ["alpha", "beta"] });
+  h.card.handleInput("v");
+  h.card.handleInput("c");
+  h.card.handleInput("hello");
+  h.card.handleInput("\x1b[106;5u"); // kitty ctrl+j
+  h.card.handleInput("world");
+  h.card.handleInput("\r");
+  assert.equal(h.calls.annotate[0].comment, "hello\nworld");
+
+  const h2 = makeCard({ lines: ["alpha", "beta"] });
+  h2.card.handleInput("v");
+  h2.card.handleInput("c");
+  h2.card.handleInput("a");
+  h2.card.handleInput("\x1b[13;2u"); // kitty shift+enter
+  h2.card.handleInput("b");
+  h2.card.handleInput("\r");
+  assert.equal(h2.calls.annotate[0].comment, "a\nb");
+});
