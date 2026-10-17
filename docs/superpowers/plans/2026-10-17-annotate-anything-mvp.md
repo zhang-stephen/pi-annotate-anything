@@ -299,7 +299,7 @@ export class AnnotationStore {
 - Create: `src/transform.ts`
 - Create: `test/transform.test.ts`
 
-- [ ] **Step 1: Write failing tests** covering: single token expands inline
+- [x] **Step 1: Write failing tests** covering: single token expands inline
   mid-prose; multiple tokens expand in order; user-typed `[a.ts:10-20]` that
   is NOT in the store stays untouched; tokens are regex-escaped (paths with
   `.` or `[`); text without tokens returns unchanged; expansion separates the
@@ -319,12 +319,12 @@ export function expandTokens(text: string, store: AnnotationStore): { changed: b
 
   Trim trailing whitespace of the preceding prose before inserting.
 
-- [ ] **Step 2: Run tests, expect failure.**
+- [x] **Step 2: Run tests, expect failure.**
 
-- [ ] **Step 3: Implement.** Escape tokens via
+- [x] **Step 3: Implement.** Escape tokens via
   `token.replace(/[.*+?^${}()[\]\\|]/g, "\\$&")` before building the RegExp.
 
-- [ ] **Step 4: Commit** -- `feat(transform): add token expansion on input`
+- [x] **Step 4: Commit** -- `feat(transform): add token expansion on input`
 
 ---
 
