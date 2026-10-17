@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.1.1](https://github.com/zhang-stephen/pi-annotate-anything/compare/pi-annotate-anything-v1.1.0...pi-annotate-anything-v1.1.1) (2026-10-17)
+
+
+### Bug Fixes
+
+* **composer:** coexist with other extensions' editors (predecessor-preserving, lazy install) ([b3805e3](https://github.com/zhang-stephen/pi-annotate-anything/commit/b3805e3307bf670483e31a45bb08cea132f87e5e))
+
 ## [1.1.0](https://github.com/zhang-stephen/pi-annotate-anything/compare/pi-annotate-anything-v1.0.0...pi-annotate-anything-v1.1.0) (2026-10-17)
 
 
