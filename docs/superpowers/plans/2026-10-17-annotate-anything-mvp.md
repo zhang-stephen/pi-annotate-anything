@@ -257,7 +257,7 @@ Comment: <comment>
 - Create: `src/store.ts`
 - Create: `test/store.test.ts`
 
-- [ ] **Step 1: Write failing tests** covering: add returns a unique token;
+- [x] **Step 1: Write failing tests** covering: add returns a unique token;
   identical file+range annotated twice gets ` ~2` suffix; `list()` order is
   insertion order; `prune(presentTokens)` drops entries whose token is gone;
   `clear()` empties; token lookup by exact match only; `pruneFromText(text)`
@@ -285,11 +285,11 @@ export class AnnotationStore {
 }
 ```
 
-- [ ] **Step 2: Run tests, expect failure.**
+- [x] **Step 2: Run tests, expect failure.**
 
-- [ ] **Step 3: Implement** (Map-based, insertion order).
+- [x] **Step 3: Implement** (Map-based, insertion order).
 
-- [ ] **Step 4: Commit** -- `feat(store): add annotation draft store`
+- [x] **Step 4: Commit** -- `feat(store): add annotation draft store`
 
 ---
 
