@@ -37,3 +37,13 @@ a quote block plus comment into the conversation.
 - `package.json` carries `"keywords": ["pi-package"]`.
 - Host packages such as `@earendil-works/pi-coding-agent` go in
   `peerDependencies` with `"*"`, never in `dependencies`.
+
+## Progress tracking
+
+- `docs/superpowers/STATUS.md` is the entry point at session start: read it
+  before opening any spec or plan.
+- Specs and plans marked `done` in STATUS.md are NOT read again, unless the
+  current work touches that area.
+- Fine-grained progress lives in plan checkboxes (`- [ ]` / `- [x]`).
+- When finishing a task or step, update the plan checkboxes AND STATUS.md in
+  the same commit as the work.
