@@ -138,7 +138,7 @@ Pure selection math. No I/O, no pi imports.
 - Create: `src/selection.ts`
 - Create: `test/selection.test.ts`
 
-- [ ] **Step 1: Write failing tests** covering: forward/backward
+- [x] **Step 1: Write failing tests** covering: forward/backward
   normalization; char-wise keeps columns; line-wise expands to full lines
   (col 0 to line length); cursor clamped to last column of line and to file
   bounds; `o` swaps anchor/cursor.
@@ -158,11 +158,11 @@ export function clampPosition(pos: Position, lines: string[]): Position;
   Line-wise semantics: `startCol = 0`, `endCol = lines[endLine].length`
   (end-exclusive), matching how extraction slices.
 
-- [ ] **Step 2: Run tests, expect failure.** Run: `node --test test/`
+- [x] **Step 2: Run tests, expect failure.** Run: `node --test test/`
 
-- [ ] **Step 3: Implement `src/selection.ts`.** Re-run tests until green.
+- [x] **Step 3: Implement `src/selection.ts`.** Re-run tests until green.
 
-- [ ] **Step 4: Commit** -- `feat(selection): add selection model`
+- [x] **Step 4: Commit** -- `feat(selection): add selection model`
 
 ---
 
