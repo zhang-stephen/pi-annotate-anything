@@ -16,7 +16,7 @@ pi's own overlay surfaces (e.g. the background-tasks manager) solve this by pain
 2. The top border carries an embedded title: `╭─ Annotate: <relative-path> (N) ──...──╮` where N is the live count of pending annotations for the file (drafts whose pill still lives in the composer; pruned drafts stop counting immediately). N is omitted when 0. Long paths are truncated from the left to keep the file name visible.
 3. A footer row inside the bottom of the panel shows mode-aware key hints, dimmed via the theme.
 4. The comment input is a floating bordered sub-panel that opens adjacent to the current selection inside the card (below the selection's last visible row, flipping above it when space runs out; horizontally aligned to the selection start column, clamped to the panel width). It carries an embedded `Comment` title. The editor box is fixed-width (`min(innerWidth, 64)` columns; it never resizes while typing), soft-wraps its text at the box's inner content width, caps at 8 rows (6 content rows) with a scroll window that keeps the cursor's row visible, and emulates the text cursor with SGR inverse video (the character under the cursor is inverted; at end of line an inverse space). The cursor appears only in comment mode, never in the read-only preview.
-5. Pending annotation styling: the range text is underlined with raw SGR 4 (theme-neutral) and the gutter `*` marker (and nothing else) keeps the theme warning color.
+5. Pending annotation styling: the range text is underlined with raw SGR 4 (theme-neutral) and the gutter marker (and nothing else) keeps the theme warning color. The marker is the Nerd Font comment icon U+F075 (`nf-fa-comment`) followed by the number of pending drafts covering the line (`+` above 9); lines without drafts render a blank field of the same width. Assuming a monospace Nerd Font (NF Mono), the icon is exactly 1 cell, so the marker field is a fixed 2 cells and line numbers never shift horizontally.
 6. Pending annotations are editable in place. Key choices follow vim conventions: `c` is the change operator (in visual mode it comments the selection, unchanged; in normal mode with the cursor on a line covered by a pending annotation it reopens the floating comment box pre-filled with the existing comment and updates the draft in place on submit). `x` deletes the pending annotation under the cursor, mirroring vim's delete-char-under-cursor: the draft is removed and its pill token is stripped from the composer text. `d` is deliberately not used: it is an operator prefix in vim and would imply a pending-operator state machine.
 7. Hover-style comment preview, toggleable. In normal mode, when the cursor rests on a line covered by a pending annotation, a read-only floating box (same chrome as the comment editor, `Comment` title) appears adjacent to the cursor line showing that annotation's comment. Moving off the line dismisses it. Pressing `c` turns the preview into the editor in place. Overlapping drafts: the most recently added one wins, matching the `c` and `x` targeting rule. Long comments are capped at 6 box rows. `p` toggles the preview on and off (normal mode); the toggle is card-session state, defaults to ON, and is deliberately NOT a persisted config option - pi's extension settings system is not unified yet. `p` has no vim meaning here (no paste/register concept in the card), so there is no habit conflict. The lookup is an O(pending-count) scan on the render path, which already runs per keystroke; no I/O, no re-highlight, no measurable cost.
 
@@ -40,8 +40,8 @@ All colors come from the active pi theme through `theme.fg()` token lookups (`bo
 
 ```
 ╭─ Annotate: src/viewer.ts (2) ─────────────╮
-│  10   func handler() {                    │
-│  11 *   result := compute(ctx)            │   * = pending (SGR 4 underline)
+│  10    func handler() {                   │
+│  11 1  result := compute(ctx)            │   N = pending draft count (Nerd Font nf-fa-comment, U+F075; SGR 4 underline)
 │  ...                                      │
 │ hjkl move  v select  c comment  q close   │
 ╰───────────────────────────────────────────╯
@@ -50,12 +50,12 @@ All colors come from the active pi theme through `theme.fg()` token lookups (`bo
 Comment mode floats the sub-panel next to the selection:
 
 ```
-│  10   func handler() {                    │
-│  11 >   result := compute(ctx)            │   > = selection
-│       ╭─ Comment ─────────────────────╮   │
-│       │ this is the comment text█     │   │   █ = inverse cursor
-│       ╰───────────────────────────────╯   │
-│  12   ...                                 │
+│  10    func handler() {                   │
+│  11 >  result := compute(ctx)             │   > = selection (2-cell marker field)
+│        ╭─ Comment ─────────────────────╮  │
+│        │ this is the comment text█     │  │   █ = inverse cursor
+│        ╰───────────────────────────────╯  │
+│  12    ...                                │
 │ Enter submit  ctrl+j newline  Esc cancel  │
 ╰───────────────────────────────────────────╯
 ```
@@ -99,7 +99,7 @@ Pill tokens are a deterministic function of path + range, so editing a comment n
 - Card shows border, embedded title with path and live pending count, and a mode-correct footer (badge in accent, hints in dim) in all four modes, including `-- NORMAL --`. Background is transparent by design (overlays repaint every cell).
 - No bleed-through of underlying content at any card row.
 - Comment input floats adjacent to the selection (below, flipping above near the bottom; left edge aligned to selection start, clamped to the panel), fixed-width with soft wrap, 8-row cap, and an emulated inverse cursor; Enter/Esc/ctrl+j behavior unchanged.
-- Pending annotations still marked with gutter `*` in the theme warning color; the range text is underlined via raw SGR 4.
+- Pending annotations still marked in the gutter with the warning-colored comment icon (U+F075 `nf-fa-comment`) plus the per-line draft count; the range text is underlined via raw SGR 4.
 - `node --test test/` and `npx tsc --noEmit` stay green; new helper tests cover border geometry with wide characters and long-path truncation.
 - Editing a comment updates the draft in place: token unchanged, composer pill untouched, snapshot unchanged. Deleting removes the draft and strips its pill from the composer.
 - Normal-mode preview: cursor on a pending line shows the comment in a read-only floating box next to the line; moving away dismisses it; `c` converts the preview into the pre-filled editor.

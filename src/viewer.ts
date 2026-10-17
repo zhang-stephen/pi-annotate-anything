@@ -86,11 +86,19 @@ export function rawColToDisplayCol(line: string, col: number, tabSize: number = 
   return width;
 }
 
+// Pending gutter marker: the Nerd Font comment bubble followed by the number
+// of pending drafts covering the line ("+" above 9), or a blank 2-cell field
+// when the line has none. NF Mono renders the icon in exactly 1 cell, so the
+// field is a fixed 2 columns (icon + count digit); no width measuring for it.
+export const PENDING_ICON = "\u{F075}"; // nf-fa-comment
+const MARKER_FIELD_WIDTH = 2; // icon (1 cell) + count digit (1 cell)
+
 // Gutter width for a file with lineCount lines: right-aligned line number
-// (width of the largest 1-based number), a space, the pending-marker column,
-// and a space. Must stay in sync with AnnotateCard.gutter.
+// (width of the largest 1-based number), a space, the pending-marker field
+// (always present, blank when the line has no drafts, so line numbers never
+// shift horizontally), and a space. Must stay in sync with AnnotateCard.gutter.
 export function gutterWidth(lineCount: number): number {
-  return String(Math.max(1, lineCount)).length + 3;
+  return String(Math.max(1, lineCount)).length + MARKER_FIELD_WIDTH + 2;
 }
 
 // Display-column spans to style within one rendered line. Styling functions
@@ -137,7 +145,7 @@ export class AnnotateCard implements Component, Focusable {
   private readonly tui: TUI;
   private readonly file: { path: string; lines: string[] }; // LF-normalized source
   // Live getter, re-read on every render: annotations created while the card
-  // stays open show their "*" marker + underline immediately.
+  // stays open show their gutter marker + underline immediately.
   private readonly pending: () => Range[];
   private readonly onAnnotate: (range: Range, mode: VisualMode, comment: string) => void;
   private readonly done: () => void;
@@ -192,7 +200,7 @@ export class AnnotateCard implements Component, Focusable {
     };
     // Inverse and underline stay raw ANSI (theme-neutral): inverse is the
     // cursor/selection highlight, SGR 4 underlines pending ranges; the
-    // pending gutter star keeps the theme warning color.
+    // pending gutter marker keeps the theme warning color.
     this.spanStyles = {
       inverse: (s) => INVERSE_ON + s + INVERSE_OFF,
       underline: (s) => UNDERLINE_ON + s + UNDERLINE_OFF,
@@ -369,7 +377,12 @@ export class AnnotateCard implements Component, Focusable {
       const idx = place.top + k;
       if (idx >= vh) continue;
       const base = rows[idx];
-      rows[idx] = sliceByColumn(base, 0, place.left) + box[k] + sliceByColumn(base, place.left + boxW, inner - place.left - boxW);
+      // The left sliver may end mid-SGR-run (e.g. an underline the box edge
+      // cuts in half); close underline + inverse so the box border glyphs do
+      // not inherit the open attributes. The right sliver re-opens its
+      // carried state itself (sliceByColumn).
+      rows[idx] =
+        sliceByColumn(base, 0, place.left) + UNDERLINE_OFF + INVERSE_OFF + box[k] + sliceByColumn(base, place.left + boxW, inner - place.left - boxW);
     }
   }
 
@@ -384,12 +397,19 @@ export class AnnotateCard implements Component, Focusable {
     );
   }
 
-  // "N * " style gutter; line numbers are 1-based (see message.ts). The
-  // pending marker column uses the theme warning color.
+  // Gutter for one file line: right-aligned 1-based line number (see
+  // message.ts), a space, the pending-marker field, and a space. The field is
+  // always MARKER_FIELD_WIDTH display columns (blank when no draft covers the
+  // line) so line numbers never shift horizontally; when drafts cover the
+  // line it shows PENDING_ICON plus the draft count ("+" above 9) in the
+  // theme warning color.
   private gutter(line: number): string {
     const digits = String(Math.max(1, this.file.lines.length)).length;
-    const marked = this.pending().some((r) => r.startLine <= line && line <= r.endLine);
-    return String(line + 1).padStart(digits) + " " + (marked ? this.colors.warning("*") : " ") + " ";
+    const count = this.pending().filter((r) => r.startLine <= line && line <= r.endLine).length;
+    const field = count === 0
+      ? " ".repeat(MARKER_FIELD_WIDTH)
+      : this.colors.warning(PENDING_ICON + (count > 9 ? "+" : String(count)));
+    return String(line + 1).padStart(digits) + " " + field + " ";
   }
 
   // One file line: highlighted content unless the selection covers the line

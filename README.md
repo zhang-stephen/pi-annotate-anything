@@ -82,7 +82,7 @@ Label variants:
 ## Behavior notes
 
 - The card stays open after submitting an annotation so you can mark several ranges in one pass. Close it with `Esc` or `q`, then compose prose around the pills in the composer. Sending always happens from the composer.
-- Pending (unsent) annotations render as an SGR-underlined range with a warning-colored `*` gutter marker; resting the cursor on one previews its comment.
+- Pending (unsent) annotations render as an SGR-underlined range with a warning-colored gutter marker: the Nerd Font comment icon (U+F075 `nf-fa-comment`) followed by the number of pending drafts covering the line (`+` above 9). Lines without drafts render a blank field of the same width, so line numbers never shift. Resting the cursor on one previews its comment.
 - An empty comment is allowed: the annotation is sent without a `Comment:` line.
 - Deleting a pill from the composer deletes that annotation; its markers disappear from the card.
 - Sending the message expands every remaining pill into its payload and clears them.

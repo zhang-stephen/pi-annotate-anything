@@ -79,8 +79,9 @@ function moved(state: ViewerState, to: Position, lines: string[], vh: number): V
 // \r submits, \n and \x1b\r insert newlines, \x7f backspaces, \x1b cancels.
 // Any other chunk free of control characters is appended whole, so
 // multi-char input (pastes, astral chars) is not dropped; chunks containing
-// Esc or C0 controls (except \t) are ignored so terminal escape sequences
-// never leak into the text.
+// Esc or C0 controls (including \t) are ignored so terminal escape sequences
+// never leak into the text. Tabs are rejected too: the box renderer never
+// expands tabs, so a tab would misalign the wrap/cursor column math.
 function toCommentKey(key: string): CommentKey | null {
   if (key === "\r") return { kind: "submit" };
   if (key === "\n" || key === "\x1b\r") return { kind: "newline" };
@@ -89,7 +90,7 @@ function toCommentKey(key: string): CommentKey | null {
   if (key.length === 0) return null;
   for (const ch of key) {
     const code = ch.codePointAt(0) as number;
-    if (ch === "\x1b" || (code < 0x20 && ch !== "\t")) return null;
+    if (code < 0x20) return null; // Esc and C0 controls, \t included
   }
   return { kind: "char", ch: key };
 }

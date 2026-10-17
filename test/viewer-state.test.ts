@@ -365,6 +365,17 @@ test("reduceViewer: chunks with Esc or C0 controls are ignored in comment mode",
   }
 });
 
+test("reduceViewer: tab characters are rejected in comment mode", () => {
+  // The box renderer never expands tabs, so \t would misalign the wrap and
+  // cursor column math; whole chunks containing one are ignored.
+  const start = commentState("a");
+  for (const key of ["\t", "x\ty"]) {
+    const res = view(start, key);
+    assert.deepEqual(res.state.comment, { text: "a" });
+    assert.equal(res.effect, undefined);
+  }
+});
+
 test("reduceViewer: unmapped escape sequences are ignored in comment mode", () => {
   const start = commentState("a");
   const res = view(start, "\x1b[A");
