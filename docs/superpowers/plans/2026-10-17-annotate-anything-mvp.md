@@ -46,10 +46,12 @@ native type stripping on Node >= 22.18), `tsc --noEmit` for typechecking.
 3. Wide chars/tabs: selection math on raw columns, display math via
    `visibleWidth()`; tab expansion mapping helper must be tested.
 4. CRLF and binary/size guards in file loading.
-5. Draft lifecycle: pills survive the editor clear on submit; store clears
-   only at `message_start`. Orphan pruning happens at three reconcile
-   points: editor text change (AnnotateEditor hook), card open (via
-   `getEditorText()`), and before transform on `input`.
+5. Draft lifecycle: the composer text is the source of truth for draft
+   survival. `pruneFromText(editorText)` runs at every trigger point:
+   editor text change, card open, before transform on `input`, and on
+   `message_start` (no blind `clear()` -- a message_start from an
+   RPC/extension-sent message must not kill drafts whose pills are still in
+   the composer). Store is dropped at session shutdown.
 
 ---
 
@@ -578,7 +580,8 @@ export default function (pi: ExtensionAPI) {
     return { action: "transform", text: result.text };
   });
 
-  pi.on("message_start", () => store.clear());
+  pi.on("message_start", (_event, ctx) =>
+    store.pruneFromText(ctx.ui.getEditorText()));
 }
 ```
 
@@ -593,7 +596,12 @@ export default function (pi: ExtensionAPI) {
     AnnotateCard, so markers never outlive their pills.
   - AnnotateEditor prunes on text change: override the text-mutation path
     (setText/clear or a handleInput post-check) so deleting a pill prunes
-    its draft immediately.
+    its draft immediately. Clearing the whole composer therefore clears all
+    drafts, which matches the user's mental model.
+  - `message_start` must NOT blindly `clear()`: run
+    `store.pruneFromText(ctx.ui.getEditorText())` instead. After the user's
+    own send the editor is empty, so this clears everything; an unrelated
+    RPC/extension message_start keeps drafts whose pills are still present.
 
 - [ ] **Step 2: Typecheck** -- `npx tsc --noEmit` clean.
 

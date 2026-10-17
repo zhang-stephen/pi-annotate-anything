@@ -82,7 +82,10 @@ them all in one message.
        Comment: <user comment>
 
    Line-wise selections render as `(lines 10-20)`.
-4. `message_start` clears the draft store; card markers vanish.
+4. `message_start` prunes drafts whose tokens are no longer in the composer
+   (after the user's own send, the composer is empty, so all drafts go; an
+   unrelated RPC/extension-sent message keeps drafts whose pills remain).
+   Card markers vanish accordingly.
 
 ## 4. Architecture
 
@@ -118,9 +121,11 @@ Built from the path (relative to cwd when possible, basename-heavy when long)
 plus the range. If the identical label is already taken, a suffix disambiguates
 (`[a.ts:10-20 ~2]`). Inserted via `ctx.ui.pasteToEditor()`. Because the token
 is short, it stays in the composer as plain text; the custom editor recolors
-it (section 5.2). Deleting the token text deletes the annotation: orphaned
-store entries are pruned at three reconcile points (editor text change, card
-open via `getEditorText()`, and before expansion on each `input` event).
+it (section 5.2). The composer text is the source of truth for draft
+survival: drafts whose token no longer appears in the composer are pruned at
+every trigger point (editor text change, card open via `getEditorText()`,
+before expansion on each `input` event, and on `message_start`). Clearing
+the composer therefore clears all unsent drafts.
 
 ### 5.2 Custom editor (pill rendering)
 
