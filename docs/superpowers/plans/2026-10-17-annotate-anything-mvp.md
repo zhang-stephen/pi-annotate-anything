@@ -172,7 +172,7 @@ export function clampPosition(pos: Position, lines: string[]): Position;
 - Create: `src/file-range.ts`
 - Create: `test/file-range.test.ts`
 
-- [ ] **Step 1: Write failing tests** covering: `~` and relative path
+- [x] **Step 1: Write failing tests** covering: `~` and relative path
   resolution against cwd; reject directories, missing files, NUL-containing
   (binary) files, files over 1 MB; CRLF normalized to LF; extraction of
   full-line ranges, mid-line char ranges, ranges spanning lines; empty file
@@ -194,12 +194,12 @@ export function extractRange(lines: string[], range: Range): string;
   `line.slice(startCol, endCol)`; multi-line keeps middle lines whole.
   Newlines between selected lines are included in the snapshot.
 
-- [ ] **Step 2: Run tests, expect failure.**
+- [x] **Step 2: Run tests, expect failure.**
 
-- [ ] **Step 3: Implement.** Use `node:fs` (`statSync` size check before
+- [x] **Step 3: Implement.** Use `node:fs` (`statSync` size check before
   read), `node:os` homedir for `~`, `node:path`.
 
-- [ ] **Step 4: Commit** -- `feat(file): add file loading with guards and range extraction`
+- [x] **Step 4: Commit** -- `feat(file): add file loading with guards and range extraction`
 
 ---
 
