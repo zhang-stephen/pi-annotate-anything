@@ -6,7 +6,7 @@
 
 import { getLanguageFromPath, highlightCode } from "@earendil-works/pi-coding-agent";
 import type { Component, Focusable, TUI } from "@earendil-works/pi-tui";
-import { sliceByColumn, truncateToWidth, visibleWidth } from "@earendil-works/pi-tui";
+import { matchesKey, sliceByColumn, truncateToWidth, visibleWidth } from "@earendil-works/pi-tui";
 
 import { renderCommentBox } from "./comment-input.ts";
 import { normalize } from "./selection.ts";
@@ -185,7 +185,11 @@ export class AnnotateCard implements Component, Focusable {
   }
 
   handleInput(data: string): void {
-    const result = reduceViewer(this.state, data, this.file.lines, { height: this.viewportHeight() });
+    // Terminals in kitty keyboard mode deliver the Escape key as a CSI-u
+    // sequence (e.g. "\x1b[27u") instead of a bare "\x1b". Normalize every
+    // escape flavor to the legacy form the reducer understands.
+    const key = matchesKey(data, "escape") ? "\x1b" : data;
+    const result = reduceViewer(this.state, key, this.file.lines, { height: this.viewportHeight() });
     this.state = result.state;
     if (!result.effect) return;
     if (result.effect.type === "annotate") {
