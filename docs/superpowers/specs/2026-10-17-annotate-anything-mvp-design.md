@@ -1,7 +1,10 @@
+---
+status: done
+---
+
 # pi-annotate-anything MVP Design
 
 Date: 2026-10-17
-Status: done
 
 ## 1. Problem
 

@@ -1,6 +1,9 @@
+---
+status: approved
+---
+
 # Annotate stacked comments & gutter semantics design
 
-Status: approved (design agreed in conversation 2026-10-17/18; implementation pending)
 Scope: follow-up batch on top of the card-chrome work (merged to master).
 Target release: 1.1.0 via release-please.
 Also in scope: README.md rewrite and an AGENTS.md Releases section.

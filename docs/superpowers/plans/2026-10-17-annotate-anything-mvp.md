@@ -1,3 +1,8 @@
+---
+status: done
+progress: 12/12
+---
+
 # pi-annotate-anything MVP Implementation Plan
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers-zh's

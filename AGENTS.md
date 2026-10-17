@@ -30,9 +30,16 @@ Project: **pi-annotate-anything** -- a Pi coding agent extension for annotating 
 - `package.json` carries `"keywords": ["pi-package"]`.
 - Host packages such as `@earendil-works/pi-coding-agent` go in `peerDependencies` with `"*"`, never in `dependencies`.
 
+## Releases
+
+- Versions and changelogs are managed by **release-please**; never bump
+  `package.json` `"version"` or edit `CHANGELOG.md` by hand.
+- Merging a release PR tags the release and publishes to npm via **trusted
+  publishing (OIDC)**; there is no npm token in the repo.
+
 ## Progress tracking
 
-- `docs/superpowers/STATUS.md` is the entry point at session start: read it before opening any spec or plan.
-- Specs and plans marked `done` in STATUS.md are NOT read again, unless the current work touches that area.
+- `docs/superpowers/STATUS.md` is the entry point at session start. It is a pure index; the authoritative status of a spec/plan lives in its own YAML front-matter: `status: draft|approved|in-progress|done`, plans also carry `progress: n/m`.
+- Specs and plans with `status: done` are NOT read again, unless the current work touches that area.
 - Fine-grained progress lives in plan checkboxes (`- [ ]` / `- [x]`).
-- When finishing a task or step, update the plan checkboxes AND STATUS.md in the same commit as the work.
+- When finishing a task or step, update the plan checkboxes AND the front-matter (`status`/`progress`) AND STATUS.md in the same commit as the work.

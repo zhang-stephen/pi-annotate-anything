@@ -1,6 +1,9 @@
+---
+status: draft
+---
+
 # CI TUI E2E - Design
 
-Status: draft (awaiting approval)
 Date: 2026-10-17
 Follow-up to: 2026-10-17-annotate-card-chrome-design.md
 

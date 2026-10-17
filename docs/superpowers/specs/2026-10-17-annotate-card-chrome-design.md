@@ -1,6 +1,9 @@
+---
+status: done
+---
+
 # Annotate Card Chrome - Design
 
-Status: approved
 Date: 2026-10-17
 Follow-up to: 2026-10-17-annotate-anything-mvp-design.md (done)
 

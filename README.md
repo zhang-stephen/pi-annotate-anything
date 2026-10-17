@@ -1,25 +1,36 @@
 # pi-annotate-anything
 
-A [Pi](https://github.com/earendil-works/pi-coding-agent) coding agent extension for annotating arbitrary line/character ranges of any local file. Annotations are injected into the conversation as a quote block plus comment.
+[![npm version](https://img.shields.io/npm/v/pi-annotate-anything)](https://www.npmjs.com/package/pi-annotate-anything)
+[![ci](https://github.com/zhang-stephen/pi-annotate-anything/actions/workflows/ci.yml/badge.svg)](https://github.com/zhang-stephen/pi-annotate-anything/actions/workflows/ci.yml)
+[![license](https://img.shields.io/npm/l/pi-annotate-anything)](LICENSE)
 
-Open any file in an overlay viewer, select a range the way vim does, attach a comment, and send it to the agent as part of a normal message. Built for plan and code review: mark several ranges while the agent is busy, then send them all in one message.
+A [Pi](https://github.com/earendil-works/pi-coding-agent) coding agent extension for annotating arbitrary line/character ranges of any local file, injected into the conversation as a quote block plus comment.
 
-## How it works
+## Highlights
 
-1. `/annotate <path>` opens an overlay card showing the file with line numbers and syntax highlighting.
-2. You select a range in visual mode and press `c` to write a comment.
-3. On submit, a short pill token such as `[src/a.ts:10-20]` is inserted into the composer. The card stays open for the next annotation.
-4. When you send your message, every pill is expanded into a full payload containing an exact snapshot of the selected text plus your comment.
+- **Vim-like modal interaction.** The annotation card is a modal viewer with normal / visual / comment modes: `h j k l` movement, `v` / `V` char-wise and line-wise selection, `gg` / `G`, half-page jumps, `c` to comment, `x` to delete, `Esc` to back out. If your fingers know vim, they already know this card.
+- **Annotate anything.** Any local file, not just code: source, logs, configs, docs, data. Any range, down to character precision. Each annotation becomes a pill in the composer and ships to the agent as an exact annotate-time snapshot plus your comment.
 
-The payload carries the text you saw at annotate time, not a re-read of the file, so agent-visible content never silently drifts.
+## Demo
+
+<!-- TODO: terminal recording (asciinema / vhs) of /annotate in action -->
 
 ## Install
 
-This is a Pi extension package (`pi-package`). Install it with npm as you would any package, or run it directly from source during development:
-
 ```sh
-pi --extension /path/to/pi-annotate-anything
+pi install npm:pi-annotate-anything
 ```
+
+## Features
+
+- Overlay card with line numbers, syntax highlighting, a live pending-count title bar, and a vim-style mode badge footer.
+- Composer pills like `[src/a.ts:10-20]` that expand into full quote-block-plus-comment payloads when the message is sent.
+- Annotate-time snapshots: the payload carries the text you saw when annotating, never a silent re-read of the file.
+- Floating comment editor next to the selection with soft wrap and multiline support (`ctrl+j` / `shift+enter`).
+- Pending ranges marked with underlines plus a gutter marker (Nerd Font icon + count on each draft's start line, continuation lines get a dim bar).
+- Stacked annotations: when several pending drafts cover the cursor, `Tab` cycles the target; preview, edit (`c`), and delete (`x`) act on the target.
+- Hover preview of the comment under the cursor (`p` toggles it).
+- The card stays open after each annotation: mark many ranges in one pass, then send them all in one message.
 
 ## Usage
 
@@ -41,15 +52,12 @@ pi --extension /path/to/pi-annotate-anything
 | `v` | Start char-wise selection; in visual mode, switch to char-wise or exit |
 | `V` | Start line-wise selection; in visual mode, switch to line-wise or exit |
 | `o` | Swap the anchor and cursor ends (visual mode only) |
-| `c` | Visual mode: comment the selection. Normal mode on a line with a pending annotation: edit its comment (pre-filled) |
-| `x` | Delete the pending annotation under the cursor (normal mode); also removes its pill from the composer |
+| `Tab` | Cycle the target among stacked pending annotations under the cursor (normal mode) |
+| `c` | Visual mode: comment the selection. Normal mode: edit the targeted annotation's comment (pre-filled) |
+| `x` | Delete the targeted pending annotation; also removes its pill from the composer |
 | `p` | Toggle the hover preview of pending comments (normal mode) |
 | `Esc` | Cancel the selection or comment box; otherwise close the card |
 | `q` | Close the card (normal mode only) |
-
-The card is a bordered panel: the title bar shows the file path and live pending count, and the footer shows a vim-style mode badge (`-- NORMAL --`, `-- VISUAL --`, `-- VISUAL LINE --`, `-- COMMENT --`) plus the keys available in that mode. In normal mode, resting the cursor on a line with a pending annotation shows a read-only preview of its comment; press `c` to edit it in place.
-
-The cursor clamps to the last column of the current line: `l` at the end of a line does not wrap to the next line. Reversed selections (bottom-up) are normalized automatically.
 
 ### Keys: comment box
 
@@ -61,13 +69,24 @@ The cursor clamps to the last column of the current line: `l` at the end of a li
 
 The comment box is a floating panel that opens next to the selection (below it, or above when space runs out).
 
+### Stacked annotations and the gutter
+
+Pending annotations render as underlined ranges. The gutter before each line shows a marker field of fixed width:
+
+- On a draft's start line: the comment icon plus the number of drafts starting there (warning color, `+` above 9).
+- On lines a draft merely passes through: a dim vertical bar.
+- The sum of all gutter counts always equals the pending count in the title bar.
+
+When the cursor sits on a position covered by several pending drafts, exactly one is the target: its range renders bold and warning-colored, overlapping non-targets go dim, and the preview box shows its comment with a `(i/n)` position indicator. Press `Tab` to cycle the target (newest first, wrapping); moving the cursor resets the cycle.
+
 ## Payload format
 
 A pill in the composer looks like `[src/a.ts:10-20]`. When the message is sent, it is expanded to:
 
 ````text
 In `src/a.ts` (lines 10-20):
-```ts export function greet(name: string) { return `Hello, ${name}`; }
+```ts
+export function greet(name: string) { return `Hello, ${name}`; }
 ```
 Comment: this name is misleading, rename it?
 ````
@@ -82,7 +101,6 @@ Label variants:
 ## Behavior notes
 
 - The card stays open after submitting an annotation so you can mark several ranges in one pass. Close it with `Esc` or `q`, then compose prose around the pills in the composer. Sending always happens from the composer.
-- Pending (unsent) annotations render as an SGR-underlined range with a warning-colored gutter marker: the Nerd Font comment icon (U+F075 `nf-fa-comment`) followed by the number of pending drafts covering the line (`+` above 9). Lines without drafts render a blank field of the same width, so line numbers never shift. Resting the cursor on one previews its comment.
 - An empty comment is allowed: the annotation is sent without a `Comment:` line.
 - Deleting a pill from the composer deletes that annotation; its markers disappear from the card.
 - Sending the message expands every remaining pill into its payload and clears them.
@@ -104,6 +122,10 @@ Run the extension from source:
 ```sh
 pi --extension ./index.ts
 ```
+
+### Release
+
+Versions, changelogs, and npm publishing are automated: [release-please](https://github.com/googleapis/release-please) opens a release PR from Conventional Commits, and merging it tags the release and publishes to npm via trusted publishing (OIDC). Never bump `package.json` or edit `CHANGELOG.md` by hand.
 
 ## License
 

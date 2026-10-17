@@ -1,6 +1,6 @@
 ---
-status: in-progress
-progress: 2/3
+status: done
+progress: 3/3
 ---
 
 # Annotate stacked cycling & gutter semantics implementation plan
@@ -37,6 +37,6 @@ Files: `src/viewer.ts`, `src/card-chrome.ts`, `test/viewer.test.ts`, `test/card-
 
 Files: `README.md`, `AGENTS.md`, `docs/superpowers/STATUS.md`
 
-- [ ] README rewrite (structure: title + one-liner + badges, Highlights [Vim-like modal, Annotate anything], Demo placeholder, Install, Features, Usage, How it works, Development/Release, License). Install uses ONLY `pi install npm:pi-annotate-anything` (never bare npm install). Refreshed key tables (Tab cycling, p, c, x), stacked cycling behavior, new gutter semantics with worked example.
-- [ ] AGENTS.md: Releases section (release-please flow, no manual version/CHANGELOG edits, npm trusted publishing).
-- [ ] Status tracking migrated to YAML front-matter on all spec/plan files (status/progress fields, historical files migrated); STATUS.md slimmed to a pure index; merge bookkeeping.
+- [x] README rewrite (structure: title + one-liner + badges, Highlights [Vim-like modal, Annotate anything], Demo placeholder, Install, Features, Usage, How it works, Development/Release, License). Install uses ONLY `pi install npm:pi-annotate-anything` (never bare npm install). Refreshed key tables (Tab cycling, p, c, x), stacked cycling behavior, new gutter semantics with worked example.
+- [x] AGENTS.md: Releases section (release-please flow, no manual version/CHANGELOG edits, npm trusted publishing).
+- [x] Status tracking migrated to YAML front-matter on all spec/plan files (status/progress fields, historical files migrated); STATUS.md slimmed to a pure index; merge bookkeeping.

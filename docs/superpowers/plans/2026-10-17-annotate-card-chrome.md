@@ -1,3 +1,8 @@
+---
+status: done
+progress: 5/5
+---
+
 # Annotate Card Chrome Implementation Plan
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers-zh's subagent-driven-development or executing-plans to implement this plan task by task. Steps use checkbox (`- [ ]`) syntax for tracking.
