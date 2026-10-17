@@ -29,3 +29,6 @@ coverage/
 
 # Pi local state
 .pi/
+
+# Superpowers workspace
+.superpowers/
