@@ -62,13 +62,13 @@ native type stripping on Node >= 22.18), `tsc --noEmit` for typechecking.
 - Create: `tsconfig.json`
 - Create: `test/smoke.test.ts`
 
-- [ ] **Step 1: Install dev dependencies**
+- [x] **Step 1: Install dev dependencies**
 
 ```bash
 npm install --save-dev @earendil-works/pi-coding-agent@1.3.0 @earendil-works/pi-tui@1.3.0 typescript
 ```
 
-- [ ] **Step 2: Update package.json**
+- [x] **Step 2: Update package.json**
 
 Set scripts and peer deps:
 
@@ -85,7 +85,7 @@ Set scripts and peer deps:
 }
 ```
 
-- [ ] **Step 3: Create tsconfig.json**
+- [x] **Step 3: Create tsconfig.json**
 
 ```json
 {
@@ -106,7 +106,7 @@ Set scripts and peer deps:
 Imports use explicit `.ts` extensions (jiti resolves them; tsc accepts them
 via `allowImportingTsExtensions`).
 
-- [ ] **Step 4: Smoke test the runner**
+- [x] **Step 4: Smoke test the runner**
 
 Create `test/smoke.test.ts`:
 
@@ -122,7 +122,7 @@ test("runner works", () => {
 Run: `node --test test/` -- expected: 1 passing test.
 Run: `npx tsc --noEmit` -- expected: clean.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add -A && git commit -m "chore: scaffold test runner and typescript config"
