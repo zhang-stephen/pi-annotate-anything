@@ -614,7 +614,7 @@ export default function (pi: ExtensionAPI) {
 **Files:**
 - Create: `README.md`
 
-- [ ] **Step 1: Write README.md** (English): what it does, install
+- [x] **Step 1: Write README.md** (English): what it does, install
   (`npm install` / pi package install), usage (`/annotate <path>`, key
   table), payload example, development (`npm test`, `npm run typecheck`).
 
