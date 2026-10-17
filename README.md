@@ -21,6 +21,8 @@ A [Pi](https://github.com/earendil-works/pi-coding-agent) coding agent extension
 pi install npm:pi-annotate-anything
 ```
 
+**Requirements**: a terminal font with Nerd Font Mono glyphs (used for the pending-annotation gutter icon). Without one the icon degrades to a placeholder box; everything else works the same.
+
 ## Features
 
 - Overlay card with line numbers, syntax highlighting, a live pending-count title bar, and a vim-style mode badge footer.
