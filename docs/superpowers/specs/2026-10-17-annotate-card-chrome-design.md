@@ -69,7 +69,7 @@ The editor box is fixed at `min(innerWidth, 64)` columns; its text soft-wraps at
 
 Footer content by mode, following vim's mode-indicator convention (every mode shows a badge in the theme `accent` color, followed by the mode's hints in `dim`):
 
-- normal:  `-- NORMAL --  hjkl move  v/V select  c/x comment/delete  p preview  q/Esc close`
+- normal: `-- NORMAL --  hjkl move  v/V select  c/x comment/delete  p preview  q/Esc close`
 - visual (char): `-- VISUAL --  hjkl extend  o swap  c comment  Esc cancel`
 - visual (line): `-- VISUAL LINE --  hjkl extend  o swap  c comment  Esc cancel`
 - comment: `-- COMMENT --  Enter submit  ctrl+j newline  Esc cancel`

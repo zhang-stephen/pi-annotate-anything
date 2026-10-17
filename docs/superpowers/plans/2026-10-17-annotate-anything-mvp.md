@@ -39,6 +39,7 @@ progress: 12/12
 ### Task 1: Project scaffold
 
 **Files:**
+
 - Modify: `package.json`
 - Create: `tsconfig.json`
 - Create: `test/smoke.test.ts`
@@ -114,6 +115,7 @@ git add -A && git commit -m "chore: scaffold test runner and typescript config"
 Pure selection math. No I/O, no pi imports.
 
 **Files:**
+
 - Create: `src/selection.ts`
 - Create: `test/selection.test.ts`
 
@@ -122,16 +124,28 @@ Pure selection math. No I/O, no pi imports.
   Shapes:
 
 ```ts
-export interface Position { line: number; col: number } // 0-based, col in raw chars
+export interface Position {
+  line: number;
+  col: number;
+} // 0-based, col in raw chars
 export type VisualMode = "char" | "line";
-export interface Selection { anchor: Position; cursor: Position; mode: VisualMode }
-export interface Range { startLine: number; startCol: number; endLine: number; endCol: number }
+export interface Selection {
+  anchor: Position;
+  cursor: Position;
+  mode: VisualMode;
+}
+export interface Range {
+  startLine: number;
+  startCol: number;
+  endLine: number;
+  endCol: number;
+}
 
 export function normalize(sel: Selection, lines: string[]): Range;
 export function clampPosition(pos: Position, lines: string[]): Position;
 ```
 
-  Line-wise semantics: `startCol = 0`, `endCol = lines[endLine].length` (end-exclusive), matching how extraction slices.
+Line-wise semantics: `startCol = 0`, `endCol = lines[endLine].length` (end-exclusive), matching how extraction slices.
 
 - [x] **Step 2: Run tests, expect failure.** Run: `node --test test/`
 
@@ -144,6 +158,7 @@ export function clampPosition(pos: Position, lines: string[]): Position;
 ### Task 3: File loading and range extraction (`src/file-range.ts`)
 
 **Files:**
+
 - Create: `src/file-range.ts`
 - Create: `test/file-range.test.ts`
 
@@ -153,15 +168,19 @@ export function clampPosition(pos: Position, lines: string[]): Position;
 
 ```ts
 export type LoadResult =
-  | { ok: true; path: string; lines: string[] }   // lines: LF-normalized, no trailing ""
-  | { ok: false; reason: "not-found" | "is-directory" | "binary" | "too-large" | "read-error" };
+  | { ok: true; path: string; lines: string[] } // lines: LF-normalized, no trailing ""
+  | {
+      ok: false;
+      reason:
+        "not-found" | "is-directory" | "binary" | "too-large" | "read-error";
+    };
 
 export function resolvePath(input: string, cwd: string): string;
 export function loadFile(path: string, maxBytes?: number): LoadResult;
 export function extractRange(lines: string[], range: Range): string;
 ```
 
-  `extractRange` slices raw columns: single-line range slices `line.slice(startCol, endCol)`; multi-line keeps middle lines whole. Newlines between selected lines are included in the snapshot.
+`extractRange` slices raw columns: single-line range slices `line.slice(startCol, endCol)`; multi-line keeps middle lines whole. Newlines between selected lines are included in the snapshot.
 
 - [x] **Step 2: Run tests, expect failure.**
 
@@ -176,6 +195,7 @@ export function extractRange(lines: string[], range: Range): string;
 Pure formatting.
 
 **Files:**
+
 - Create: `src/message.ts`
 - Create: `test/message.test.ts`
 
@@ -184,23 +204,34 @@ Pure formatting.
   Shapes:
 
 ```ts
-export function rangeLabel(range: Range, mode: VisualMode): string;   // "lines 10-20" | "lines 10:5-12:20"
-export function displayPath(absPath: string, cwd: string): string;    // relative when inside cwd
-export function tokenLabel(absPath: string, cwd: string, range: Range, mode: VisualMode): string; // "[a.ts:10-20]"
+export function rangeLabel(range: Range, mode: VisualMode): string; // "lines 10-20" | "lines 10:5-12:20"
+export function displayPath(absPath: string, cwd: string): string; // relative when inside cwd
+export function tokenLabel(
+  absPath: string,
+  cwd: string,
+  range: Range,
+  mode: VisualMode,
+): string; // "[a.ts:10-20]"
 export function formatPayload(input: {
-  absPath: string; cwd: string; range: Range; mode: VisualMode;
-  snapshot: string; comment: string;
+  absPath: string;
+  cwd: string;
+  range: Range;
+  mode: VisualMode;
+  snapshot: string;
+  comment: string;
 }): string;
 ```
 
-  Payload layout (char-wise example):
+Payload layout (char-wise example):
 
-```text
+````text
 In `src/a.ts` (lines 10:5-12:20):
 ```ts <snapshot>
-```
+````
+
 Comment: <comment>
-```
+
+````
 
   Omit the `Comment:` line when the comment is empty.
 
@@ -240,7 +271,7 @@ export class AnnotationStore {
   pruneFromText(text: string): void;   // keeps drafts whose token appears in text
   clear(): void;
 }
-```
+````
 
 - [x] **Step 2: Run tests, expect failure.**
 
@@ -253,6 +284,7 @@ export class AnnotationStore {
 ### Task 6: Input transform (`src/transform.ts`)
 
 **Files:**
+
 - Create: `src/transform.ts`
 - Create: `test/transform.test.ts`
 
@@ -261,16 +293,19 @@ export class AnnotationStore {
   Shape:
 
 ```ts
-export function expandTokens(text: string, store: AnnotationStore): { changed: boolean; text: string };
+export function expandTokens(
+  text: string,
+  store: AnnotationStore,
+): { changed: boolean; text: string };
 ```
 
-  Expansion of one token:
+Expansion of one token:
 
-```text
+````text
 \n\nIn `path` (lines ...):\n```lang\n<snapshot>\n```\nComment: ...\n\n
-```
+````
 
-  Trim trailing whitespace of the preceding prose before inserting.
+Trim trailing whitespace of the preceding prose before inserting.
 
 - [x] **Step 2: Run tests, expect failure.**
 
@@ -283,16 +318,21 @@ export function expandTokens(text: string, store: AnnotationStore): { changed: b
 ### Task 7: Composer pill rendering (`src/editor.ts`)
 
 **Files:**
+
 - Create: `src/editor.ts`
 - Create: `test/editor.test.ts`
 
 - [x] **Step 1: Write failing tests** for the pure recolor helper:
 
 ```ts
-export function recolorTokens(line: string, tokens: string[], style: (s: string) => string): string;
+export function recolorTokens(
+  line: string,
+  tokens: string[],
+  style: (s: string) => string,
+): string;
 ```
 
-  Cases: token recolored; unknown text untouched; multiple tokens; ANSI width unchanged (`visibleWidth` of output equals input); token not found returns input unchanged. Test with a trivial style wrapper `(s) => \`<${s}>\``.
+Cases: token recolored; unknown text untouched; multiple tokens; ANSI width unchanged (`visibleWidth` of output equals input); token not found returns input unchanged. Test with a trivial style wrapper `(s) => \`<${s}>\``.
 
 - [x] **Step 2: Run tests, expect failure.**
 
@@ -304,19 +344,26 @@ export function recolorTokens(line: string, tokens: string[], style: (s: string)
 import { CustomEditor } from "@earendil-works/pi-coding-agent";
 
 export class AnnotateEditor extends CustomEditor {
-  constructor(tui, theme, keybindings, private getTokens: () => string[]) {
+  constructor(
+    tui,
+    theme,
+    keybindings,
+    private getTokens: () => string[],
+  ) {
     super(tui, theme, keybindings);
   }
   override render(width: number): string[] {
     const lines = super.render(width);
     const tokens = this.getTokens();
     if (tokens.length === 0) return lines;
-    return lines.map((l) => recolorTokens(l, tokens, (s) => `\x1b[7m${s}\x1b[27m`));
+    return lines.map((l) =>
+      recolorTokens(l, tokens, (s) => `\x1b[7m${s}\x1b[27m`),
+    );
   }
 }
 ```
 
-  Color-only replacement (inverse video). Known limitation, accepted: a token split across wrapped lines is not recolored (stays plain text).
+Color-only replacement (inverse video). Known limitation, accepted: a token split across wrapped lines is not recolored (stays plain text).
 
 - [x] **Step 5: Run tests + typecheck. Commit** -- `feat(editor): add pill recoloring composer editor`
 
@@ -327,25 +374,33 @@ export class AnnotateEditor extends CustomEditor {
 Embedded in the card. A small state machine, not pi-tui's full Editor.
 
 **Files:**
+
 - Create: `src/comment-input.ts`
 - Create: `test/comment-input.test.ts`
 
 - [x] **Step 1: Write failing tests** for the pure state machine:
 
 ```ts
-export interface CommentState { text: string }
+export interface CommentState {
+  text: string;
+}
 export type CommentKey =
   | { kind: "char"; ch: string }
-  | { kind: "newline" }      // ctrl+j / shift+enter
+  | { kind: "newline" } // ctrl+j / shift+enter
   | { kind: "backspace" }
-  | { kind: "submit" }       // Enter
-  | { kind: "cancel" };      // Esc
+  | { kind: "submit" } // Enter
+  | { kind: "cancel" }; // Esc
 
-export function reduceComment(state: CommentState, key: CommentKey):
-  { state: CommentState; effect?: { type: "submit"; text: string } | { type: "cancel" } };
+export function reduceComment(
+  state: CommentState,
+  key: CommentKey,
+): {
+  state: CommentState;
+  effect?: { type: "submit"; text: string } | { type: "cancel" };
+};
 ```
 
-  Cases: typing appends; newline inserts `\n`; backspace deletes; submit emits current text (empty text allowed); cancel emits cancel.
+Cases: typing appends; newline inserts `\n`; backspace deletes; submit emits current text (empty text allowed); cancel emits cancel.
 
 - [x] **Step 2: Run tests, expect failure.**
 
@@ -360,6 +415,7 @@ export function reduceComment(state: CommentState, key: CommentKey):
 Pure vim reducer -- the card's brain, fully unit-tested.
 
 **Files:**
+
 - Create: `src/viewer-state.ts`
 - Create: `test/viewer-state.test.ts`
 
@@ -382,11 +438,15 @@ export type ViewerEffect =
   | { type: "annotate"; range: Range; mode: VisualMode; comment: string }
   | { type: "close" };
 
-export function reduceViewer(state: ViewerState, key: string, lines: string[], viewport: { height: number }):
-  { state: ViewerState; effect?: ViewerEffect };
+export function reduceViewer(
+  state: ViewerState,
+  key: string,
+  lines: string[],
+  viewport: { height: number },
+): { state: ViewerState; effect?: ViewerEffect };
 ```
 
-  Key table (raw input strings): `h j k l`, arrows (`\x1b[A` etc.), `0`, `$`, `gg` (two-stroke), `G`, `ctrl+d` (`\x04`) / `ctrl+u` (`\x15`) half-page, PgUp/PgDn, `v`, `V`, `o`, `c`, `q`, Esc (`\x1b`). In comment mode, keys route to `reduceComment` (Enter = `\r`, ctrl+j = `\n`, shift+enter = `\x1b\r`).
+Key table (raw input strings): `h j k l`, arrows (`\x1b[A` etc.), `0`, `$`, `gg` (two-stroke), `G`, `ctrl+d` (`\x04`) / `ctrl+u` (`\x15`) half-page, PgUp/PgDn, `v`, `V`, `o`, `c`, `q`, Esc (`\x1b`). In comment mode, keys route to `reduceComment` (Enter = `\r`, ctrl+j = `\n`, shift+enter = `\x1b\r`).
 
 - [x] **Step 2: Run tests, expect failure.**
 
@@ -401,6 +461,7 @@ export function reduceViewer(state: ViewerState, key: string, lines: string[], v
 The pi-tui `Component` that renders the card and wires the reducer.
 
 **Files:**
+
 - Create: `src/viewer.ts`
 - Create: `test/viewer.test.ts` (render helpers only)
 
@@ -408,11 +469,15 @@ The pi-tui `Component` that renders the card and wires the reducer.
 
 ```ts
 export function tabExpanded(s: string, tabSize?: number): string;
-export function rawColToDisplayCol(line: string, col: number, tabSize?: number): number;
+export function rawColToDisplayCol(
+  line: string,
+  col: number,
+  tabSize?: number,
+): number;
 export function gutterWidth(lineCount: number): number;
 ```
 
-  Tab mapping: tab advances to the next multiple of `tabSize` (default 4); `rawColToDisplayCol` maps a raw column to its display column after expansion. Test tabs at various positions and wide chars via `visibleWidth`.
+Tab mapping: tab advances to the next multiple of `tabSize` (default 4); `rawColToDisplayCol` maps a raw column to its display column after expansion. Test tabs at various positions and wide chars via `visibleWidth`.
 
 - [x] **Step 2: Run tests, expect failure. Implement helpers.**
 
@@ -423,26 +488,35 @@ export class AnnotateCard {
   focused = false;
   constructor(
     private tui: TUI,
-    private file: { path: string; lines: string[] },   // LF-normalized source
-    private pending: Range[],                            // from the store, for markers
-    private onAnnotate: (range: Range, mode: VisualMode, comment: string) => void,
+    private file: { path: string; lines: string[] }, // LF-normalized source
+    private pending: Range[], // from the store, for markers
+    private onAnnotate: (
+      range: Range,
+      mode: VisualMode,
+      comment: string,
+    ) => void,
     private done: () => void,
   ) {}
-  render(width: number): string[] { /* see below */ }
-  handleInput(data: string): void { /* feed reduceViewer; on effect: onAnnotate or done() */ }
+  render(width: number): string[] {
+    /* see below */
+  }
+  handleInput(data: string): void {
+    /* feed reduceViewer; on effect: onAnnotate or done() */
+  }
   invalidate(): void {}
 }
 ```
 
-  Render pipeline per visible line:
-  1. Gutter: right-aligned line number; `*` marker column for lines with a pending annotation.
-  2. Content: `highlightCode(lines.join("\n"), getLanguageFromPath(path))` computed once in the constructor; per frame, slice the viewport.
-  3. Active selection: for lines intersecting the selection, render the raw (tab-expanded, unhighlighted) text with the selected display-column span wrapped in inverse video (`\x1b[7m...\x1b[27m`). Selection display wins over syntax highlight on those lines.
-  4. Pending annotations: underline the covered display span (`\x1b[4m...\x1b[24m`) so syntax colors stay visible; underline applies AFTER highlighting (wrapping whole-line or spliced span).
-  5. Cursor cell in normal/visual mode: inverse video on the cursor column.
-  6. Comment mode: append `renderCommentBox` output below the file area.
+Render pipeline per visible line:
 
-  All width clipping via `truncateToWidth` / `sliceByColumn` from pi-tui.
+1. Gutter: right-aligned line number; `*` marker column for lines with a pending annotation.
+2. Content: `highlightCode(lines.join("\n"), getLanguageFromPath(path))` computed once in the constructor; per frame, slice the viewport.
+3. Active selection: for lines intersecting the selection, render the raw (tab-expanded, unhighlighted) text with the selected display-column span wrapped in inverse video (`\x1b[7m...\x1b[27m`). Selection display wins over syntax highlight on those lines.
+4. Pending annotations: underline the covered display span (`\x1b[4m...\x1b[24m`) so syntax colors stay visible; underline applies AFTER highlighting (wrapping whole-line or spliced span).
+5. Cursor cell in normal/visual mode: inverse video on the cursor column.
+6. Comment mode: append `renderCommentBox` output below the file area.
+
+All width clipping via `truncateToWidth` / `sliceByColumn` from pi-tui.
 
 - [x] **Step 4: Typecheck + run all tests. Commit** -- `feat(viewer): add annotate card component`
 
@@ -451,6 +525,7 @@ export class AnnotateCard {
 ### Task 11: Extension wiring (`index.ts`)
 
 **Files:**
+
 - Create: `index.ts`
 
 - [x] **Step 1: Implement the extension** (no unit tests; verified by e2e in Task 12):
@@ -465,7 +540,12 @@ export default function (pi: ExtensionAPI) {
 
   pi.on("session_start", async (_event, ctx) => {
     store = new AnnotationStore();
-    editor = new AnnotateEditor(ctx.ui.tui, ctx.ui.theme, /* keybindings */ undefined, () => store.list().map((d) => d.token));
+    editor = new AnnotateEditor(
+      ctx.ui.tui,
+      ctx.ui.theme,
+      /* keybindings */ undefined,
+      () => store.list().map((d) => d.token),
+    );
     ctx.ui.setEditorComponent(editor);
   });
 
@@ -478,40 +558,63 @@ export default function (pi: ExtensionAPI) {
     handler: async (args, ctx) => {
       const path = resolvePath(args.trim(), ctx.cwd);
       const loaded = loadFile(path);
-      if (!loaded.ok) { ctx.ui.notify(`annotate: ${loaded.reason}: ${path}`, "error"); return; }
-      await ctx.ui.custom((tui, theme, _kb, done) =>
-        new AnnotateCard(tui, { path: loaded.path, lines: loaded.lines },
-          store.list().filter((d) => d.absPath === loaded.path).map((d) => d.range),
-          (range, mode, comment) => {
-            const snapshot = extractRange(loaded.lines, range);
-            const draft = store.add({ absPath: loaded.path, range, mode, snapshot, comment },
-              tokenLabel(loaded.path, ctx.cwd, range, mode));
-            ctx.ui.pasteToEditor(draft.token);
-            ctx.ui.notify(`Annotation added: ${draft.token}`);
-          },
-          done),
-        { overlay: true, overlayOptions: { width: "80%", maxHeight: "80%", anchor: "center" } });
+      if (!loaded.ok) {
+        ctx.ui.notify(`annotate: ${loaded.reason}: ${path}`, "error");
+        return;
+      }
+      await ctx.ui.custom(
+        (tui, theme, _kb, done) =>
+          new AnnotateCard(
+            tui,
+            { path: loaded.path, lines: loaded.lines },
+            store
+              .list()
+              .filter((d) => d.absPath === loaded.path)
+              .map((d) => d.range),
+            (range, mode, comment) => {
+              const snapshot = extractRange(loaded.lines, range);
+              const draft = store.add(
+                { absPath: loaded.path, range, mode, snapshot, comment },
+                tokenLabel(loaded.path, ctx.cwd, range, mode),
+              );
+              ctx.ui.pasteToEditor(draft.token);
+              ctx.ui.notify(`Annotation added: ${draft.token}`);
+            },
+            done,
+          ),
+        {
+          overlay: true,
+          overlayOptions: { width: "80%", maxHeight: "80%", anchor: "center" },
+        },
+      );
     },
   });
 
   pi.on("input", (event) => {
     const result = expandTokens(event.text, store);
     if (!result.changed) return { action: "continue" };
-    store.prune(store.list().map((d) => d.token).filter((t) => event.text.includes(t)));
+    store.prune(
+      store
+        .list()
+        .map((d) => d.token)
+        .filter((t) => event.text.includes(t)),
+    );
     return { action: "transform", text: result.text };
   });
 
   pi.on("message_start", (_event, ctx) =>
-    store.pruneFromText(ctx.ui.getEditorText()));
+    store.pruneFromText(ctx.ui.getEditorText()),
+  );
 }
 ```
 
-  Notes for the implementer:
-  - Check the real `CustomEditor` constructor signature and `ctx.ui.theme`/`ctx.ui.tui` availability in `types.d.ts`; adjust the wiring (not the tested modules) as needed.
-  - `prune` runs BEFORE expansion is irrelevant; it must run on every input event using the pre-expansion text (tokens still visible there).
-  - Reconcile on card open: the command handler calls `store.prune(...)` against `ctx.ui.getEditorText()` BEFORE constructing AnnotateCard, so markers never outlive their pills.
-  - AnnotateEditor prunes on text change: override the text-mutation path (setText/clear or a handleInput post-check) so deleting a pill prunes its draft immediately. Clearing the whole composer therefore clears all drafts, which matches the user's mental model.
-  - `message_start` must NOT blindly `clear()`: run `store.pruneFromText(ctx.ui.getEditorText())` instead. After the user's own send the editor is empty, so this clears everything; an unrelated RPC/extension message_start keeps drafts whose pills are still present.
+Notes for the implementer:
+
+- Check the real `CustomEditor` constructor signature and `ctx.ui.theme`/`ctx.ui.tui` availability in `types.d.ts`; adjust the wiring (not the tested modules) as needed.
+- `prune` runs BEFORE expansion is irrelevant; it must run on every input event using the pre-expansion text (tokens still visible there).
+- Reconcile on card open: the command handler calls `store.prune(...)` against `ctx.ui.getEditorText()` BEFORE constructing AnnotateCard, so markers never outlive their pills.
+- AnnotateEditor prunes on text change: override the text-mutation path (setText/clear or a handleInput post-check) so deleting a pill prunes its draft immediately. Clearing the whole composer therefore clears all drafts, which matches the user's mental model.
+- `message_start` must NOT blindly `clear()`: run `store.pruneFromText(ctx.ui.getEditorText())` instead. After the user's own send the editor is empty, so this clears everything; an unrelated RPC/extension message_start keeps drafts whose pills are still present.
 
 - [x] **Step 2: Typecheck** -- `npx tsc --noEmit` clean.
 
@@ -522,6 +625,7 @@ export default function (pi: ExtensionAPI) {
 ### Task 12: README and manual e2e
 
 **Files:**
+
 - Create: `README.md`
 
 - [x] **Step 1: Write README.md** (English): what it does, install (`npm install` / pi package install), usage (`/annotate <path>`, key table), payload example, development (`npm test`, `npm run typecheck`).

@@ -14,24 +14,24 @@ Primary scenario: plan/code review. The user inspects a file (often while the ag
 
 ## 2. Decisions (from brainstorming)
 
-| Area | Decision | Rationale |
-|---|---|---|
-| Interaction | `/annotate <path>` opens an overlay card; no line numbers in the command | User picks the range visually |
-| Card surface | `ctx.ui.custom(..., { overlay: true })`, auto-sized floating card | Lighter than fullscreen; pi supports overlay options natively |
-| Selection | vim-like visual mode: `v` char-wise, `V` line-wise, `hjkl`/arrows move; `v`/`V` toggle off or switch mode, `o` swaps anchor/cursor, no block mode | User requirement; char + line share one data model |
-| Selection rendering | Active selection: inverse/accent highlight (theme-driven). Pending annotations: a distinct theme color | User requirement; the two states must be visually distinguishable |
-| File rendering | Plain source text plus syntax highlighting via pi's official `highlightCode()` / `getLanguageFromPath()` (theme-driven). Highlighting changes colors only, never text or width, so selection geometry stays exact. No markdown reflow rendering | User requirement; coordinate fidelity first |
-| Comment input | Multi-line editor inside the card; Enter submits, ctrl+j / shift+enter inserts newline | User requirement |
-| Card exit | Esc / q, layered: Esc cancels an active selection or comment first; otherwise Esc or q closes the card | User requirement |
-| Card lifecycle | Card stays open after a comment submit, ready for the next selection; sending always happens from the composer, never from the card | Multi-annotation review flow; single send path avoids transform divergence |
-| Reopened card | Renders pending (unsent) annotations from the store; markers disappear when the pill is deleted or the message is sent (`message_start`) | Store is the single source of truth; composer, status line, and card stay consistent. Sent annotations are not kept (future: annotation history) |
-| Payload | Full snapshot: quote block with the selected text + comment (option A) | Fidelity to what the user saw; matches plannotator (`selectedText` + `lineStart/lineEnd`) and Claude Code; drift becomes detectable instead of silently re-pointing the comment |
-| Delivery | Pill draft in the composer (copy-mode style); goes out with the user's message | User requirement |
-| Pill visuals | Custom editor renders tokens as colored pills. The token IS the label (`[a.ts:10-20]`); rendering only recolors it, never changes width | Zero cursor-geometry risk; degrades gracefully to readable plain text |
-| Dependencies | Pi-official APIs only: `CustomEditor` from `@earendil-works/pi-coding-agent`, `@earendil-works/pi-tui`. No third-party plugin libraries (no pi-libtui) | User requirement |
-| Coexistence | Not handled: the custom editor is installed unconditionally | User decision; conflicts with pi-copy-mode's editor are accepted |
-| Message transform | `pi.on("input")` expands tokens into the full payload | Same pattern as pi-copy-mode's envelope |
-| Test runner | Node built-in `node --test` (node v26 runs TS directly) | bun is not installed; zero extra dependencies |
+| Area                | Decision                                                                                                                                                                                                                                        | Rationale                                                                                                                                                                       |
+| ------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Interaction         | `/annotate <path>` opens an overlay card; no line numbers in the command                                                                                                                                                                        | User picks the range visually                                                                                                                                                   |
+| Card surface        | `ctx.ui.custom(..., { overlay: true })`, auto-sized floating card                                                                                                                                                                               | Lighter than fullscreen; pi supports overlay options natively                                                                                                                   |
+| Selection           | vim-like visual mode: `v` char-wise, `V` line-wise, `hjkl`/arrows move; `v`/`V` toggle off or switch mode, `o` swaps anchor/cursor, no block mode                                                                                               | User requirement; char + line share one data model                                                                                                                              |
+| Selection rendering | Active selection: inverse/accent highlight (theme-driven). Pending annotations: a distinct theme color                                                                                                                                          | User requirement; the two states must be visually distinguishable                                                                                                               |
+| File rendering      | Plain source text plus syntax highlighting via pi's official `highlightCode()` / `getLanguageFromPath()` (theme-driven). Highlighting changes colors only, never text or width, so selection geometry stays exact. No markdown reflow rendering | User requirement; coordinate fidelity first                                                                                                                                     |
+| Comment input       | Multi-line editor inside the card; Enter submits, ctrl+j / shift+enter inserts newline                                                                                                                                                          | User requirement                                                                                                                                                                |
+| Card exit           | Esc / q, layered: Esc cancels an active selection or comment first; otherwise Esc or q closes the card                                                                                                                                          | User requirement                                                                                                                                                                |
+| Card lifecycle      | Card stays open after a comment submit, ready for the next selection; sending always happens from the composer, never from the card                                                                                                             | Multi-annotation review flow; single send path avoids transform divergence                                                                                                      |
+| Reopened card       | Renders pending (unsent) annotations from the store; markers disappear when the pill is deleted or the message is sent (`message_start`)                                                                                                        | Store is the single source of truth; composer, status line, and card stay consistent. Sent annotations are not kept (future: annotation history)                                |
+| Payload             | Full snapshot: quote block with the selected text + comment (option A)                                                                                                                                                                          | Fidelity to what the user saw; matches plannotator (`selectedText` + `lineStart/lineEnd`) and Claude Code; drift becomes detectable instead of silently re-pointing the comment |
+| Delivery            | Pill draft in the composer (copy-mode style); goes out with the user's message                                                                                                                                                                  | User requirement                                                                                                                                                                |
+| Pill visuals        | Custom editor renders tokens as colored pills. The token IS the label (`[a.ts:10-20]`); rendering only recolors it, never changes width                                                                                                         | Zero cursor-geometry risk; degrades gracefully to readable plain text                                                                                                           |
+| Dependencies        | Pi-official APIs only: `CustomEditor` from `@earendil-works/pi-coding-agent`, `@earendil-works/pi-tui`. No third-party plugin libraries (no pi-libtui)                                                                                          | User requirement                                                                                                                                                                |
+| Coexistence         | Not handled: the custom editor is installed unconditionally                                                                                                                                                                                     | User decision; conflicts with pi-copy-mode's editor are accepted                                                                                                                |
+| Message transform   | `pi.on("input")` expands tokens into the full payload                                                                                                                                                                                           | Same pattern as pi-copy-mode's envelope                                                                                                                                         |
+| Test runner         | Node built-in `node --test` (node v26 runs TS directly)                                                                                                                                                                                         | bun is not installed; zero extra dependencies                                                                                                                                   |
 
 ## 3. User flows
 
@@ -58,23 +58,24 @@ Primary scenario: plan/code review. The user inspects a file (often while the ag
        ``` Comment: <user comment>
 
    Line-wise selections render as `(lines 10-20)`.
+
 4. `message_start` prunes drafts whose tokens are no longer in the composer (after the user's own send, the composer is empty, so all drafts go; an unrelated RPC/extension-sent message keeps drafts whose pills remain). Card markers vanish accordingly.
 
 ## 4. Architecture
 
 Single extension directory, no build step (jiti). Planned modules:
 
-| File | Responsibility |
-|---|---|
-| `index.ts` | Default export `function (pi: ExtensionAPI)`; registers `/annotate`, wires session lifecycle |
-| `src/viewer.ts` | Overlay card component: file rendering, line numbers, scrolling, cursor, visual selection, pending-annotation markers, key handling |
-| `src/comment-input.ts` | Embedded multi-line comment editor inside the card |
-| `src/selection.ts` | Pure: normalize anchor/cursor into `{ startLine, startCol, endLine, endCol }`; char vs line mode |
-| `src/file-range.ts` | Pure-ish: read file (UTF-8, CRLF normalization, binary/size guards), extract exact range text |
-| `src/message.ts` | Pure: format the payload (quote block + comment) |
-| `src/store.ts` | Draft store: token -> { path, range, comment, snapshot }; orphan cleanup |
-| `src/editor.ts` | Custom composer editor extending pi's `CustomEditor`; recolors known tokens as pills after `super.render()` |
-| `src/transform.ts` | `input` event handler: expand tokens, `{ action: "transform" }` |
+| File                   | Responsibility                                                                                                                      |
+| ---------------------- | ----------------------------------------------------------------------------------------------------------------------------------- |
+| `index.ts`             | Default export `function (pi: ExtensionAPI)`; registers `/annotate`, wires session lifecycle                                        |
+| `src/viewer.ts`        | Overlay card component: file rendering, line numbers, scrolling, cursor, visual selection, pending-annotation markers, key handling |
+| `src/comment-input.ts` | Embedded multi-line comment editor inside the card                                                                                  |
+| `src/selection.ts`     | Pure: normalize anchor/cursor into `{ startLine, startCol, endLine, endCol }`; char vs line mode                                    |
+| `src/file-range.ts`    | Pure-ish: read file (UTF-8, CRLF normalization, binary/size guards), extract exact range text                                       |
+| `src/message.ts`       | Pure: format the payload (quote block + comment)                                                                                    |
+| `src/store.ts`         | Draft store: token -> { path, range, comment, snapshot }; orphan cleanup                                                            |
+| `src/editor.ts`        | Custom composer editor extending pi's `CustomEditor`; recolors known tokens as pills after `super.render()`                         |
+| `src/transform.ts`     | `input` event handler: expand tokens, `{ action: "transform" }`                                                                     |
 
 Data flow: viewer -> selection + file-range -> message -> store (token, snapshot) -> pasteToEditor(token) -> custom editor recolors token -> input transform expands -> message_start clears store.
 
@@ -125,14 +126,14 @@ Built from the path (relative to cwd when possible, basename-heavy when long) pl
 
 Runner: Node built-in test runner (`node --test`), TypeScript via native type stripping. No test dependencies.
 
-| Layer | Tests |
-|---|---|
-| `selection.ts` | Normalize forward/backward, char vs line mode, clamping at file bounds |
-| `file-range.ts` | Exact extraction of line ranges, char ranges, mid-line spans, CRLF input, tabs, wide chars, empty file, binary rejection, size cap |
-| `message.ts` | Payload format for line-wise, char-wise, no-comment, special chars in path |
+| Layer                       | Tests                                                                                                                                             |
+| --------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `selection.ts`              | Normalize forward/backward, char vs line mode, clamping at file bounds                                                                            |
+| `file-range.ts`             | Exact extraction of line ranges, char ranges, mid-line spans, CRLF input, tabs, wide chars, empty file, binary rejection, size cap                |
+| `message.ts`                | Payload format for line-wise, char-wise, no-comment, special chars in path                                                                        |
 | `store.ts` + `transform.ts` | Token issuance and disambiguation, expansion round-trip, orphan pruning, multiple tokens, token-like text the user typed manually must not expand |
-| `editor.ts` | Token recolor preserves line width; unknown text untouched |
-| Manual e2e | `pi --extension ./index.ts`: open card, select, comment, pill appears, reopen card shows marker, send, verify agent-visible text |
+| `editor.ts`                 | Token recolor preserves line width; unknown text untouched                                                                                        |
+| Manual e2e                  | `pi --extension ./index.ts`: open card, select, comment, pill appears, reopen card shows marker, send, verify agent-visible text                  |
 
 ## 8. Out of scope (future)
 

@@ -49,13 +49,13 @@ Decided: warning-colored bold underline for the target range (theme warning fg +
 
 Worked example: draft A covers lines 10-14, draft B covers lines 12-16.
 
-| Line | Role | Gutter |
-|------|------|--------|
-| 10 | A starts | icon + 1 (warning) |
-| 11 | A continues | dim vertical bar |
-| 12 | B starts, A continues | icon + 1 (warning; start wins) |
-| 13-14 | both continue | dim vertical bar |
-| 15-16 | B continues | dim vertical bar |
+| Line  | Role                  | Gutter                         |
+| ----- | --------------------- | ------------------------------ |
+| 10    | A starts              | icon + 1 (warning)             |
+| 11    | A continues           | dim vertical bar               |
+| 12    | B starts, A continues | icon + 1 (warning; start wins) |
+| 13-14 | both continue         | dim vertical bar               |
+| 15-16 | B continues           | dim vertical bar               |
 
 Sum of counts = 2 = title bar (2).
 

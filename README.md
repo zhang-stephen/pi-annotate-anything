@@ -44,30 +44,30 @@ pi install npm:pi-annotate-anything
 
 ### Keys: file viewer
 
-| Key | Action |
-| --- | --- |
-| `h` `j` `k` `l` or arrow keys | Move the cursor |
-| `0` / `$` | Start / end of the current line |
-| `gg` / `G` | Top / bottom of the file |
-| `ctrl+d` / `ctrl+u` | Half page down / up |
-| `PgDn` / `PgUp` | Page down / up |
-| `v` | Start char-wise selection; in visual mode, switch to char-wise or exit |
-| `V` | Start line-wise selection; in visual mode, switch to line-wise or exit |
-| `o` | Swap the anchor and cursor ends (visual mode only) |
-| `Tab` | Cycle the target among stacked pending annotations under the cursor (normal mode) |
-| `c` | Visual mode: comment the selection. Normal mode: edit the targeted annotation's comment (pre-filled) |
-| `x` | Delete the targeted pending annotation; also removes its pill from the composer |
-| `p` | Toggle the hover preview of pending comments (normal mode) |
-| `Esc` | Cancel the selection or comment box; otherwise close the card |
-| `q` | Close the card (normal mode only) |
+| Key                           | Action                                                                                               |
+| ----------------------------- | ---------------------------------------------------------------------------------------------------- |
+| `h` `j` `k` `l` or arrow keys | Move the cursor                                                                                      |
+| `0` / `$`                     | Start / end of the current line                                                                      |
+| `gg` / `G`                    | Top / bottom of the file                                                                             |
+| `ctrl+d` / `ctrl+u`           | Half page down / up                                                                                  |
+| `PgDn` / `PgUp`               | Page down / up                                                                                       |
+| `v`                           | Start char-wise selection; in visual mode, switch to char-wise or exit                               |
+| `V`                           | Start line-wise selection; in visual mode, switch to line-wise or exit                               |
+| `o`                           | Swap the anchor and cursor ends (visual mode only)                                                   |
+| `Tab`                         | Cycle the target among stacked pending annotations under the cursor (normal mode)                    |
+| `c`                           | Visual mode: comment the selection. Normal mode: edit the targeted annotation's comment (pre-filled) |
+| `x`                           | Delete the targeted pending annotation; also removes its pill from the composer                      |
+| `p`                           | Toggle the hover preview of pending comments (normal mode)                                           |
+| `Esc`                         | Cancel the selection or comment box; otherwise close the card                                        |
+| `q`                           | Close the card (normal mode only)                                                                    |
 
 ### Keys: comment box
 
-| Key | Action |
-| --- | --- |
-| `Enter` | Submit the annotation |
-| `ctrl+j` or `shift+enter` | Insert a newline |
-| `Esc` | Cancel and return to the selection |
+| Key                       | Action                             |
+| ------------------------- | ---------------------------------- |
+| `Enter`                   | Submit the annotation              |
+| `ctrl+j` or `shift+enter` | Insert a newline                   |
+| `Esc`                     | Cancel and return to the selection |
 
 The comment box is a floating panel that opens next to the selection (below it, or above when space runs out).
 
