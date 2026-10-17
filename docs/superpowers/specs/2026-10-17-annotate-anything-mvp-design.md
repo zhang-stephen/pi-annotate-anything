@@ -119,7 +119,8 @@ plus the range. If the identical label is already taken, a suffix disambiguates
 (`[a.ts:10-20 ~2]`). Inserted via `ctx.ui.pasteToEditor()`. Because the token
 is short, it stays in the composer as plain text; the custom editor recolors
 it (section 5.2). Deleting the token text deletes the annotation: orphaned
-store entries are pruned on each `input` event.
+store entries are pruned at three reconcile points (editor text change, card
+open via `getEditorText()`, and before expansion on each `input` event).
 
 ### 5.2 Custom editor (pill rendering)
 

@@ -47,7 +47,9 @@ native type stripping on Node >= 22.18), `tsc --noEmit` for typechecking.
    `visibleWidth()`; tab expansion mapping helper must be tested.
 4. CRLF and binary/size guards in file loading.
 5. Draft lifecycle: pills survive the editor clear on submit; store clears
-   only at `message_start`.
+   only at `message_start`. Orphan pruning happens at three reconcile
+   points: editor text change (AnnotateEditor hook), card open (via
+   `getEditorText()`), and before transform on `input`.
 
 ---
 
@@ -256,7 +258,8 @@ Comment: <comment>
 - [ ] **Step 1: Write failing tests** covering: add returns a unique token;
   identical file+range annotated twice gets ` ~2` suffix; `list()` order is
   insertion order; `prune(presentTokens)` drops entries whose token is gone;
-  `clear()` empties; token lookup by exact match only.
+  `clear()` empties; token lookup by exact match only; `pruneFromText(text)`
+  keeps only drafts whose token is a substring of the given text.
 
   Shapes:
 
@@ -275,6 +278,7 @@ export class AnnotationStore {
   get(token: string): Draft | undefined;
   list(): Draft[];
   prune(presentTokens: string[]): void;
+  pruneFromText(text: string): void;   // keeps drafts whose token appears in text
   clear(): void;
 }
 ```
@@ -584,6 +588,12 @@ export default function (pi: ExtensionAPI) {
     wiring (not the tested modules) as needed.
   - `prune` runs BEFORE expansion is irrelevant; it must run on every input
     event using the pre-expansion text (tokens still visible there).
+  - Reconcile on card open: the command handler calls
+    `store.prune(...)` against `ctx.ui.getEditorText()` BEFORE constructing
+    AnnotateCard, so markers never outlive their pills.
+  - AnnotateEditor prunes on text change: override the text-mutation path
+    (setText/clear or a handleInput post-check) so deleting a pill prunes
+    its draft immediately.
 
 - [ ] **Step 2: Typecheck** -- `npx tsc --noEmit` clean.
 
