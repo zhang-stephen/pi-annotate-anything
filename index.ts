@@ -58,9 +58,19 @@ export default function (pi: ExtensionAPI) {
       // getter, re-read on every render, so annotations created while the
       // card stays open show their marker immediately.
       store.pruneFromText(ctx.ui.getEditorText());
-      const pending = () => store.list().filter((d) => d.absPath === loaded.path).map((d) => d.range);
+      // Live getters, re-read on every render: pending drives the gutter/
+      // underline markers; pendingDrafts carries token/range/comment for the
+      // card's edit (c) and delete (x) targeting. Both list this file's
+      // drafts oldest first, so overlapping ranges resolve to the most
+      // recently added one.
+      const pendingDrafts = () =>
+        store
+          .list()
+          .filter((d) => d.absPath === loaded.path)
+          .map((d) => ({ token: d.token, range: d.range, comment: d.comment }));
+      const pending = () => pendingDrafts().map((d) => d.range);
       await ctx.ui.custom<void>(
-        (tui, _theme, _keybindings, done) =>
+        (tui, theme, _keybindings, done) =>
           new AnnotateCard(
             tui,
             { path: loaded.path, lines: loaded.lines },
@@ -76,6 +86,29 @@ export default function (pi: ExtensionAPI) {
             },
             // AnnotateCard closes without a result; done's T is fixed to void.
             () => done(),
+            (draftId, comment) => {
+              // Edit submit: update the draft in place. The token is
+              // unchanged, so the pill already in the composer stays valid:
+              // no new pill is pasted.
+              store.updateComment(draftId, comment);
+              ctx.ui.notify(`Comment updated: ${draftId}`);
+            },
+            (draftId) => {
+              // Delete: drop the draft and strip its pill (first occurrence)
+              // from the composer. Pill already deleted by the user: remove
+              // the draft silently (the card render is the feedback).
+              // store.remove (not prune: prune KEEPS only the listed tokens).
+              store.remove(draftId);
+              const text = ctx.ui.getEditorText();
+              if (!text.includes(draftId)) return;
+              ctx.ui.setEditorText(text.replace(draftId, ""));
+              ctx.ui.notify(`Annotation deleted: ${draftId}`);
+            },
+            pendingDrafts,
+            // Chrome colors and the title's relative path come from the
+            // factory's active theme and the command's cwd.
+            theme,
+            ctx.cwd,
           ),
         { overlay: true, overlayOptions: { width: "80%", maxHeight: "80%", anchor: "center" } },
       );

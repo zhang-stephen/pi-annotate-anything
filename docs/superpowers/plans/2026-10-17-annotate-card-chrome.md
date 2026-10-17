@@ -17,21 +17,21 @@ Branch: feat/card-chrome off master. TDD: failing test first, then implementatio
 
 ## Task 2: viewer.ts chrome integration
 
-- [ ] **Step 1: failing tests** (via the existing viewer render seams) for: rendered output row 0 is the top border with embedded title `Annotate: <relative path>` plus ` (N)` when N > 0; last row is the bottom border; footer row present above it; every row has uniform display width.
-- [ ] **Step 2: implement** AnnotateCard theme plumbing: constructor receives the pi Theme (passed from the ctx.ui.custom factory in index.ts); build the color record via theme.fg/theme.bg (`border`, `dim`, `accent`, `warning`, bg token `customMessageBg`).
-- [ ] **Step 3: implement** render() through framePanel: border rows, title with live pending count from the pending() getter, footer hint from FOOTER_HINTS by state.mode (+ badge in accent, hints in dim), all rows bg-filled.
-- [ ] **Step 4: geometry update** - inner width = width - 2; viewport budget subtracts border (2) + footer (1) instead of RESERVED_ROWS; cursor clamping and horizontal scroll operate on inner width; update affected viewer tests.
-- [ ] **Step 5: floating comment box** - in comment mode, render frameCommentBox output over the content rows at commentBoxPlacement(selTop, selBottom, selStartCol, boxHeight, boxWidth, innerWidth, viewportRows); occluded rows are replaced, not pushed down.
-- [ ] **Step 6: pending styling** - gutter `*` and underline spans take theme `warning` color instead of raw ANSI.
-- [ ] **Step 7: verify** full suite + tsc.
+- [x] **Step 1: failing tests** (via the existing viewer render seams) for: rendered output row 0 is the top border with embedded title `Annotate: <relative path>` plus ` (N)` when N > 0; last row is the bottom border; footer row present above it; every row has uniform display width.
+- [x] **Step 2: implement** AnnotateCard theme plumbing: constructor receives the pi Theme (passed from the ctx.ui.custom factory in index.ts); build the color record via theme.fg/theme.bg (`border`, `dim`, `accent`, `warning`, bg token `customMessageBg`).
+- [x] **Step 3: implement** render() through framePanel: border rows, title with live pending count from the pending() getter, footer hint from FOOTER_HINTS by state.mode (+ badge in accent, hints in dim), all rows bg-filled.
+- [x] **Step 4: geometry update** - inner width = width - 2; viewport budget subtracts border (2) + footer (1) instead of RESERVED_ROWS; cursor clamping and horizontal scroll operate on inner width; update affected viewer tests.
+- [x] **Step 5: floating comment box** - in comment mode, render frameCommentBox output over the content rows at commentBoxPlacement(selTop, selBottom, selStartCol, boxHeight, boxWidth, innerWidth, viewportRows); occluded rows are replaced, not pushed down.
+- [x] **Step 6: pending styling** - gutter `*` and underline spans take theme `warning` color instead of raw ANSI.
+- [x] **Step 7: verify** full suite + tsc.
 
 ## Task 3: comment edit + delete (reducer, store, wiring)
 
 - [x] **Step 1: failing store tests** for `updateComment(id, comment)`: comment replaced, token/range/snapshot untouched, unknown id is a no-op (document the contract).
 - [x] **Step 2: failing reducer tests**: normal `c` on a pending line enters comment mode with state.editingDraftId set and the comment box pre-filled with the draft's comment; `c` on a non-pending line is a no-op; `x` on a pending line yields effect { type: "delete", draftId }; `x` elsewhere is a no-op; submit in editing mode yields { type: "update", draftId, comment } instead of annotate; Esc in editing mode cancels without changes.
 - [x] **Step 3: implement** store.updateComment in store.ts and reducer changes in viewer-state.ts to green.
-- [ ] **Step 4: implement** index.ts wiring: effect "update" -> store.updateComment (no pill paste, short confirmation notify); effect "delete" -> store remove + strip the draft's pill token (first occurrence) from the composer via getEditorText/setEditorText.
-- [ ] **Step 5: verify** full suite + tsc.
+- [x] **Step 4: implement** index.ts wiring: effect "update" -> store.updateComment (no pill paste, short confirmation notify); effect "delete" -> store remove + strip the draft's pill token (first occurrence) from the composer via getEditorText/setEditorText.
+- [x] **Step 5: verify** full suite + tsc.
 
 ## Task 4: hover preview + p toggle
 
