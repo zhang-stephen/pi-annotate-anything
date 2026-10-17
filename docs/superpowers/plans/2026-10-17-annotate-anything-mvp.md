@@ -384,7 +384,7 @@ Embedded in the card. A small state machine, not pi-tui's full Editor.
 - Create: `src/comment-input.ts`
 - Create: `test/comment-input.test.ts`
 
-- [ ] **Step 1: Write failing tests** for the pure state machine:
+- [x] **Step 1: Write failing tests** for the pure state machine:
 
 ```ts
 export interface CommentState { text: string }
@@ -402,12 +402,12 @@ export function reduceComment(state: CommentState, key: CommentKey):
   Cases: typing appends; newline inserts `\n`; backspace deletes; submit
   emits current text (empty text allowed); cancel emits cancel.
 
-- [ ] **Step 2: Run tests, expect failure.**
+- [x] **Step 2: Run tests, expect failure.**
 
-- [ ] **Step 3: Implement** the reducer plus `renderCommentBox(state, width,
+- [x] **Step 3: Implement** the reducer plus `renderCommentBox(state, width,
   theme): string[]` (bordered box, prompt line `Comment:`, raw text lines).
 
-- [ ] **Step 4: Commit** -- `feat(comment): add comment input state machine`
+- [x] **Step 4: Commit** -- `feat(comment): add comment input state machine`
 
 ---
 
