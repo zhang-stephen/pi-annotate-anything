@@ -4,54 +4,30 @@
 > subagent-driven-development (recommended) or executing-plans to implement
 > this plan task by task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Goal:** A pi extension that annotates arbitrary line/character ranges of
-any local file via `/annotate <path>`, collecting annotations as labeled
-composer pills that expand into full snapshot payloads on send.
+**Goal:** A pi extension that annotates arbitrary line/character ranges of any local file via `/annotate <path>`, collecting annotations as labeled composer pills that expand into full snapshot payloads on send.
 
-**Architecture:** Overlay card (`ctx.ui.custom` + `overlayOptions`) with
-vim-like selection over syntax-highlighted source; annotations stored in a
-draft store keyed by human-readable tokens (`[a.ts:10-20]`); tokens inserted
-into the composer via `ctx.ui.pasteToEditor`; a `CustomEditor` subclass
-recolors tokens as pills; an `input` event handler expands tokens into quote
-blocks + comments; `message_start` clears the store.
+**Architecture:** Overlay card (`ctx.ui.custom` + `overlayOptions`) with vim-like selection over syntax-highlighted source; annotations stored in a draft store keyed by human-readable tokens (`[a.ts:10-20]`); tokens inserted into the composer via `ctx.ui.pasteToEditor`; a `CustomEditor` subclass recolors tokens as pills; an `input` event handler expands tokens into quote blocks + comments; `message_start` clears the store.
 
-**Spec:** `docs/superpowers/specs/2026-10-17-annotate-anything-mvp-design.md`
-(approved; it holds user-flow and rendering decisions, this plan holds file
-paths and commands).
+**Spec:** `docs/superpowers/specs/2026-10-17-annotate-anything-mvp-design.md` (approved; it holds user-flow and rendering decisions, this plan holds file paths and commands).
 
-**Tech stack:** TypeScript (no build step, pi's jiti loads `.ts` directly),
-`@earendil-works/pi-coding-agent` 1.3.0 + `@earendil-works/pi-tui` 1.3.0
-(pi-official APIs only, both as `peerDependencies: "*"`, pinned in
-`devDependencies` for types), Node built-in test runner (`node --test`,
-native type stripping on Node >= 22.18), `tsc --noEmit` for typechecking.
+**Tech stack:** TypeScript (no build step, pi's jiti loads `.ts` directly), `@earendil-works/pi-coding-agent` 1.3.0 + `@earendil-works/pi-tui` 1.3.0 (pi-official APIs only, both as `peerDependencies: "*"`, pinned in `devDependencies` for types), Node built-in test runner (`node --test`, native type stripping on Node >= 22.18), `tsc --noEmit` for typechecking.
 
 **Global constraints (apply to every task):**
 
-- English for all code, comments, tests, docs. Chinese only where AGENTS.md
-  allows.
-- ASCII only in all files, except UI-facing strings which may use Nerd Font
-  icons.
+- English for all code, comments, tests, docs. Chinese only where AGENTS.md allows.
+- ASCII only in all files, except UI-facing strings which may use Nerd Font icons.
 - Semantic commits, e.g. `feat(viewer): ...`.
 - No third-party libraries beyond `@earendil-works/*`.
 - Run tests with `node --test test/` and typecheck with `npx tsc --noEmit`.
-- Update this plan's checkboxes AND `docs/superpowers/STATUS.md` in the same
-  commit that finishes a task.
+- Update this plan's checkboxes AND `docs/superpowers/STATUS.md` in the same commit that finishes a task.
 
 **Review Focus (high-risk points, check carefully in review):**
 
-1. Token collision: user-typed text that looks like a token must never
-   expand (transform only expands tokens present in the store).
-2. Pill recolor must not change line width: replacement is color-only, the
-   token text itself is the pill label (cursor geometry risk if violated).
-3. Wide chars/tabs: selection math on raw columns, display math via
-   `visibleWidth()`; tab expansion mapping helper must be tested.
+1. Token collision: user-typed text that looks like a token must never expand (transform only expands tokens present in the store).
+2. Pill recolor must not change line width: replacement is color-only, the token text itself is the pill label (cursor geometry risk if violated).
+3. Wide chars/tabs: selection math on raw columns, display math via `visibleWidth()`; tab expansion mapping helper must be tested.
 4. CRLF and binary/size guards in file loading.
-5. Draft lifecycle: the composer text is the source of truth for draft
-   survival. `pruneFromText(editorText)` runs at every trigger point:
-   editor text change, card open, before transform on `input`, and on
-   `message_start` (no blind `clear()` -- a message_start from an
-   RPC/extension-sent message must not kill drafts whose pills are still in
-   the composer). Store is dropped at session shutdown.
+5. Draft lifecycle: the composer text is the source of truth for draft survival. `pruneFromText(editorText)` runs at every trigger point: editor text change, card open, before transform on `input`, and on `message_start` (no blind `clear()` -- a message_start from an RPC/extension-sent message must not kill drafts whose pills are still in the composer). Store is dropped at session shutdown.
 
 ---
 
@@ -103,8 +79,7 @@ Set scripts and peer deps:
 }
 ```
 
-Imports use explicit `.ts` extensions (jiti resolves them; tsc accepts them
-via `allowImportingTsExtensions`).
+Imports use explicit `.ts` extensions (jiti resolves them; tsc accepts them via `allowImportingTsExtensions`).
 
 - [x] **Step 4: Smoke test the runner**
 
@@ -119,8 +94,7 @@ test("runner works", () => {
 });
 ```
 
-Run: `node --test test/` -- expected: 1 passing test.
-Run: `npx tsc --noEmit` -- expected: clean.
+Run: `node --test test/` -- expected: 1 passing test. Run: `npx tsc --noEmit` -- expected: clean.
 
 - [x] **Step 5: Commit**
 
@@ -138,10 +112,7 @@ Pure selection math. No I/O, no pi imports.
 - Create: `src/selection.ts`
 - Create: `test/selection.test.ts`
 
-- [x] **Step 1: Write failing tests** covering: forward/backward
-  normalization; char-wise keeps columns; line-wise expands to full lines
-  (col 0 to line length); cursor clamped to last column of line and to file
-  bounds; `o` swaps anchor/cursor.
+- [x] **Step 1: Write failing tests** covering: forward/backward normalization; char-wise keeps columns; line-wise expands to full lines (col 0 to line length); cursor clamped to last column of line and to file bounds; `o` swaps anchor/cursor.
 
   Shapes:
 
@@ -155,8 +126,7 @@ export function normalize(sel: Selection, lines: string[]): Range;
 export function clampPosition(pos: Position, lines: string[]): Position;
 ```
 
-  Line-wise semantics: `startCol = 0`, `endCol = lines[endLine].length`
-  (end-exclusive), matching how extraction slices.
+  Line-wise semantics: `startCol = 0`, `endCol = lines[endLine].length` (end-exclusive), matching how extraction slices.
 
 - [x] **Step 2: Run tests, expect failure.** Run: `node --test test/`
 
@@ -172,11 +142,7 @@ export function clampPosition(pos: Position, lines: string[]): Position;
 - Create: `src/file-range.ts`
 - Create: `test/file-range.test.ts`
 
-- [x] **Step 1: Write failing tests** covering: `~` and relative path
-  resolution against cwd; reject directories, missing files, NUL-containing
-  (binary) files, files over 1 MB; CRLF normalized to LF; extraction of
-  full-line ranges, mid-line char ranges, ranges spanning lines; empty file
-  returns zero lines; tab and wide-char content extracted byte-faithfully.
+- [x] **Step 1: Write failing tests** covering: `~` and relative path resolution against cwd; reject directories, missing files, NUL-containing (binary) files, files over 1 MB; CRLF normalized to LF; extraction of full-line ranges, mid-line char ranges, ranges spanning lines; empty file returns zero lines; tab and wide-char content extracted byte-faithfully.
 
   Shapes:
 
@@ -190,14 +156,11 @@ export function loadFile(path: string, maxBytes?: number): LoadResult;
 export function extractRange(lines: string[], range: Range): string;
 ```
 
-  `extractRange` slices raw columns: single-line range slices
-  `line.slice(startCol, endCol)`; multi-line keeps middle lines whole.
-  Newlines between selected lines are included in the snapshot.
+  `extractRange` slices raw columns: single-line range slices `line.slice(startCol, endCol)`; multi-line keeps middle lines whole. Newlines between selected lines are included in the snapshot.
 
 - [x] **Step 2: Run tests, expect failure.**
 
-- [x] **Step 3: Implement.** Use `node:fs` (`statSync` size check before
-  read), `node:os` homedir for `~`, `node:path`.
+- [x] **Step 3: Implement.** Use `node:fs` (`statSync` size check before read), `node:os` homedir for `~`, `node:path`.
 
 - [x] **Step 4: Commit** -- `feat(file): add file loading with guards and range extraction`
 
@@ -211,12 +174,7 @@ Pure formatting.
 - Create: `src/message.ts`
 - Create: `test/message.test.ts`
 
-- [x] **Step 1: Write failing tests** covering: line-wise label `lines 10-20`;
-  char-wise label `lines 10:5-12:20` (display is 1-based); single line
-  `lines 10`; payload layout with and without comment; language tag in the
-  code fence from file extension (plain text when unknown); token label
-  `[<display-path>:<label>]` where display-path is relative to cwd when
-  possible.
+- [x] **Step 1: Write failing tests** covering: line-wise label `lines 10-20`; char-wise label `lines 10:5-12:20` (display is 1-based); single line `lines 10`; payload layout with and without comment; language tag in the code fence from file extension (plain text when unknown); token label `[<display-path>:<label>]` where display-path is relative to cwd when possible.
 
   Shapes:
 
@@ -234,8 +192,7 @@ export function formatPayload(input: {
 
 ```text
 In `src/a.ts` (lines 10:5-12:20):
-```ts
-<snapshot>
+```ts <snapshot>
 ```
 Comment: <comment>
 ```
@@ -244,8 +201,7 @@ Comment: <comment>
 
 - [x] **Step 2: Run tests, expect failure.**
 
-- [x] **Step 3: Implement.** Language detection: small extension map
-  (ts/tsx/js/jsx/py/rs/go/json/md/sh/yaml/toml/css/html), fallback "".
+- [x] **Step 3: Implement.** Language detection: small extension map (ts/tsx/js/jsx/py/rs/go/json/md/sh/yaml/toml/css/html), fallback "".
 
 - [x] **Step 4: Commit** -- `feat(message): add payload and token label formatting`
 
@@ -257,11 +213,7 @@ Comment: <comment>
 - Create: `src/store.ts`
 - Create: `test/store.test.ts`
 
-- [x] **Step 1: Write failing tests** covering: add returns a unique token;
-  identical file+range annotated twice gets ` ~2` suffix; `list()` order is
-  insertion order; `prune(presentTokens)` drops entries whose token is gone;
-  `clear()` empties; token lookup by exact match only; `pruneFromText(text)`
-  keeps only drafts whose token is a substring of the given text.
+- [x] **Step 1: Write failing tests** covering: add returns a unique token; identical file+range annotated twice gets ` ~2` suffix; `list()` order is insertion order; `prune(presentTokens)` drops entries whose token is gone; `clear()` empties; token lookup by exact match only; `pruneFromText(text)` keeps only drafts whose token is a substring of the given text.
 
   Shapes:
 
@@ -299,11 +251,7 @@ export class AnnotationStore {
 - Create: `src/transform.ts`
 - Create: `test/transform.test.ts`
 
-- [x] **Step 1: Write failing tests** covering: single token expands inline
-  mid-prose; multiple tokens expand in order; user-typed `[a.ts:10-20]` that
-  is NOT in the store stays untouched; tokens are regex-escaped (paths with
-  `.` or `[`); text without tokens returns unchanged; expansion separates the
-  payload from surrounding prose with blank lines.
+- [x] **Step 1: Write failing tests** covering: single token expands inline mid-prose; multiple tokens expand in order; user-typed `[a.ts:10-20]` that is NOT in the store stays untouched; tokens are regex-escaped (paths with `.` or `[`); text without tokens returns unchanged; expansion separates the payload from surrounding prose with blank lines.
 
   Shape:
 
@@ -321,8 +269,7 @@ export function expandTokens(text: string, store: AnnotationStore): { changed: b
 
 - [x] **Step 2: Run tests, expect failure.**
 
-- [x] **Step 3: Implement.** Escape tokens via
-  `token.replace(/[.*+?^${}()[\]\\|]/g, "\\$&")` before building the RegExp.
+- [x] **Step 3: Implement.** Escape tokens via `token.replace(/[.*+?^${}()[\]\\|]/g, "\\$&")` before building the RegExp.
 
 - [x] **Step 4: Commit** -- `feat(transform): add token expansion on input`
 
@@ -340,16 +287,11 @@ export function expandTokens(text: string, store: AnnotationStore): { changed: b
 export function recolorTokens(line: string, tokens: string[], style: (s: string) => string): string;
 ```
 
-  Cases: token recolored; unknown text untouched; multiple tokens; ANSI
-  width unchanged (`visibleWidth` of output equals input); token not found
-  returns input unchanged. Test with a trivial style wrapper
-  `(s) => \`<${s}>\``.
+  Cases: token recolored; unknown text untouched; multiple tokens; ANSI width unchanged (`visibleWidth` of output equals input); token not found returns input unchanged. Test with a trivial style wrapper `(s) => \`<${s}>\``.
 
 - [x] **Step 2: Run tests, expect failure.**
 
-- [x] **Step 3: Implement `recolorTokens`** (plain string split/join on
-  exact token occurrences -- the token contains no ANSI, rendered lines are
-  the editor's plain text lines).
+- [x] **Step 3: Implement `recolorTokens`** (plain string split/join on exact token occurrences -- the token contains no ANSI, rendered lines are the editor's plain text lines).
 
 - [x] **Step 4: Implement `AnnotateEditor`**:
 
@@ -369,8 +311,7 @@ export class AnnotateEditor extends CustomEditor {
 }
 ```
 
-  Color-only replacement (inverse video). Known limitation, accepted: a
-  token split across wrapped lines is not recolored (stays plain text).
+  Color-only replacement (inverse video). Known limitation, accepted: a token split across wrapped lines is not recolored (stays plain text).
 
 - [x] **Step 5: Run tests + typecheck. Commit** -- `feat(editor): add pill recoloring composer editor`
 
@@ -399,13 +340,11 @@ export function reduceComment(state: CommentState, key: CommentKey):
   { state: CommentState; effect?: { type: "submit"; text: string } | { type: "cancel" } };
 ```
 
-  Cases: typing appends; newline inserts `\n`; backspace deletes; submit
-  emits current text (empty text allowed); cancel emits cancel.
+  Cases: typing appends; newline inserts `\n`; backspace deletes; submit emits current text (empty text allowed); cancel emits cancel.
 
 - [x] **Step 2: Run tests, expect failure.**
 
-- [x] **Step 3: Implement** the reducer plus `renderCommentBox(state, width,
-  theme): string[]` (bordered box, prompt line `Comment:`, raw text lines).
+- [x] **Step 3: Implement** the reducer plus `renderCommentBox(state, width, theme): string[]` (bordered box, prompt line `Comment:`, raw text lines).
 
 - [x] **Step 4: Commit** -- `feat(comment): add comment input state machine`
 
@@ -419,13 +358,7 @@ Pure vim reducer -- the card's brain, fully unit-tested.
 - Create: `src/viewer-state.ts`
 - Create: `test/viewer-state.test.ts`
 
-- [x] **Step 1: Write failing tests** covering the key table below plus:
-  cursor clamping (no wrap past end of line); viewport scrolls to keep the
-  cursor visible; `v`/`V` enter/toggle/exit modes; `o` swaps ends; Esc in
-  visual mode exits to normal, in normal mode requests close; `q` in normal
-  mode requests close; `c` with an active selection enters comment mode;
-  comment submit emits the annotation effect and returns to normal mode
-  (card stays open).
+- [x] **Step 1: Write failing tests** covering the key table below plus: cursor clamping (no wrap past end of line); viewport scrolls to keep the cursor visible; `v`/`V` enter/toggle/exit modes; `o` swaps ends; Esc in visual mode exits to normal, in normal mode requests close; `q` in normal mode requests close; `c` with an active selection enters comment mode; comment submit emits the annotation effect and returns to normal mode (card stays open).
 
   Shapes:
 
@@ -448,17 +381,11 @@ export function reduceViewer(state: ViewerState, key: string, lines: string[], v
   { state: ViewerState; effect?: ViewerEffect };
 ```
 
-  Key table (raw input strings): `h j k l`, arrows (`\x1b[A` etc.),
-  `0`, `$`, `gg` (two-stroke), `G`, `ctrl+d` (`\x04`) / `ctrl+u` (`\x15`)
-  half-page, PgUp/PgDn, `v`, `V`, `o`, `c`, `q`, Esc (`\x1b`). In comment
-  mode, keys route to `reduceComment` (Enter = `\r`, ctrl+j = `\n`,
-  shift+enter = `\x1b\r`).
+  Key table (raw input strings): `h j k l`, arrows (`\x1b[A` etc.), `0`, `$`, `gg` (two-stroke), `G`, `ctrl+d` (`\x04`) / `ctrl+u` (`\x15`) half-page, PgUp/PgDn, `v`, `V`, `o`, `c`, `q`, Esc (`\x1b`). In comment mode, keys route to `reduceComment` (Enter = `\r`, ctrl+j = `\n`, shift+enter = `\x1b\r`).
 
 - [x] **Step 2: Run tests, expect failure.**
 
-- [x] **Step 3: Implement.** Two-stroke keys (`gg`) tracked with a pending-key
-  field. Selection during visual modes derives from `anchor` + `cursor` via
-  `normalize()`.
+- [x] **Step 3: Implement.** Two-stroke keys (`gg`) tracked with a pending-key field. Selection during visual modes derives from `anchor` + `cursor` via `normalize()`.
 
 - [x] **Step 4: Commit** -- `feat(viewer): add vim-style viewer state machine`
 
@@ -480,10 +407,7 @@ export function rawColToDisplayCol(line: string, col: number, tabSize?: number):
 export function gutterWidth(lineCount: number): number;
 ```
 
-  Tab mapping: tab advances to the next multiple of `tabSize` (default 4);
-  `rawColToDisplayCol` maps a raw column to its display column after
-  expansion. Test tabs at various positions and wide chars via
-  `visibleWidth`.
+  Tab mapping: tab advances to the next multiple of `tabSize` (default 4); `rawColToDisplayCol` maps a raw column to its display column after expansion. Test tabs at various positions and wide chars via `visibleWidth`.
 
 - [x] **Step 2: Run tests, expect failure. Implement helpers.**
 
@@ -506,17 +430,10 @@ export class AnnotateCard {
 ```
 
   Render pipeline per visible line:
-  1. Gutter: right-aligned line number; `*` marker column for lines with a
-     pending annotation.
-  2. Content: `highlightCode(lines.join("\n"), getLanguageFromPath(path))`
-     computed once in the constructor; per frame, slice the viewport.
-  3. Active selection: for lines intersecting the selection, render the raw
-     (tab-expanded, unhighlighted) text with the selected display-column
-     span wrapped in inverse video (`\x1b[7m...\x1b[27m`). Selection display
-     wins over syntax highlight on those lines.
-  4. Pending annotations: underline the covered display span
-     (`\x1b[4m...\x1b[24m`) so syntax colors stay visible; underline applies
-     AFTER highlighting (wrapping whole-line or spliced span).
+  1. Gutter: right-aligned line number; `*` marker column for lines with a pending annotation.
+  2. Content: `highlightCode(lines.join("\n"), getLanguageFromPath(path))` computed once in the constructor; per frame, slice the viewport.
+  3. Active selection: for lines intersecting the selection, render the raw (tab-expanded, unhighlighted) text with the selected display-column span wrapped in inverse video (`\x1b[7m...\x1b[27m`). Selection display wins over syntax highlight on those lines.
+  4. Pending annotations: underline the covered display span (`\x1b[4m...\x1b[24m`) so syntax colors stay visible; underline applies AFTER highlighting (wrapping whole-line or spliced span).
   5. Cursor cell in normal/visual mode: inverse video on the cursor column.
   6. Comment mode: append `renderCommentBox` output below the file area.
 
@@ -531,8 +448,7 @@ export class AnnotateCard {
 **Files:**
 - Create: `index.ts`
 
-- [x] **Step 1: Implement the extension** (no unit tests; verified by e2e in
-  Task 12):
+- [x] **Step 1: Implement the extension** (no unit tests; verified by e2e in Task 12):
 
 ```ts
 import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";
@@ -586,22 +502,11 @@ export default function (pi: ExtensionAPI) {
 ```
 
   Notes for the implementer:
-  - Check the real `CustomEditor` constructor signature and
-    `ctx.ui.theme`/`ctx.ui.tui` availability in `types.d.ts`; adjust the
-    wiring (not the tested modules) as needed.
-  - `prune` runs BEFORE expansion is irrelevant; it must run on every input
-    event using the pre-expansion text (tokens still visible there).
-  - Reconcile on card open: the command handler calls
-    `store.prune(...)` against `ctx.ui.getEditorText()` BEFORE constructing
-    AnnotateCard, so markers never outlive their pills.
-  - AnnotateEditor prunes on text change: override the text-mutation path
-    (setText/clear or a handleInput post-check) so deleting a pill prunes
-    its draft immediately. Clearing the whole composer therefore clears all
-    drafts, which matches the user's mental model.
-  - `message_start` must NOT blindly `clear()`: run
-    `store.pruneFromText(ctx.ui.getEditorText())` instead. After the user's
-    own send the editor is empty, so this clears everything; an unrelated
-    RPC/extension message_start keeps drafts whose pills are still present.
+  - Check the real `CustomEditor` constructor signature and `ctx.ui.theme`/`ctx.ui.tui` availability in `types.d.ts`; adjust the wiring (not the tested modules) as needed.
+  - `prune` runs BEFORE expansion is irrelevant; it must run on every input event using the pre-expansion text (tokens still visible there).
+  - Reconcile on card open: the command handler calls `store.prune(...)` against `ctx.ui.getEditorText()` BEFORE constructing AnnotateCard, so markers never outlive their pills.
+  - AnnotateEditor prunes on text change: override the text-mutation path (setText/clear or a handleInput post-check) so deleting a pill prunes its draft immediately. Clearing the whole composer therefore clears all drafts, which matches the user's mental model.
+  - `message_start` must NOT blindly `clear()`: run `store.pruneFromText(ctx.ui.getEditorText())` instead. After the user's own send the editor is empty, so this clears everything; an unrelated RPC/extension message_start keeps drafts whose pills are still present.
 
 - [x] **Step 2: Typecheck** -- `npx tsc --noEmit` clean.
 
@@ -614,12 +519,9 @@ export default function (pi: ExtensionAPI) {
 **Files:**
 - Create: `README.md`
 
-- [x] **Step 1: Write README.md** (English): what it does, install
-  (`npm install` / pi package install), usage (`/annotate <path>`, key
-  table), payload example, development (`npm test`, `npm run typecheck`).
+- [x] **Step 1: Write README.md** (English): what it does, install (`npm install` / pi package install), usage (`/annotate <path>`, key table), payload example, development (`npm test`, `npm run typecheck`).
 
-- [x] **Step 2: Manual e2e checklist** -- run `pi --extension ./index.ts` and
-  verify each item, checking the box after each:
+- [x] **Step 2: Manual e2e checklist** -- run `pi --extension ./index.ts` and verify each item, checking the box after each:
   - [x] `/annotate <file>` opens the card; syntax highlight visible; line numbers correct
   - [x] `hjkl`/arrows/`gg`/`G`/`0`/`$`/ctrl+d/ctrl+u move as expected; no cursor past line end
   - [x] `v` char-wise selection renders inverse; `V` line-wise; `o` swaps; Esc cancels
@@ -636,9 +538,4 @@ export default function (pi: ExtensionAPI) {
 
 ## Self-review
 
-Coverage: every spec module maps to a task (status.ts removed per spec).
-TDD: every logic module has failing tests before implementation; TUI wiring
-is covered by pure-helper tests + manual e2e. Placeholder scan: the only
-intentional gap is the CustomEditor constructor details in Task 11, flagged
-in-line. Type consistency: `Range`, `VisualMode`, `Draft` are defined once
-in `selection.ts`/`store.ts` and reused.
+Coverage: every spec module maps to a task (status.ts removed per spec). TDD: every logic module has failing tests before implementation; TUI wiring is covered by pure-helper tests + manual e2e. Placeholder scan: the only intentional gap is the CustomEditor constructor details in Task 11, flagged in-line. Type consistency: `Range`, `VisualMode`, `Draft` are defined once in `selection.ts`/`store.ts` and reused.
