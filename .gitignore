@@ -1,0 +1,31 @@
+# Dependencies
+node_modules/
+
+# Build output
+dist/
+build/
+*.tsbuildinfo
+
+# Logs
+*.log
+npm-debug.log*
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Editor directories
+.idea/
+.vscode/
+*.swp
+
+# Environment / secrets
+.env
+.env.*
+
+# Coverage / test artifacts
+coverage/
+.nyc_output/
+
+# Pi local state
+.pi/

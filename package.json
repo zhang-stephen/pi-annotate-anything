@@ -1,0 +1,14 @@
+{
+  "name": "pi-annotate-anything",
+  "version": "0.0.0",
+  "description": "Pi extension: annotate arbitrary line/character ranges of any local file, injected as a quote block plus comment",
+  "type": "module",
+  "main": "index.ts",
+  "keywords": [
+    "pi-package"
+  ],
+  "license": "MIT",
+  "peerDependencies": {
+    "@earendil-works/pi-coding-agent": "*"
+  }
+}
