@@ -211,7 +211,7 @@ Pure formatting.
 - Create: `src/message.ts`
 - Create: `test/message.test.ts`
 
-- [ ] **Step 1: Write failing tests** covering: line-wise label `lines 10-20`;
+- [x] **Step 1: Write failing tests** covering: line-wise label `lines 10-20`;
   char-wise label `lines 10:5-12:20` (display is 1-based); single line
   `lines 10`; payload layout with and without comment; language tag in the
   code fence from file extension (plain text when unknown); token label
@@ -242,12 +242,12 @@ Comment: <comment>
 
   Omit the `Comment:` line when the comment is empty.
 
-- [ ] **Step 2: Run tests, expect failure.**
+- [x] **Step 2: Run tests, expect failure.**
 
-- [ ] **Step 3: Implement.** Language detection: small extension map
+- [x] **Step 3: Implement.** Language detection: small extension map
   (ts/tsx/js/jsx/py/rs/go/json/md/sh/yaml/toml/css/html), fallback "".
 
-- [ ] **Step 4: Commit** -- `feat(message): add payload and token label formatting`
+- [x] **Step 4: Commit** -- `feat(message): add payload and token label formatting`
 
 ---
 
