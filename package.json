@@ -5,7 +5,12 @@
   "type": "module",
   "main": "index.ts",
   "keywords": [
-    "pi-package"
+    "pi-package",
+    "pi",
+    "pi-coding-agent",
+    "extension",
+    "annotation",
+    "vim"
   ],
   "license": "MIT",
   "repository": {
@@ -21,6 +26,11 @@
     "README.md",
     "LICENSE"
   ],
+  "pi": {
+    "extensions": [
+      "./index.ts"
+    ]
+  },
   "publishConfig": {
     "access": "public",
     "provenance": true
