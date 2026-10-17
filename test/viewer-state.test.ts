@@ -2,7 +2,7 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 
 import { reduceViewer } from "../src/viewer-state.ts";
-import type { ViewerState } from "../src/viewer-state.ts";
+import type { PendingDraft, ViewerState } from "../src/viewer-state.ts";
 
 // 30-line fixture: "line 0" .. "line 29" (col max 6 for single-digit lines).
 const LINES = Array.from({ length: 30 }, (_, i) => `line ${i}`);
@@ -17,12 +17,13 @@ function viewer(overrides: Partial<ViewerState> = {}): ViewerState {
     comment: null,
     pending: null,
     visualMode: "char",
+    editingDraftId: null,
     ...overrides,
   };
 }
 
-function view(state: ViewerState, key: string) {
-  return reduceViewer(state, key, LINES, { height: VH });
+function view(state: ViewerState, key: string, pending: PendingDraft[] = []) {
+  return reduceViewer(state, key, LINES, { height: VH }, pending);
 }
 
 // Movement: h j k l --------------------------------------------------------
@@ -427,6 +428,100 @@ test("reduceViewer: Esc in comment mode cancels back to the visual selection", (
 test("reduceViewer: Esc in comment mode restores char-wise when that was the origin", () => {
   const res = view(commentState("draft", "char"), "\x1b");
   assert.equal(res.state.mode, "visual-char");
+});
+
+// Edit/delete pending drafts (normal-mode c and x) -------------------------
+
+// Pending drafts ordered oldest first, as store.list() returns them.
+const DRAFT_A: PendingDraft = {
+  token: "[a.ts:3-5]",
+  range: { startLine: 2, startCol: 0, endLine: 4, endCol: 6 },
+  comment: "first",
+};
+const DRAFT_B: PendingDraft = {
+  token: "[a.ts:4-4]",
+  range: { startLine: 3, startCol: 1, endLine: 3, endCol: 4 },
+  comment: "second",
+};
+
+function editingState(draft: PendingDraft, text: string): ViewerState {
+  return viewer({
+    mode: "comment",
+    cursor: { line: 3, col: 2 },
+    visualMode: "char",
+    comment: { text },
+    editingDraftId: draft.token,
+  });
+}
+
+test("reduceViewer: c on a pending line enters comment mode editing that draft, pre-filled", () => {
+  const res = view(viewer({ cursor: { line: 3, col: 2 } }), "c", [DRAFT_A]);
+  assert.equal(res.state.mode, "comment");
+  assert.deepEqual(res.state.comment, { text: "first" });
+  assert.equal(res.state.editingDraftId, DRAFT_A.token);
+  assert.equal(res.state.anchor, null);
+  assert.equal(res.effect, undefined);
+});
+
+test("reduceViewer: c in normal mode off pending lines is a no-op", () => {
+  const start = viewer({ cursor: { line: 10, col: 0 } });
+  const res = view(start, "c", [DRAFT_A]);
+  assert.deepEqual(res.state, start);
+  assert.equal(res.effect, undefined);
+});
+
+test("reduceViewer: overlapping drafts resolve to the most recently added one", () => {
+  const res = view(viewer({ cursor: { line: 3, col: 2 } }), "c", [DRAFT_A, DRAFT_B]);
+  assert.equal(res.state.editingDraftId, DRAFT_B.token);
+  assert.deepEqual(res.state.comment, { text: "second" });
+});
+
+test("reduceViewer: c in visual mode starts a fresh comment even on a pending line", () => {
+  const start = viewer({ mode: "visual-char", cursor: { line: 3, col: 2 }, anchor: { line: 3, col: 1 } });
+  const res = view(start, "c", [DRAFT_A]);
+  assert.equal(res.state.mode, "comment");
+  assert.deepEqual(res.state.comment, { text: "" });
+  assert.equal(res.state.editingDraftId, null);
+});
+
+test("reduceViewer: submit while editing updates that draft instead of annotating", () => {
+  const typed = view(editingState(DRAFT_A, "first"), "!", [DRAFT_A]);
+  assert.deepEqual(typed.state.comment, { text: "first!" });
+  const res = view(typed.state, "\r", [DRAFT_A]);
+  assert.deepEqual(res.effect, { type: "update", draftId: DRAFT_A.token, comment: "first!" });
+  assert.equal(res.state.mode, "normal");
+  assert.equal(res.state.comment, null);
+  assert.equal(res.state.editingDraftId, null);
+  assert.equal(res.state.anchor, null);
+});
+
+test("reduceViewer: Esc while editing cancels back to normal without changes", () => {
+  const res = view(editingState(DRAFT_A, "first"), "\x1b", [DRAFT_A]);
+  assert.equal(res.state.mode, "normal");
+  assert.equal(res.state.comment, null);
+  assert.equal(res.state.editingDraftId, null);
+  assert.equal(res.effect, undefined);
+});
+
+test("reduceViewer: x on a pending line requests deletion of that draft", () => {
+  const start = viewer({ cursor: { line: 3, col: 0 } });
+  const res = view(start, "x", [DRAFT_A]);
+  assert.deepEqual(res.effect, { type: "delete", draftId: DRAFT_A.token });
+  assert.deepEqual(res.state, start);
+});
+
+test("reduceViewer: x off pending lines is a no-op", () => {
+  const start = viewer({ cursor: { line: 10, col: 0 } });
+  const res = view(start, "x", [DRAFT_A]);
+  assert.deepEqual(res.state, start);
+  assert.equal(res.effect, undefined);
+});
+
+test("reduceViewer: x in visual mode is a no-op even on a pending line", () => {
+  const start = viewer({ mode: "visual-char", cursor: { line: 3, col: 2 }, anchor: { line: 3, col: 1 } });
+  const res = view(start, "x", [DRAFT_A]);
+  assert.deepEqual(res.state, start);
+  assert.equal(res.effect, undefined);
 });
 
 // Purity -------------------------------------------------------------------

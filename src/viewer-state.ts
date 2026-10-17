@@ -6,6 +6,7 @@ import { clampPosition, normalize } from "./selection.ts";
 import type { Position, Range, Selection, VisualMode } from "./selection.ts";
 import { reduceComment } from "./comment-input.ts";
 import type { CommentKey, CommentState } from "./comment-input.ts";
+import { draftAtCursor } from "./card-chrome.ts";
 
 export type ViewerMode = "normal" | "visual-char" | "visual-line" | "comment";
 
@@ -22,10 +23,28 @@ export interface ViewerState {
   // across comment mode (which hides `mode`) so the annotate effect and the
   // Esc restore use the flavor the selection was started in.
   visualMode: VisualMode;
+  // Token of the pending draft being edited (normal-mode c on a line the
+  // draft covers): comment mode with the box pre-filled from that draft,
+  // where submit updates it and Esc restores normal mode. Optional so
+  // callers that construct this state without the field (pre-edit callers)
+  // stay valid; the reducer treats undefined like null.
+  editingDraftId?: string | null;
+}
+
+// Minimal view of a pending annotation the reducer needs for edit (c) and
+// delete (x): identity (token) for the update/delete effects, the range for
+// line targeting, and the comment for pre-filling the editor. Entries of
+// AnnotationStore.list() satisfy it structurally.
+export interface PendingDraft {
+  token: string;
+  range: Range;
+  comment: string;
 }
 
 export type ViewerEffect =
   | { type: "annotate"; range: Range; mode: VisualMode; comment: string }
+  | { type: "update"; draftId: string; comment: string }
+  | { type: "delete"; draftId: string }
   | { type: "close" };
 
 export interface ViewerResult {
@@ -34,6 +53,7 @@ export interface ViewerResult {
 }
 
 const HALF_PAGE = (vh: number) => Math.floor(vh / 2);
+
 
 // Clamps scrollTop into [0, lines.length - vh], then nudges it so the cursor
 // line stays inside the visible window. Applied to every cursor-moving key.
@@ -80,8 +100,21 @@ function commentStep(state: ViewerState, key: string, lines: string[], vh: numbe
     return { state: keepVisible({ ...state, comment: res.state }, lines, vh) };
   }
   if (res.effect.type === "cancel") {
+    if (state.editingDraftId) {
+      // Editing a pending draft: back to normal mode (no selection to
+      // restore), draft untouched.
+      return { state: { ...state, mode: "normal", comment: null, editingDraftId: null } };
+    }
     // Back to the visual mode the selection was started in, selection intact.
     return { state: { ...state, mode: state.visualMode === "line" ? "visual-line" : "visual-char", comment: null } };
+  }
+  if (state.editingDraftId) {
+    // Submit while editing: update the draft's comment in place; no new
+    // annotation is created.
+    return {
+      state: { ...state, mode: "normal", anchor: null, comment: null, pending: null, editingDraftId: null },
+      effect: { type: "update", draftId: state.editingDraftId, comment: res.effect.text },
+    };
   }
   // Submit: annotate the CURRENT selection, clear it, stay open (no close).
   const sel: Selection = { anchor: state.anchor ?? state.cursor, cursor: state.cursor, mode: state.visualMode };
@@ -91,7 +124,7 @@ function commentStep(state: ViewerState, key: string, lines: string[], vh: numbe
   };
 }
 
-function handleMode(state: ViewerState, key: string, lines: string[], vh: number): ViewerResult {
+function handleMode(state: ViewerState, key: string, lines: string[], vh: number, pending: PendingDraft[]): ViewerResult {
   const visual = state.mode === "visual-char" || state.mode === "visual-line";
   switch (key) {
     case "h":
@@ -134,8 +167,22 @@ function handleMode(state: ViewerState, key: string, lines: string[], vh: number
       if (!visual) return { state };
       return { state: { ...state, anchor: state.cursor, cursor: state.anchor ?? state.cursor } };
     case "c":
-      if (!visual) return { state };
+      if (state.mode === "normal") {
+        // Editing flow: on a line a pending draft covers, reopen its comment
+        // pre-filled; elsewhere a no-op.
+        const draft = draftAtCursor(state.cursor.line, pending);
+        if (draft === undefined) return { state };
+        return {
+          state: { ...state, mode: "comment", comment: { text: draft.comment }, editingDraftId: draft.token },
+        };
+      }
       return { state: { ...state, mode: "comment", comment: { text: "" } } };
+    case "x":
+      // Delete flow: normal mode only, on a line a pending draft covers.
+      if (state.mode !== "normal") return { state };
+      const victim = draftAtCursor(state.cursor.line, pending);
+      if (victim === undefined) return { state };
+      return { state, effect: { type: "delete", draftId: victim.token } };
     case "q":
       return state.mode === "normal" ? { state, effect: { type: "close" } } : { state };
     case "\x1b":
@@ -151,6 +198,10 @@ export function reduceViewer(
   key: string,
   lines: string[],
   viewport: { height: number },
+  // Pending annotation drafts (token/range/comment), oldest first, used to
+  // target normal-mode edit (c) and delete (x); callers without pending
+  // drafts may omit it.
+  pending: PendingDraft[] = [],
 ): ViewerResult {
   const vh = Math.max(1, viewport.height);
 
@@ -167,5 +218,5 @@ export function reduceViewer(
     current = { ...current, pending: null };
   }
 
-  return handleMode(current, key, lines, vh);
+  return handleMode(current, key, lines, vh, pending);
 }

@@ -44,6 +44,22 @@ export class AnnotationStore {
     return this.drafts.get(token);
   }
 
+  // Replaces only the comment of the draft stored under id (its token); the
+  // token, range, mode, and snapshot are untouched, and the draft keeps its
+  // list() position. Unknown id is a no-op: callers can hold stale ids after
+  // a prune, so an update must never throw or resurrect the draft.
+  updateComment(id: string, comment: string): void {
+    const draft = this.drafts.get(id);
+    if (!draft) return;
+    this.drafts.set(id, { ...draft, comment });
+  }
+
+  // Removes the draft stored under token. Unknown token is a no-op,
+  // consistent with updateComment: callers can hold stale ids after a prune.
+  remove(token: string): void {
+    this.drafts.delete(token);
+  }
+
   list(): Draft[] {
     return [...this.drafts.values()];
   }

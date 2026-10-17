@@ -129,6 +129,36 @@ test("pruneFromText: a suffixed token is not kept by its base appearing alone", 
   assert.deepEqual(store.list().map((d) => d.token), [t1, t3]);
 });
 
+test("updateComment: replaces only the comment; token, range, snapshot and mode untouched", () => {
+  const store = new AnnotationStore();
+  const d = store.add(draft("/a.ts", rangeA, "snap", "old"), "[a.ts:10-20]");
+  store.updateComment(d.token, "new");
+  const updated = store.get(d.token) as Draft;
+  assert.equal(updated.comment, "new");
+  assert.equal(updated.token, d.token);
+  assert.equal(updated.snapshot, "snap");
+  assert.equal(updated.absPath, "/a.ts");
+  assert.deepEqual(updated.range, rangeA);
+  assert.equal(updated.mode, "line");
+});
+
+test("updateComment: unknown id is a no-op", () => {
+  const store = new AnnotationStore();
+  const d = store.add(draft("/a.ts", rangeA, "snap", "old"), "[a.ts:10-20]");
+  store.updateComment("[missing.ts:1-2]", "new");
+  assert.equal(store.get(d.token)?.comment, "old");
+  assert.equal(store.get("[missing.ts:1-2]"), undefined);
+  assert.equal(store.list().length, 1);
+});
+
+test("updateComment: keeps the updated draft's position in list() order", () => {
+  const store = new AnnotationStore();
+  const t1 = store.add(draft("/a.ts", rangeA, "s1", "one"), "[a.ts:10-20]").token;
+  const t2 = store.add(draft("/b.ts", rangeB, "s2", "two"), "[b.ts:1-3]").token;
+  store.updateComment(t1, "edited");
+  assert.deepEqual(store.list().map((d) => d.token), [t1, t2]);
+});
+
 test("clear: empties the store", () => {
   const store = new AnnotationStore();
   store.add(draft("/a.ts", rangeA, "s1", "one"), "[a.ts:10-20]");
@@ -136,4 +166,15 @@ test("clear: empties the store", () => {
   store.clear();
   assert.deepEqual(store.list(), []);
   assert.equal(store.get("[a.ts:10-20]"), undefined);
+});
+
+test("store.remove deletes only the targeted draft", () => {
+  const store = new AnnotationStore();
+  const a = store.add(draft("/f.ts", rangeA, "snap", "one"), "[f.ts:1-2]");
+  const b = store.add(draft("/f.ts", rangeB, "snap", "two"), "[f.ts:3-4]");
+  store.remove(a.token);
+  assert.deepEqual(store.list().map((d) => d.token), [b.token]);
+  // Unknown token is a no-op.
+  store.remove("[f.ts:99-100]");
+  assert.equal(store.list().length, 1);
 });

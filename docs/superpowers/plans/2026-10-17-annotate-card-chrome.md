@@ -27,9 +27,9 @@ Branch: feat/card-chrome off master. TDD: failing test first, then implementatio
 
 ## Task 3: comment edit + delete (reducer, store, wiring)
 
-- [ ] **Step 1: failing store tests** for `updateComment(id, comment)`: comment replaced, token/range/snapshot untouched, unknown id is a no-op (document the contract).
-- [ ] **Step 2: failing reducer tests**: normal `c` on a pending line enters comment mode with state.editingDraftId set and the comment box pre-filled with the draft's comment; `c` on a non-pending line is a no-op; `x` on a pending line yields effect { type: "delete", draftId }; `x` elsewhere is a no-op; submit in editing mode yields { type: "update", draftId, comment } instead of annotate; Esc in editing mode cancels without changes.
-- [ ] **Step 3: implement** store.updateComment in store.ts and reducer changes in viewer-state.ts to green.
+- [x] **Step 1: failing store tests** for `updateComment(id, comment)`: comment replaced, token/range/snapshot untouched, unknown id is a no-op (document the contract).
+- [x] **Step 2: failing reducer tests**: normal `c` on a pending line enters comment mode with state.editingDraftId set and the comment box pre-filled with the draft's comment; `c` on a non-pending line is a no-op; `x` on a pending line yields effect { type: "delete", draftId }; `x` elsewhere is a no-op; submit in editing mode yields { type: "update", draftId, comment } instead of annotate; Esc in editing mode cancels without changes.
+- [x] **Step 3: implement** store.updateComment in store.ts and reducer changes in viewer-state.ts to green.
 - [ ] **Step 4: implement** index.ts wiring: effect "update" -> store.updateComment (no pill paste, short confirmation notify); effect "delete" -> store remove + strip the draft's pill token (first occurrence) from the composer via getEditorText/setEditorText.
 - [ ] **Step 5: verify** full suite + tsc.
 

@@ -7,7 +7,6 @@
 
 import { sliceByColumn, truncateToWidth, visibleWidth } from "@earendil-works/pi-tui";
 
-import type { Draft } from "./store.ts";
 
 // Color functions the chrome needs, mapped from the active pi theme by the
 // caller. bg fills full rows, border paints border glyphs; dim, accent, and
@@ -113,8 +112,10 @@ export function commentBoxPlacement(
 // ends inclusive, 0-based lines; column bounds ignored). Pending order is
 // insertion order, so keeping the last hit while scanning forward returns
 // the most recently added draft - the same draft `c` and `x` target.
-export function draftAtCursor(cursorLine: number, pending: readonly Draft[]): Draft | undefined {
-  let hit: Draft | undefined;
+// Generic over the minimal range-bearing shape so both the store Draft
+// and the reducer's pending entries can use it.
+export function draftAtCursor<T extends { range: { startLine: number; endLine: number } }>(cursorLine: number, pending: readonly T[]): T | undefined {
+  let hit: T | undefined;
   for (const d of pending) {
     if (cursorLine >= d.range.startLine && cursorLine <= d.range.endLine) hit = d;
   }
