@@ -42,9 +42,9 @@ Branch: feat/card-chrome off master. TDD: failing test first, then implementatio
 
 ## Task 5: docs and e2e
 
-- [ ] **Step 1: update README** key tables (c/x/p, mode badges, floating comment box, preview) - keep it accurate, no marketing.
-- [ ] **Step 2: manual e2e** (user, real TUI) - detailed scenario list below.
-- [ ] **Step 3: update STATUS.md** and merge feat/card-chrome to master after e2e passes (merge needs explicit user approval).
+- [x] **Step 1: update README** key tables (c/x/p, mode badges, floating comment box, preview) - keep it accurate, no marketing.
+- [x] **Step 2: manual e2e** (user, real TUI) - detailed scenario list below.
+- [x] **Step 3: update STATUS.md** and merge feat/card-chrome to master after e2e passes (merge needs explicit user approval).
 
 ### E2E scenarios (run from the repo root, fixtures under .superpowers/sdd/2026-10-17-annotate-anything-mvp/e2e-fixtures/)
 
