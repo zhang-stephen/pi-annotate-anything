@@ -87,11 +87,12 @@ export function rawColToDisplayCol(line: string, col: number, tabSize: number = 
 }
 
 // Pending gutter marker: the Nerd Font comment bubble followed by the number
-// of pending drafts covering the line ("+" above 9), or a blank 2-cell field
-// when the line has none. NF Mono renders the icon in exactly 1 cell, so the
-// field is a fixed 2 columns (icon + count digit); no width measuring for it.
+// of pending drafts covering the line ("+" above 9), or a blank field when the
+// line has none. The icon glyph is WIDER than one cell in many patched fonts
+// (wcwidth says 1, the glyph bleeds right), so a spacer cell separates it from
+// the count digit; on true NF Mono fonts the spacer just looks like a gap.
 export const PENDING_ICON = "\u{F075}"; // nf-fa-comment
-const MARKER_FIELD_WIDTH = 2; // icon (1 cell) + count digit (1 cell)
+const MARKER_FIELD_WIDTH = 3; // icon + spacer + count digit
 
 // Gutter width for a file with lineCount lines: right-aligned line number
 // (width of the largest 1-based number), a space, the pending-marker field
@@ -408,7 +409,7 @@ export class AnnotateCard implements Component, Focusable {
     const count = this.pending().filter((r) => r.startLine <= line && line <= r.endLine).length;
     const field = count === 0
       ? " ".repeat(MARKER_FIELD_WIDTH)
-      : this.colors.warning(PENDING_ICON + (count > 9 ? "+" : String(count)));
+      : this.colors.warning(PENDING_ICON + " " + (count > 9 ? "+" : String(count)));
     return String(line + 1).padStart(digits) + " " + field + " ";
   }
 
