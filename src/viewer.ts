@@ -12,18 +12,24 @@ import type { Theme } from "@earendil-works/pi-coding-agent";
 import type { Component, Focusable, TUI } from "@earendil-works/pi-tui";
 import { matchesKey, sliceByColumn, truncateToWidth, visibleWidth } from "@earendil-works/pi-tui";
 
-import { FOOTER_HINTS, commentBoxPlacement, draftAtCursor, frameCommentBox, framePanel } from "./card-chrome.ts";
+import { FOOTER_HINTS, commentBoxPlacement, frameCommentBox, framePanel } from "./card-chrome.ts";
 import type { CardMode, ChromeColors } from "./card-chrome.ts";
 import { INVERSE_OFF, INVERSE_ON, withCursorCell, wrapCommentLines } from "./comment-input.ts";
 import { displayPath } from "./message.ts";
 import { normalize } from "./selection.ts";
 import type { Range, VisualMode } from "./selection.ts";
-import { reduceViewer } from "./viewer-state.ts";
+import { reduceViewer, stackAtCursor } from "./viewer-state.ts";
 import type { PendingDraft, ViewerMode, ViewerState } from "./viewer-state.ts";
 
 const DEFAULT_TAB_SIZE = 4;
 const UNDERLINE_ON = "\x1b[4m";
 const UNDERLINE_OFF = "\x1b[24m";
+// Target emphasis (spec section 2): SGR 1 bold for the cycle target's range,
+// SGR 2 dim for the non-target stack members covering the cursor. SGR 22
+// (normal intensity) is the exact complement of both.
+const BOLD_ON = "\x1b[1m";
+const DIM_ON = "\x1b[2m";
+const INTENSITY_OFF = "\x1b[22m";
 
 // File-area height budget: the panel chrome fixes 3 rows (top + bottom
 // border, footer), and the card is capped on tall terminals. The floating
@@ -87,11 +93,17 @@ export function rawColToDisplayCol(line: string, col: number, tabSize: number = 
 }
 
 // Pending gutter marker: the Nerd Font comment bubble followed by the number
-// of pending drafts covering the line ("+" above 9), or a blank field when the
-// line has none. The icon glyph is WIDER than one cell in many patched fonts
-// (wcwidth says 1, the glyph bleeds right), so a spacer cell separates it from
-// the count digit; on true NF Mono fonts the spacer just looks like a gap.
+// of pending drafts STARTING on the line ("+" above 9), shown only on a
+// draft's start line so the gutter counts sum to the title bar's (N) (spec
+// section 3). Lines a draft covers without starting there show the dim
+// CONTINUATION_MARK instead; a line that both starts a draft and continues
+// another keeps the icon (start wins). The icon glyph is WIDER than one cell
+// in many patched fonts (wcwidth says 1, the glyph bleeds right), so a spacer
+// cell separates it from the count digit; on true NF Mono fonts the spacer
+// just looks like a gap.
 export const PENDING_ICON = "\u{F075}"; // nf-fa-comment
+// Continuation marker: a dim vertical bar centered in the marker field.
+export const CONTINUATION_MARK = "\u{2502}"; // box drawings light vertical
 const MARKER_FIELD_WIDTH = 3; // icon + spacer + count digit
 
 // Gutter width for a file with lineCount lines: right-aligned line number
@@ -104,8 +116,9 @@ export function gutterWidth(lineCount: number): number {
 
 // Display-column spans to style within one rendered line. Styling functions
 // wrap text segments (SGR attributes are additive with independent resets),
-// so overlapping spans of different styles can nest safely.
-type SpanStyle = "inverse" | "underline";
+// so overlapping spans of different styles can nest safely. "target" and
+// "dimUnderline" are the stacked-draft emphases of spec section 2.
+type SpanStyle = "inverse" | "underline" | "target" | "dimUnderline";
 interface StyleSpan {
   start: number; // display column, inclusive
   end: number; // display column, exclusive
@@ -199,12 +212,16 @@ export class AnnotateCard implements Component, Focusable {
       accent: (s) => theme.fg("accent", s),
       warning: (s) => theme.fg("warning", s),
     };
-    // Inverse and underline stay raw ANSI (theme-neutral): inverse is the
-    // cursor/selection highlight, SGR 4 underlines pending ranges; the
-    // pending gutter marker keeps the theme warning color.
+    // Inverse stays raw ANSI (theme-neutral): the cursor/selection highlight.
+    // Pending ranges underline with raw SGR 4; the cycle target's range adds
+    // SGR 1 bold + the theme warning fg, and non-target stack members dim
+    // their underline (SGR 2). The pending gutter marker keeps the theme
+    // warning color.
     this.spanStyles = {
       inverse: (s) => INVERSE_ON + s + INVERSE_OFF,
       underline: (s) => UNDERLINE_ON + s + UNDERLINE_OFF,
+      target: (s) => this.colors.warning(BOLD_ON + UNDERLINE_ON + s + INTENSITY_OFF + UNDERLINE_OFF),
+      dimUnderline: (s) => DIM_ON + UNDERLINE_ON + s + INTENSITY_OFF + UNDERLINE_OFF,
     };
     // Tabs are expanded PER LINE before highlighting so display columns agree
     // between the highlighted content and the raw/selection rendering below
@@ -239,11 +256,14 @@ export class AnnotateCard implements Component, Focusable {
     const selection = this.activeSelection();
     const cursorOn = this.state.mode !== "comment";
 
+    // Target emphasis is resolved once per frame (normal mode only): the
+    // cycle target's ranges vs the other stacked drafts (spec section 2).
+    const emphasis = this.pendingEmphasis();
     // Content rows are clipped to the inner width, then space-padded to it so
     // the floating comment box can replace exact display-column slices below.
     const rows: string[] = [];
     for (let i = first; i < last; i++) {
-      rows.push(truncateToWidth(this.gutter(i) + this.renderLine(i, selection, cursorOn), inner, "...", true));
+      rows.push(truncateToWidth(this.gutter(i) + this.renderLine(i, selection, cursorOn, emphasis), inner, "...", true));
     }
     if (this.state.mode === "comment") this.overlayCommentBox(rows, first, inner);
     else if (this.state.mode === "normal" && this.state.previewOn) this.overlayPreview(rows, first, inner);
@@ -333,25 +353,31 @@ export class AnnotateCard implements Component, Focusable {
     this.paintCommentBox(rows, first, inner, shown, boxW, anchor);
   }
 
-  // Normal-mode hover preview: read-only Comment box for the draft under the
-  // cursor (most recent wins, the same column-precise targeting rule as c/x).
-  // Anchored to the cursor line and aligned to the draft's start display
-  // column; comment lines are capped at PREVIEW_MAX_INNER_ROWS (head kept),
-  // the box stays content-sized, and no cursor is rendered (read-only). The
-  // render caller gates on previewOn, so preview-off renders nothing;
-  // comment mode never reaches here, so the edit flow replaces the preview.
+  // Normal-mode hover preview: read-only Comment box for the CURRENT cycle
+  // target under the cursor (spec section 2). On a stack of 2+ drafts the
+  // title gains a 1-based positional indicator "(i/n)" (newest = 1); a lone
+  // draft keeps the plain title. Anchored to the cursor line and aligned to
+  // the target's start display column; comment lines are capped at
+  // PREVIEW_MAX_INNER_ROWS (head kept), the box stays content-sized, and no
+  // cursor is rendered (read-only). The render caller gates on previewOn, so
+  // preview-off renders nothing; comment mode never reaches here, so the
+  // edit flow replaces the preview.
   private overlayPreview(rows: string[], first: number, inner: number): void {
-    const draft = draftAtCursor(this.state.cursor.line, this.state.cursor.col, this.pendingDrafts());
-    if (draft === undefined) return;
+    const stack = stackAtCursor(this.state.cursor.line, this.state.cursor.col, this.pendingDrafts());
+    if (stack.length === 0) return;
+    // The same target the reducer edits via c/x: stack[ordinal % length].
+    const ordinal = (this.state.cycleOrdinal ?? 0) % stack.length;
+    const draft = stack[ordinal];
+    const title = stack.length >= 2 ? `${COMMENT_BOX_TITLE} (${ordinal + 1}/${stack.length})` : COMMENT_BOX_TITLE;
     const capped = draft.comment.split("\n").slice(0, PREVIEW_MAX_INNER_ROWS);
     const widest = Math.max(...capped.map((l) => visibleWidth(l)), 0);
-    const boxW = Math.min(inner, Math.max(widest + 3, COMMENT_BOX_TITLE.length + 6));
+    const boxW = Math.min(inner, Math.max(widest + 3, title.length + 6));
     this.paintCommentBox(rows, first, inner, capped, boxW, {
       topLine: this.state.cursor.line,
       bottomLine: this.state.cursor.line,
       colLine: draft.range.startLine,
       rawCol: draft.range.startCol,
-    });
+    }, title);
   }
 
   // Paints a floating Comment box of the given width over the content rows
@@ -359,7 +385,8 @@ export class AnnotateCard implements Component, Focusable {
   // down. The anchor is expressed in file lines (clamped to the viewport
   // here) plus a raw column resolved on colLine, so the editor (selection or
   // cursor) and the preview (cursor line, draft start column) share one
-  // placement path.
+  // placement path. The editor keeps the default title; the preview passes
+  // its positional "Comment (i/n)" title.
   private paintCommentBox(
     rows: string[],
     first: number,
@@ -367,9 +394,10 @@ export class AnnotateCard implements Component, Focusable {
     textLines: string[],
     boxW: number,
     anchor: { topLine: number; bottomLine: number; colLine: number; rawCol: number },
+    title: string = COMMENT_BOX_TITLE,
   ): void {
     const vh = rows.length;
-    const box = frameCommentBox(textLines, boxW, this.colors, COMMENT_BOX_TITLE);
+    const box = frameCommentBox(textLines, boxW, this.colors, title);
 
     const anchorRow = (line: number) => Math.min(Math.max(line - first, 0), Math.max(0, vh - 1));
     const selTop = anchorRow(anchor.topLine);
@@ -406,22 +434,48 @@ export class AnnotateCard implements Component, Focusable {
 
   // Gutter for one file line: right-aligned 1-based line number (see
   // message.ts), a space, the pending-marker field, and a space. The field is
-  // always MARKER_FIELD_WIDTH display columns (blank when no draft covers the
-  // line) so line numbers never shift horizontally; when drafts cover the
-  // line it shows PENDING_ICON plus the draft count ("+" above 9) in the
-  // theme warning color.
+  // always MARKER_FIELD_WIDTH display columns so line numbers never shift
+  // horizontally. Spec section 3 semantics: lines where one or more drafts
+  // START show PENDING_ICON plus that start count ("+" above 9) in the theme
+  // warning color (start wins over continuation); lines merely COVERED by a
+  // draft show a dim vertical bar centered in the field; uncovered lines stay
+  // blank. The start counts sum to the title bar's (N).
   private gutter(line: number): string {
     const digits = String(Math.max(1, this.file.lines.length)).length;
-    const count = this.pending().filter((r) => r.startLine <= line && line <= r.endLine).length;
-    const field = count === 0
-      ? " ".repeat(MARKER_FIELD_WIDTH)
-      : this.colors.warning(PENDING_ICON + " " + (count > 9 ? "+" : String(count)));
+    const starts = this.pending().filter((r) => r.startLine === line).length;
+    const covered = this.pending().some((r) => r.startLine <= line && line <= r.endLine);
+    const field = starts > 0
+      ? this.colors.warning(PENDING_ICON + " " + (starts > 9 ? "+" : String(starts)))
+      : covered
+        ? " " + this.colors.dim(CONTINUATION_MARK) + " "
+        : " ".repeat(MARKER_FIELD_WIDTH);
     return String(line + 1).padStart(digits) + " " + field + " ";
   }
 
+  // Target emphasis for one frame (spec section 2): maps the RANGE of every
+  // draft covering the cursor to its span style - the cycle target's range
+  // paints "target" (warning fg + bold + underline) and the other stack
+  // members "dimUnderline" (SGR 2). Normal mode only: visual and comment
+  // modes return an empty map, so all pending ranges stay plain underline.
+  // Keys are the draft range OBJECTS, identical to the pending() ranges
+  // (index.ts derives both from the same store entries); ranges absent from
+  // the map keep the plain underline.
+  private pendingEmphasis(): Map<Range, SpanStyle> {
+    const emphasis = new Map<Range, SpanStyle>();
+    if (this.state.mode !== "normal") return emphasis;
+    const stack = stackAtCursor(this.state.cursor.line, this.state.cursor.col, this.pendingDrafts());
+    if (stack.length === 0) return emphasis;
+    const ordinal = (this.state.cycleOrdinal ?? 0) % stack.length;
+    for (const [k, draft] of stack.entries()) {
+      emphasis.set(draft.range, k === ordinal ? "target" : "dimUnderline");
+    }
+    return emphasis;
+  }
+
   // One file line: highlighted content unless the selection covers the line
-  // (selection display wins), then pending underlines, then the cursor cell.
-  private renderLine(line: number, selection: Range | null, cursorOn: boolean): string {
+  // (selection display wins), then pending underlines (plain, or the frame's
+  // target/dim emphasis where the map says so), then the cursor cell.
+  private renderLine(line: number, selection: Range | null, cursorOn: boolean, emphasis: Map<Range, SpanStyle>): string {
     const raw = this.file.lines[line] ?? "";
     const spans: StyleSpan[] = [];
 
@@ -437,7 +491,7 @@ export class AnnotateCard implements Component, Focusable {
     for (const p of this.pending()) {
       if (line < p.startLine || line > p.endLine) continue;
       const span = this.displaySpan(raw, line, p);
-      if (span !== null) spans.push({ start: span[0], end: span[1], style: "underline" });
+      if (span !== null) spans.push({ start: span[0], end: span[1], style: emphasis.get(p) ?? "underline" });
     }
 
     let virtualCursorCell = false;

@@ -1,3 +1,8 @@
+---
+status: in-progress
+progress: 2/3
+---
+
 # Annotate stacked cycling & gutter semantics implementation plan
 
 Spec: `docs/superpowers/specs/2026-10-18-annotate-stacked-and-gutter-design.md` (approved)
@@ -20,13 +25,13 @@ Files: `src/viewer-state.ts`, `test/viewer-state.test.ts`
 
 Files: `src/viewer.ts`, `src/card-chrome.ts`, `test/viewer.test.ts`, `test/card-chrome.test.ts`
 
-- [ ] Target range: theme warning fg + bold + underline spans (normal mode only).
-- [ ] Non-target stack members covering the cursor: dim underline.
-- [ ] Pending ranges not covering the cursor: plain underline (unchanged).
-- [ ] Gutter: icon + count only on start lines (count = drafts starting there); continuation lines get dim vertical bar; start wins over continuation on shared lines.
-- [ ] Sum-of-counts invariant test: sum of gutter counts == pending count.
-- [ ] Preview box title gains `(i/n)` 1-based positional indicator when cursor is on a stack with n >= 2.
-- [ ] Regression: visual-mode selection inverse unchanged; cursor cell unchanged.
+- [x] Target range: theme warning fg + bold + underline spans (normal mode only).
+- [x] Non-target stack members covering the cursor: dim underline.
+- [x] Pending ranges not covering the cursor: plain underline (unchanged).
+- [x] Gutter: icon + count only on start lines (count = drafts starting there); continuation lines get dim vertical bar; start wins over continuation on shared lines.
+- [x] Sum-of-counts invariant test: sum of gutter counts == pending count.
+- [x] Preview box title gains `(i/n)` 1-based positional indicator when cursor is on a stack with n >= 2.
+- [x] Regression: visual-mode selection inverse unchanged; cursor cell unchanged.
 
 ## Task 3: docs + bookkeeping
 
@@ -34,4 +39,4 @@ Files: `README.md`, `AGENTS.md`, `docs/superpowers/STATUS.md`
 
 - [ ] README rewrite (structure: title + one-liner + badges, Highlights [Vim-like modal, Annotate anything], Demo placeholder, Install, Features, Usage, How it works, Development/Release, License). Install uses ONLY `pi install npm:pi-annotate-anything` (never bare npm install). Refreshed key tables (Tab cycling, p, c, x), stacked cycling behavior, new gutter semantics with worked example.
 - [ ] AGENTS.md: Releases section (release-please flow, no manual version/CHANGELOG edits, npm trusted publishing).
-- [ ] STATUS.md: plan done (3/3); merge bookkeeping.
+- [ ] Status tracking migrated to YAML front-matter on all spec/plan files (status/progress fields, historical files migrated); STATUS.md slimmed to a pure index; merge bookkeeping.

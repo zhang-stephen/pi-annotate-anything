@@ -7,7 +7,7 @@ import type { TUI } from "@earendil-works/pi-tui";
 
 import type { Range, VisualMode } from "../src/selection.ts";
 import type { PendingDraft } from "../src/viewer-state.ts";
-import { AnnotateCard, gutterWidth, PENDING_ICON, rawColToDisplayCol, tabExpanded } from "../src/viewer.ts";
+import { AnnotateCard, CONTINUATION_MARK, gutterWidth, PENDING_ICON, rawColToDisplayCol, tabExpanded } from "../src/viewer.ts";
 
 // Pending-marker field width: a fixed 2 cells (icon renders 1 cell in NF
 // Mono + 1 count digit).
@@ -470,9 +470,16 @@ test("pending underline spans multi-line ranges line by line", () => {
 });
 
 // Gutter marker field -----------------------------------------------------------
-// Pending lines show the NF comment icon (U+F075) plus the number of drafts
-// covering the line; lines without drafts render a blank field of the same
+// Start lines of pending drafts show the NF comment icon (U+F075) plus the
+// number of drafts STARTING there; lines covered without a start show a dim
+// vertical continuation bar; uncovered lines render a blank field of the same
 // display width, so line numbers never shift when markers appear/disappear.
+
+// The 3-cell pending-marker field of a stripped content row: "│" + line
+// number (digits wide) + " " + field.
+function fieldOf(bare: string, digits: number): string {
+  return bare.slice(1 + digits + 1, 1 + digits + 1 + FIELD);
+}
 
 test("a pending line shows the icon plus the draft count in the gutter", () => {
   const h = makeCard({ lines: ["alpha", "beta", "gamma"] });
@@ -481,16 +488,65 @@ test("a pending line shows the icon plus the draft count in the gutter", () => {
   assert.ok(bare[1].startsWith("│1 " + PENDING_ICON + " " + "1"), `icon + count on the pending line, got: ${JSON.stringify(bare[1])}`);
 });
 
-test("a line covered by N pending drafts shows the count N", () => {
+test("gutter count counts drafts STARTING on the line: two starts -> count 2", () => {
   const h = makeCard({ lines: ["alpha", "beta", "gamma"] });
   h.pending.push({ startLine: 0, startCol: 0, endLine: 0, endCol: 2 });
   h.pending.push({ startLine: 0, startCol: 3, endLine: 0, endCol: 5 });
   const bare = h.card.render(40).map(strip);
-  assert.ok(bare[1].startsWith("│1 " + PENDING_ICON + " " + "2"), "two drafts covering line 1 -> count 2");
+  assert.ok(bare[1].startsWith("│1 " + PENDING_ICON + " " + "2"), "two drafts starting on line 1 -> count 2");
   assert.ok(!bare[3].includes(PENDING_ICON), "unmarked line has no icon");
 });
 
-test("more than 9 pending drafts on a line render as icon + +", () => {
+test("a covered line where no draft starts shows a dim centered continuation bar, not a count", () => {
+  const h = makeCard({ lines: ["alpha", "beta", "gamma", "delta"] });
+  h.pending.push({ startLine: 0, startCol: 0, endLine: 2, endCol: 3 });
+  const bare = h.card.render(40).map(strip);
+  assert.equal(fieldOf(bare[1], 1), PENDING_ICON + " " + "1", "start line keeps icon + count");
+  assert.equal(fieldOf(bare[2], 1), " " + CONTINUATION_MARK + " ", "continuation bar centered in the field");
+  assert.equal(fieldOf(bare[3], 1), " " + CONTINUATION_MARK + " ", "end line is a continuation too");
+  assert.ok(!bare[2].includes(PENDING_ICON) && !bare[3].includes(PENDING_ICON), "no icon on continuation lines");
+  const dimmed = h.fgCalls.filter((c) => c.token === "dim").map((c) => c.text);
+  assert.ok(dimmed.includes(CONTINUATION_MARK), "the bar is theme dim");
+});
+
+test("a line that both starts a draft and continues another shows the start count (start wins)", () => {
+  const h = makeCard({ lines: ["a", "b", "c", "d", "e", "f"] });
+  h.pending.push({ startLine: 0, startCol: 0, endLine: 3, endCol: 0 }); // A: lines 1-4
+  h.pending.push({ startLine: 2, startCol: 0, endLine: 5, endCol: 0 }); // B: lines 3-6
+  const bare = h.card.render(40).map(strip);
+  assert.equal(fieldOf(bare[1], 1), PENDING_ICON + " " + "1", "line 1: A starts");
+  assert.equal(fieldOf(bare[2], 1), " " + CONTINUATION_MARK + " ", "line 2: A continues");
+  assert.equal(fieldOf(bare[3], 1), PENDING_ICON + " " + "1", "line 3: B starts (A continues: start wins)");
+  assert.equal(fieldOf(bare[4], 1), " " + CONTINUATION_MARK + " ", "line 4: both continue");
+  assert.equal(fieldOf(bare[5], 1), " " + CONTINUATION_MARK + " ", "line 5: B continues");
+  assert.equal(fieldOf(bare[6], 1), " " + CONTINUATION_MARK + " ", "line 6: B continues");
+});
+
+test("gutter start-counts sum to the pending count across overlapping drafts", () => {
+  // The invariant from spec section 3: the sum of all gutter counts equals
+  // the title bar's (N) pending count, no matter how the drafts overlap.
+  const lines = Array.from({ length: 10 }, (_, i) => `line ${i}`);
+  const h = makeCard({ lines });
+  const ranges: Range[] = [
+    { startLine: 0, startCol: 0, endLine: 3, endCol: 5 },
+    { startLine: 0, startCol: 7, endLine: 0, endCol: 9 },
+    { startLine: 2, startCol: 0, endLine: 5, endCol: 5 },
+    { startLine: 2, startCol: 6, endLine: 2, endCol: 9 },
+    { startLine: 4, startCol: 0, endLine: 9, endCol: 6 },
+    { startLine: 7, startCol: 0, endLine: 8, endCol: 2 },
+  ];
+  for (const r of ranges) h.pending.push(r);
+  const bare = h.card.render(60).map(strip);
+  const digits = String(lines.length).length;
+  let sum = 0;
+  for (let k = 0; k < lines.length; k++) {
+    const field = fieldOf(bare[1 + k], digits);
+    if (field.includes(PENDING_ICON)) sum += field[2] === "+" ? 10 : Number(field[2]);
+  }
+  assert.equal(sum, ranges.length);
+});
+
+test("more than 9 drafts starting on a line render as icon + +", () => {
   const h = makeCard({ lines: ["alpha"] });
   for (let i = 0; i < 10; i++) {
     h.pending.push({ startLine: 0, startCol: i, endLine: 0, endCol: i + 1 });
@@ -519,6 +575,100 @@ test("the marker field uses the theme warning color; blank fields stay unstyled"
   h.card.render(40);
   const warned = h.fgCalls.filter((c) => c.token === "warning").map((c) => c.text);
   assert.deepEqual(warned, [PENDING_ICON + " " + "1"]); // only line 1's field is styled
+});
+
+// Target emphasis (spec section 2) ---------------------------------------------
+// Normal mode only: the cycle target's range paints theme warning fg + bold +
+// underline; the other stack members covering the cursor dim their underline
+// (SGR 2); pending ranges off the cursor keep plain SGR 4. Visual and comment
+// modes never emphasize.
+
+const BOLD_ON = "\x1b[1m";
+const DIM_ON = "\x1b[2m";
+const INTENSITY_OFF = "\x1b[22m"; // complement of both bold (SGR 1) and dim (SGR 2)
+const UNDERLINE_ON = "\x1b[4m"; // raw SGR codes the card paints pending ranges with
+const UNDERLINE_OFF = "\x1b[24m";
+
+// Two stacked drafts on "abcdef": the newer covers cols 0-2 (display span
+// "ab"), the older cols 2-4 (display span "cd", end-exclusive); the cursor at
+// col 2 is hit-covered by both (hit testing is end-inclusive).
+function makeStack(): CardHarness {
+  const h = makeCard({ lines: ["abcdef", "beta"] });
+  const older = { startLine: 0, startCol: 2, endLine: 0, endCol: 4 };
+  const newer = { startLine: 0, startCol: 0, endLine: 0, endCol: 2 };
+  h.pending.push(older, newer);
+  h.drafts.push({ token: "[a.ts:3-5]", range: older, comment: "older" });
+  h.drafts.push({ token: "[a.ts:1-3 ~2]", range: newer, comment: "newer" });
+  h.card.handleInput("l");
+  h.card.handleInput("l"); // cursor col 2, inside both ranges
+  // Preview off: with only 2 content rows the preview box cannot fit below
+  // the cursor line and would occlude the emphasized spans under test.
+  h.card.handleInput("p");
+  return h;
+}
+
+test("target emphasis: cycle target warning+bold+underline, other stack member dim underline", () => {
+  const h = makeStack();
+  const row = h.card.render(60)[1];
+  // Target (newest draft, "ab"): the theme warning fg wraps bold + underline.
+  assert.ok(row.includes(FG_ON + BOLD_ON + UNDERLINE_ON + "ab" + INTENSITY_OFF + UNDERLINE_OFF + FG_OFF), "target span is warning fg + bold + underline");
+  // Non-target stack member ("d", the older draft's display span tail): dim
+  // underline, no theme wrap. (Its "c" cell composes with the cursor's
+  // inverse instead.)
+  assert.ok(row.includes(DIM_ON + UNDERLINE_ON + "d" + INTENSITY_OFF + UNDERLINE_OFF), "stack member under the cursor dims its underline");
+  // The warning token styles exactly the bold+underline composite.
+  assert.ok(h.fgCalls.some((c) => c.token === "warning" && c.text === BOLD_ON + UNDERLINE_ON + "ab" + INTENSITY_OFF + UNDERLINE_OFF));
+});
+
+test("Tab moves the emphasis to the next stack member", () => {
+  const h = makeStack();
+  h.card.handleInput("\t"); // ordinal 1: the older draft becomes the target
+  const row = h.card.render(60)[1];
+  assert.ok(row.includes(FG_ON + BOLD_ON + UNDERLINE_ON + "d" + INTENSITY_OFF + UNDERLINE_OFF + FG_OFF), "new target span warning+bold+underline");
+  assert.ok(row.includes(DIM_ON + UNDERLINE_ON + "ab" + INTENSITY_OFF + UNDERLINE_OFF), "previous target dims to underline");
+});
+
+test("pending ranges off the cursor keep plain underline (no emphasis)", () => {
+  const h = makeCard({ lines: ["abcd", "beta"] });
+  const r = { startLine: 0, startCol: 1, endLine: 0, endCol: 3 };
+  h.pending.push(r);
+  h.drafts.push({ token: "[a.ts:2-4]", range: r, comment: "note" });
+  h.card.handleInput("j"); // cursor to line 1, off the range
+  const row = h.card.render(60)[1];
+  assert.ok(row.includes(UNDERLINE_ON + "bc" + UNDERLINE_OFF), "plain SGR 4 underline");
+  assert.ok(!row.includes(BOLD_ON) && !row.includes(DIM_ON), "no bold or dim emphasis");
+});
+
+test("visual mode: no target emphasis, selection inverse unchanged", () => {
+  const h = makeStack();
+  h.card.handleInput("v"); // visual-char anchored at col 2
+  h.card.handleInput("l"); // selection cols 2-3
+  const row = h.card.render(60)[1];
+  assert.ok(!row.includes(BOLD_ON) && !row.includes(DIM_ON), "no target emphasis in visual mode");
+  assert.ok(row.includes("\x1b[7m"), "selection still inverse");
+  assert.ok(row.includes(UNDERLINE_ON + "ab" + UNDERLINE_OFF), "pending underline stays plain");
+});
+
+test("comment mode: no target emphasis", () => {
+  const h = makeStack();
+  h.card.handleInput("c"); // opens the editor for the cycle target
+  for (const row of h.card.render(60)) {
+    assert.ok(!row.includes(BOLD_ON) && !row.includes(DIM_ON), "no target emphasis in comment mode");
+  }
+});
+
+test("cursor cell composes with target emphasis and stays a single inverse cell", () => {
+  const h = makeCard({ lines: ["abcdef", "beta"] });
+  const r = { startLine: 0, startCol: 0, endLine: 0, endCol: 5 };
+  h.pending.push(r);
+  h.drafts.push({ token: "[a.ts:1-6]", range: r, comment: "note" });
+  h.card.handleInput("l");
+  h.card.handleInput("l"); // cursor col 2, inside the target range
+  h.card.handleInput("p"); // preview off: keeps the cursor row unoccluded
+  const row = h.card.render(60)[1];
+  // Pending spans paint before the cursor cell, so the inverse cell wraps
+  // the target-styled "c": the cursor stays visible over the emphasized text.
+  assert.ok(row.includes("\x1b[7m" + FG_ON + BOLD_ON + UNDERLINE_ON + "c" + INTENSITY_OFF + UNDERLINE_OFF + FG_OFF + "\x1b[27m"), "inverse cursor cell over target-styled char");
 });
 
 // Task 3 seams ----------------------------------------------------------------
@@ -667,6 +817,36 @@ test("hover preview: c on the pending line replaces it with the pre-filled edito
   h.card.handleInput("\x1b");
   bare = h.card.render(40).map(strip);
   assert.ok(bare[2].includes("╭─ Comment"));
+});
+
+test("preview shows the cycle target's comment with a (i/n) title on stacked drafts", () => {
+  const lines = ["abcdef", "beta", "gamma", "delta", "epsilon"];
+  const h = makeCard({ lines });
+  const older = { startLine: 0, startCol: 2, endLine: 0, endCol: 4 };
+  const newer = { startLine: 0, startCol: 0, endLine: 0, endCol: 2 };
+  h.pending.push(older, newer);
+  h.drafts.push({ token: "[a.ts:3-5]", range: older, comment: "older note" });
+  h.drafts.push({ token: "[a.ts:1-3 ~2]", range: newer, comment: "newer note" });
+  h.card.handleInput("l");
+  h.card.handleInput("l"); // cursor col 2: stack [newer, older]
+  let bare = h.card.render(60).map(strip);
+  assert.ok(bare[2].includes("╭─ Comment (1/2) ─╮"), `title carries 1/2, got: ${JSON.stringify(bare[2])}`);
+  assert.ok(bare[3].includes("│newer note"), "box shows the target's comment");
+  h.card.handleInput("\t"); // cycle: the older draft becomes the target
+  bare = h.card.render(60).map(strip);
+  assert.ok(bare[2].includes("╭─ Comment (2/2) ─╮"), "title advances to 2/2");
+  assert.ok(bare[3].includes("│older note"), "box shows the newly targeted comment");
+});
+
+test("preview on a stack of 1 keeps the plain Comment title", () => {
+  const lines = ["alpha", "beta", "gamma", "delta", "epsilon"];
+  const h = makeCard({ lines });
+  const range = { startLine: 0, startCol: 0, endLine: 0, endCol: 5 };
+  h.drafts.push({ token: "[a.ts:1]", range, comment: "note" });
+  h.pending.push(range);
+  const bare = h.card.render(40).map(strip);
+  assert.ok(bare[2].includes("╭─ Comment ─╮"), "plain title");
+  for (const row of bare) assert.ok(!row.includes("(1/"), "no positional indicator on a lone draft");
 });
 
 // Kitty keyboard protocol normalization ---------------------------------------

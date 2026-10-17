@@ -67,6 +67,8 @@ export default function (pi: ExtensionAPI) {
         store
           .list()
           .filter((d) => d.absPath === loaded.path)
+          // range objects are shared by reference (never copied); the
+          // viewer's emphasis map keys on their identity, so keep it that way.
           .map((d) => ({ token: d.token, range: d.range, comment: d.comment }));
       const pending = () => pendingDrafts().map((d) => d.range);
       await ctx.ui.custom<void>(
