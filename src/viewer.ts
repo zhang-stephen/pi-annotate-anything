@@ -128,6 +128,11 @@ interface StyleSpan {
 // Wraps the given display-column spans of line (ANSI-aware, zero-width
 // codes ignored) in their styles. Boundaries are walked cell by cell so
 // overlapping spans compose and same-style overlaps collapse into one wrap.
+// Emphasis precedence: only the strongest emphasis paints per segment
+// (target > dimUnderline > underline; all three include underline, so the
+// weaker ones are visually redundant) - a dim span nested inside the target
+// would dim the warning fg into invisibility on dark terminals. Inverse
+// (selection/cursor) always composes on top.
 function applyStyleSpans(line: string, spans: StyleSpan[], styles: Record<SpanStyle, (s: string) => string>): string {
   const total = visibleWidth(line);
   const clamped = spans
@@ -141,8 +146,10 @@ function applyStyleSpans(line: string, spans: StyleSpan[], styles: Record<SpanSt
     const a = bounds[k];
     const b = bounds[k + 1];
     const active = [...new Set(clamped.filter((s) => s.start <= a && a < s.end).map((s) => s.style))];
+    const strongest = active.includes("target") ? "target" : active.includes("dimUnderline") ? "dimUnderline" : active.includes("underline") ? "underline" : null;
+    const final = active.filter((s) => s === "inverse" || s === strongest);
     const seg = sliceByColumn(line, a, b - a);
-    out += active.reduce((text, s) => styles[s](text), seg);
+    out += final.reduce((text, s) => styles[s](text), seg);
   }
   return out;
 }

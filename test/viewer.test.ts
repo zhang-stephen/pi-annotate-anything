@@ -657,6 +657,30 @@ test("comment mode: no target emphasis", () => {
   }
 });
 
+// Regression: overlapping stack ranges must not nest the non-target dim
+// inside the target wrap - SGR 2 dims the warning fg into invisibility on
+// dark terminals. Only the strongest emphasis paints per segment.
+test("overlapping stack ranges: target segment carries no dim", () => {
+  const h = makeCard({ lines: ["abcdef", "beta"] });
+  const older = { startLine: 0, startCol: 1, endLine: 0, endCol: 5 }; // bcde
+  const newer = { startLine: 0, startCol: 0, endLine: 0, endCol: 3 }; // abc
+  h.pending.push(older, newer);
+  h.drafts.push({ token: "[a.ts:2-6]", range: older, comment: "older" });
+  h.drafts.push({ token: "[a.ts:1-4]", range: newer, comment: "newer" });
+  h.card.handleInput("l"); // cursor col 1: covered by both
+  h.card.handleInput("p"); // preview off: the box would occlude the spans
+  const row = h.card.render(60)[1];
+  // Overlap cells "b" and "c": target only (warning fg + bold + underline),
+  // no dim inside; the cursor cell "c" composes inverse on top of target.
+  assert.ok(row.includes(FG_ON + BOLD_ON + UNDERLINE_ON + "c" + INTENSITY_OFF + UNDERLINE_OFF + FG_OFF), "overlap segment is pure target");
+  assert.ok(row.includes("\x1b[7m" + FG_ON + BOLD_ON + UNDERLINE_ON + "b" + INTENSITY_OFF + UNDERLINE_OFF + FG_OFF + "\x1b[27m"), "cursor cell = inverse over pure target");
+  assert.ok(!row.includes(BOLD_ON + UNDERLINE_ON + DIM_ON), "no dim nested inside any target wrap");
+  // Older-only tail "de": dim underline.
+  assert.ok(row.includes(DIM_ON + UNDERLINE_ON + "de" + INTENSITY_OFF + UNDERLINE_OFF), "non-target-only segment dims");
+  // Newer-only head "a": target without dim.
+  assert.ok(row.includes(FG_ON + BOLD_ON + UNDERLINE_ON + "a" + INTENSITY_OFF + UNDERLINE_OFF + FG_OFF), "target-only segment");
+});
+
 test("cursor cell composes with target emphasis and stays a single inverse cell", () => {
   const h = makeCard({ lines: ["abcdef", "beta"] });
   const r = { startLine: 0, startCol: 0, endLine: 0, endCol: 5 };
