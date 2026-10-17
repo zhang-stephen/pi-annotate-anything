@@ -171,9 +171,9 @@ function handleMode(state: ViewerState, key: string, lines: string[], vh: number
       return { state: { ...state, anchor: state.cursor, cursor: state.anchor ?? state.cursor } };
     case "c":
       if (state.mode === "normal") {
-        // Editing flow: on a line a pending draft covers, reopen its comment
-        // pre-filled; elsewhere a no-op.
-        const draft = draftAtCursor(state.cursor.line, pending);
+        // Editing flow: on a position a pending draft covers, reopen its
+        // comment pre-filled; elsewhere a no-op.
+        const draft = draftAtCursor(state.cursor.line, state.cursor.col, pending);
         if (draft === undefined) return { state };
         return {
           state: { ...state, mode: "comment", comment: { text: draft.comment }, editingDraftId: draft.token },
@@ -181,9 +181,9 @@ function handleMode(state: ViewerState, key: string, lines: string[], vh: number
       }
       return { state: { ...state, mode: "comment", comment: { text: "" } } };
     case "x":
-      // Delete flow: normal mode only, on a line a pending draft covers.
+      // Delete flow: normal mode only, on a position a pending draft covers.
       if (state.mode !== "normal") return { state };
-      const victim = draftAtCursor(state.cursor.line, pending);
+      const victim = draftAtCursor(state.cursor.line, state.cursor.col, pending);
       if (victim === undefined) return { state };
       return { state, effect: { type: "delete", draftId: victim.token } };
     case "p":

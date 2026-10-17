@@ -108,16 +108,28 @@ export function commentBoxPlacement(
   return { top, left };
 }
 
-// The most recent pending draft whose line range covers cursorLine (both
-// ends inclusive, 0-based lines; column bounds ignored). Pending order is
-// insertion order, so keeping the last hit while scanning forward returns
-// the most recently added draft - the same draft `c` and `x` target.
-// Generic over the minimal range-bearing shape so both the store Draft
-// and the reducer's pending entries can use it.
-export function draftAtCursor<T extends { range: { startLine: number; endLine: number } }>(cursorLine: number, pending: readonly T[]): T | undefined {
+// The most recent pending draft whose range covers the cursor position
+// (0-based lines, raw code-unit columns): the line must lie in
+// [startLine, endLine], and on a boundary line the column must have entered
+// the range (col >= startCol on the start line) and not left it (col <=
+// endCol on the end line). Inner lines hit at any column. Whole-line
+// (V-mode) drafts have startCol 0 / endCol = line length, so they still hit
+// anywhere on the line. Pending order is insertion order, so keeping the
+// last hit while scanning forward returns the most recently added draft -
+// the same draft `c` and `x` target. Generic over the minimal range-bearing
+// shape so both the store Draft and the reducer's pending entries can use it.
+export function draftAtCursor<T extends { range: { startLine: number; startCol: number; endLine: number; endCol: number } }>(
+  cursorLine: number,
+  cursorCol: number,
+  pending: readonly T[],
+): T | undefined {
   let hit: T | undefined;
   for (const d of pending) {
-    if (cursorLine >= d.range.startLine && cursorLine <= d.range.endLine) hit = d;
+    const r = d.range;
+    const inLines = cursorLine >= r.startLine && cursorLine <= r.endLine;
+    const afterStart = cursorLine > r.startLine || cursorCol >= r.startCol;
+    const beforeEnd = cursorLine < r.endLine || cursorCol <= r.endCol;
+    if (inLines && afterStart && beforeEnd) hit = d;
   }
   return hit;
 }
@@ -125,8 +137,9 @@ export function draftAtCursor<T extends { range: { startLine: number; endLine: n
 export type CardMode = "normal" | "visualChar" | "visualLine" | "comment";
 
 export interface FooterHints {
-  // null in normal mode: vim's convention that normal mode shows no badge.
-  badge: string | null;
+  // Mode badge shown before the hints in the accent color. Every mode has
+  // one now, including normal (-- NORMAL --).
+  badge: string;
   hints: string;
 }
 
@@ -134,7 +147,7 @@ export interface FooterHints {
 // can color them differently (badge in accent, hints in dim).
 export const FOOTER_HINTS: Record<CardMode, FooterHints> = {
   normal: {
-    badge: null,
+    badge: "-- NORMAL --",
     hints: "hjkl move  v/V select  c/x comment/delete  p preview  q/Esc close",
   },
   visualChar: { badge: "-- VISUAL --", hints: "hjkl extend  o swap  c comment  Esc cancel" },

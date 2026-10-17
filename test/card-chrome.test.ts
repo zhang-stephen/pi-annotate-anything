@@ -144,24 +144,54 @@ test("commentBoxPlacement clamps degenerate box sizes", () => {
 
 // draftAtCursor -----------------------------------------------------------------
 
-test("draftAtCursor returns the draft covering the cursor line", () => {
+// A draft covering lines 10..20; cols only matter on the boundary lines.
+test("draftAtCursor returns the draft covering the cursor position", () => {
   const d = draft({ range: { startLine: 10, startCol: 0, endLine: 20, endCol: 3 } });
-  assert.equal(draftAtCursor(15, [d]), d);
+  assert.equal(draftAtCursor(15, 0, [d]), d);
 });
 
-test("draftAtCursor bounds are inclusive on both ends", () => {
-  const d = draft({ range: { startLine: 10, startCol: 0, endLine: 20, endCol: 3 } });
-  assert.equal(draftAtCursor(10, [d]), d);
-  assert.equal(draftAtCursor(20, [d]), d);
-  assert.equal(draftAtCursor(9, [d]), undefined);
-  assert.equal(draftAtCursor(21, [d]), undefined);
+test("draftAtCursor line bounds are inclusive on both ends", () => {
+  const d = draft({ range: { startLine: 10, startCol: 2, endLine: 20, endCol: 3 } });
+  assert.equal(draftAtCursor(10, 2, [d]), d); // start line at the start col
+  assert.equal(draftAtCursor(20, 3, [d]), d); // end line at the end col
+  assert.equal(draftAtCursor(9, 0, [d]), undefined);
+  assert.equal(draftAtCursor(21, 0, [d]), undefined);
+});
+
+test("draftAtCursor is column-precise on boundary lines", () => {
+  const d = draft({ range: { startLine: 10, startCol: 2, endLine: 12, endCol: 4 } });
+  // Start line: columns before startCol miss.
+  assert.equal(draftAtCursor(10, 0, [d]), undefined);
+  assert.equal(draftAtCursor(10, 1, [d]), undefined);
+  assert.equal(draftAtCursor(10, 2, [d]), d);
+  // End line: columns past endCol miss.
+  assert.equal(draftAtCursor(12, 4, [d]), d);
+  assert.equal(draftAtCursor(12, 5, [d]), undefined);
+  assert.equal(draftAtCursor(12, 9, [d]), undefined);
+  // Inner lines hit at any column.
+  assert.equal(draftAtCursor(11, 0, [d]), d);
+  assert.equal(draftAtCursor(11, 99, [d]), d);
+});
+
+test("draftAtCursor: whole-line (V-mode) drafts hit anywhere on their lines", () => {
+  const lineWise = draft({ mode: "line", range: { startLine: 7, startCol: 0, endLine: 7, endCol: 40 } });
+  assert.equal(draftAtCursor(7, 0, [lineWise]), lineWise);
+  assert.equal(draftAtCursor(7, 17, [lineWise]), lineWise);
+  assert.equal(draftAtCursor(7, 40, [lineWise]), lineWise); // clamped cursor col = line length
+});
+
+test("draftAtCursor: an empty (single-cell) range hits only on its exact column", () => {
+  const d = draft({ range: { startLine: 5, startCol: 3, endLine: 5, endCol: 3 } });
+  assert.equal(draftAtCursor(5, 3, [d]), d);
+  assert.equal(draftAtCursor(5, 2, [d]), undefined);
+  assert.equal(draftAtCursor(5, 4, [d]), undefined);
 });
 
 test("draftAtCursor returns the last draft among overlapping ranges", () => {
   const first = draft({ token: "[f.ts:10-20]", range: { startLine: 10, startCol: 0, endLine: 20, endCol: 9 } });
   const second = draft({ token: "[f.ts:12-15]", range: { startLine: 12, startCol: 2, endLine: 15, endCol: 7 } });
-  assert.equal(draftAtCursor(13, [first, second]), second);
-  assert.equal(draftAtCursor(11, [first, second]), first);
+  assert.equal(draftAtCursor(13, 4, [first, second]), second);
+  assert.equal(draftAtCursor(11, 4, [first, second]), first);
 });
 
 test("draftAtCursor covers char-wise and line-wise ranges alike", () => {
@@ -173,21 +203,21 @@ test("draftAtCursor covers char-wise and line-wise ranges alike", () => {
     mode: "line",
     range: { startLine: 7, startCol: 0, endLine: 7, endCol: 40 },
   });
-  assert.equal(draftAtCursor(4, [charWise, lineWise]), charWise);
-  assert.equal(draftAtCursor(7, [charWise, lineWise]), lineWise);
+  assert.equal(draftAtCursor(4, 6, [charWise, lineWise]), charWise);
+  assert.equal(draftAtCursor(7, 6, [charWise, lineWise]), lineWise);
 });
 
 test("draftAtCursor returns undefined when nothing covers the cursor", () => {
   const d = draft({ range: { startLine: 10, startCol: 0, endLine: 12, endCol: 3 } });
-  assert.equal(draftAtCursor(11, []), undefined);
-  assert.equal(draftAtCursor(15, [d]), undefined);
+  assert.equal(draftAtCursor(11, 0, []), undefined);
+  assert.equal(draftAtCursor(15, 0, [d]), undefined);
 });
 
 // FOOTER_HINTS ------------------------------------------------------------------
 
-test("FOOTER_HINTS normal mode has no badge and the full hint line", () => {
+test("FOOTER_HINTS normal mode carries the NORMAL badge and the full hint line", () => {
   const { badge, hints } = FOOTER_HINTS.normal;
-  assert.equal(badge, null);
+  assert.equal(badge, "-- NORMAL --");
   assert.equal(hints, "hjkl move  v/V select  c/x comment/delete  p preview  q/Esc close");
   assert.ok(hints.includes("c/x"), "normal hints mention c/x");
   assert.ok(hints.includes("p preview"), "normal hints mention p preview");
@@ -210,6 +240,7 @@ test("FOOTER_HINTS exposes badge and hints as separate fields per mode", () => {
   for (const mode of ["normal", "visualChar", "visualLine", "comment"] as const) {
     const entry = FOOTER_HINTS[mode];
     assert.equal(typeof entry.hints, "string");
-    assert.ok(entry.badge === null || typeof entry.badge === "string");
+    assert.equal(typeof entry.badge, "string");
+    assert.ok(entry.badge.length > 0);
   }
 });

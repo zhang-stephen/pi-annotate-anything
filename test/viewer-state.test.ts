@@ -525,6 +525,17 @@ test("reduceViewer: x in visual mode is a no-op even on a pending line", () => {
   assert.equal(res.effect, undefined);
 });
 
+test("reduceViewer: c/x respect draft columns on boundary lines", () => {
+  // DRAFT_B covers line 3 cols 1..4 (inclusive of the cursor char): col 0 is
+  // before its start, col 5 is past its end - both must miss.
+  const beforeStart = view(viewer({ cursor: { line: 3, col: 0 } }), "c", [DRAFT_B]);
+  assert.deepEqual(beforeStart.state, viewer({ cursor: { line: 3, col: 0 } }));
+  const pastEnd = view(viewer({ cursor: { line: 3, col: 5 } }), "x", [DRAFT_B]);
+  assert.deepEqual(pastEnd.state, viewer({ cursor: { line: 3, col: 5 } }));
+  const inside = view(viewer({ cursor: { line: 3, col: 4 } }), "c", [DRAFT_B]);
+  assert.equal(inside.state.editingDraftId, DRAFT_B.token);
+});
+
 // Hover preview toggle (normal-mode p) --------------------------------------
 
 test("reduceViewer: p in normal mode toggles previewOn off and back on", () => {

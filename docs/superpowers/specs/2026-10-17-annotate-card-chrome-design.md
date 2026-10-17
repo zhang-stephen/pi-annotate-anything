@@ -12,11 +12,11 @@ pi's own overlay surfaces (e.g. the background-tasks manager) solve this by pain
 
 ## Goals
 
-1. The annotate card is a bordered panel: rounded box-drawing border (`╭ ╮ ╰ ╯ ─ │`), every row padded to the panel width and painted with a theme background, so nothing behind the overlay bleeds through.
+1. The annotate card is a bordered panel: rounded box-drawing border (`╭ ╮ ╰ ╯ ─ │`), every row padded to the panel width. The background is transparent by design: pi-tui overlays repaint every cell they occupy, so nothing behind the card bleeds through and no theme bg token is needed.
 2. The top border carries an embedded title: `╭─ Annotate: <relative-path> (N) ──...──╮` where N is the live count of pending annotations for the file (drafts whose pill still lives in the composer; pruned drafts stop counting immediately). N is omitted when 0. Long paths are truncated from the left to keep the file name visible.
 3. A footer row inside the bottom of the panel shows mode-aware key hints, dimmed via the theme.
-4. The comment input is a floating bordered sub-panel that opens adjacent to the current selection inside the card (below the selection's last visible row, flipping above it when space runs out; horizontally aligned to the selection start column, clamped to the panel width). It carries an embedded `Comment` title and its own background, so it reads as an IDE-style in-place comment popup floating above the card content.
-5. Pending annotation styling is consolidated onto theme colors (gutter `*` plus underline keep their semantics; colors come from the theme instead of raw ANSI).
+4. The comment input is a floating bordered sub-panel that opens adjacent to the current selection inside the card (below the selection's last visible row, flipping above it when space runs out; horizontally aligned to the selection start column, clamped to the panel width). It carries an embedded `Comment` title. The editor box is fixed-width (`min(innerWidth, 64)` columns; it never resizes while typing), soft-wraps its text at the box's inner content width, caps at 8 rows (6 content rows) with a scroll window that keeps the cursor's row visible, and emulates the text cursor with SGR inverse video (the character under the cursor is inverted; at end of line an inverse space). The cursor appears only in comment mode, never in the read-only preview.
+5. Pending annotation styling: the range text is underlined with raw SGR 4 (theme-neutral) and the gutter `*` marker (and nothing else) keeps the theme warning color.
 6. Pending annotations are editable in place. Key choices follow vim conventions: `c` is the change operator (in visual mode it comments the selection, unchanged; in normal mode with the cursor on a line covered by a pending annotation it reopens the floating comment box pre-filled with the existing comment and updates the draft in place on submit). `x` deletes the pending annotation under the cursor, mirroring vim's delete-char-under-cursor: the draft is removed and its pill token is stripped from the composer text. `d` is deliberately not used: it is an operator prefix in vim and would imply a pending-operator state machine.
 7. Hover-style comment preview, toggleable. In normal mode, when the cursor rests on a line covered by a pending annotation, a read-only floating box (same chrome as the comment editor, `Comment` title) appears adjacent to the cursor line showing that annotation's comment. Moving off the line dismisses it. Pressing `c` turns the preview into the editor in place. Overlapping drafts: the most recently added one wins, matching the `c` and `x` targeting rule. Long comments are capped at 6 box rows. `p` toggles the preview on and off (normal mode); the toggle is card-session state, defaults to ON, and is deliberately NOT a persisted config option - pi's extension settings system is not unified yet. `p` has no vim meaning here (no paste/register concept in the card), so there is no habit conflict. The lookup is an O(pending-count) scan on the render path, which already runs per keystroke; no I/O, no re-highlight, no measurable cost.
 
@@ -29,19 +29,19 @@ pi's own overlay surfaces (e.g. the background-tasks manager) solve this by pain
 
 ### Theme sources
 
-- Foreground tokens from the pi theme: `border` (border glyphs), `dim` or `muted` (footer hints), `warning` (pending gutter marker + underline), plus the existing syntax-highlight output.
-- Background: pi themes expose background tokens (`selectedBg`, `customMessageBg`, ...) through `theme.bg(token, text)`. The card paints every row with `theme.bg("customMessageBg", row)`; `customMessageBg` is a panel-style background present in every built-in theme. Themes where it resolves to the default background still work because the border delineates the panel. (Note: `cardBg`/`pageBg` exist only in theme JSON for HTML export; they are not TUI tokens.)
+- Foreground tokens from the pi theme: `border` (border glyphs), `dim` or `muted` (footer hints), `accent` (mode badges), `warning` (pending gutter marker), plus the existing syntax-highlight output.
+- Background: none. The card is transparent by design - pi-tui overlays repaint every cell they occupy, so nothing behind the card can bleed through, and no theme bg token is looked up.
 
 ### Theme adaptivity
 
-All colors come from the active pi theme through `theme.fg()` / `theme.bg()` token lookups (`border`, `dim`/`muted`, `warning`, `customMessageBg`). No hardcoded ANSI colors anywhere in the chrome; border glyphs are neutral box-drawing characters. Theme plugins that restyle pi (e.g. custom themes installed by the user) therefore reskin the card automatically. If a theme resolves `customMessageBg` poorly for this use, the token choice is a one-line change and may later become a config option.
+All colors come from the active pi theme through `theme.fg()` token lookups (`border`, `dim`/`muted`, `accent`, `warning`). No hardcoded ANSI colors anywhere in the chrome; border glyphs are neutral box-drawing characters. Raw SGR attributes (inverse for cursor/selection, underline SGR 4 for pending ranges) are deliberately theme-neutral. Theme plugins that restyle pi (e.g. custom themes installed by the user) therefore reskin the card automatically.
 
 ### Layout
 
 ```
 ╭─ Annotate: src/viewer.ts (2) ─────────────╮
 │  10   func handler() {                    │
-│  11 *   result := compute(ctx)            │   * = pending (underline)
+│  11 *   result := compute(ctx)            │   * = pending (SGR 4 underline)
 │  ...                                      │
 │ hjkl move  v select  c comment  q close   │
 ╰───────────────────────────────────────────╯
@@ -53,18 +53,20 @@ Comment mode floats the sub-panel next to the selection:
 │  10   func handler() {                    │
 │  11 >   result := compute(ctx)            │   > = selection
 │       ╭─ Comment ─────────────────────╮   │
-│       │ this is the comment text      │   │
+│       │ this is the comment text█     │   │   █ = inverse cursor
 │       ╰───────────────────────────────╯   │
 │  12   ...                                 │
 │ Enter submit  ctrl+j newline  Esc cancel  │
 ╰───────────────────────────────────────────╯
 ```
 
-Placement rules: the box opens one row below the selection's last visible row; if fewer rows than the box height remain above the footer, it flips to one row above the selection's first visible row. Its left edge aligns with the selection's start display column, clamped so the box never crosses the panel's right border. Card content under the box is occluded (the box rows are painted with the background, full width).
+Placement rules: the box opens one row below the selection's last visible row; if fewer rows than the box height remain above the footer, it flips to one row above the selection's first visible row. Its left edge aligns with the selection's start display column, clamped so the box never crosses the panel's right border. Card content under the box is occluded: occluded rows are replaced in place, spliced ANSI-safely by display column (pi-tui `sliceByColumn` carries the SGR state into the surviving slivers, so styled text left and right of the box keeps its attributes).
 
-Footer content by mode, following vim's mode-indicator convention (normal mode shows no badge; other modes show a badge in the theme `accent` color, followed by the mode's hints in `dim`):
+The editor box is fixed at `min(innerWidth, 64)` columns; its text soft-wraps at the inner content width and the box caps at 8 rows (6 content rows), scrolling so the cursor's row stays visible. The text cursor is emulated with SGR inverse (character under the cursor inverted; inverse space at end of line). The read-only preview box stays content-sized and keeps its 6-row cap; it renders no cursor.
 
-- normal:  `hjkl move  v/V select  c/x comment/delete  p preview  q/Esc close`
+Footer content by mode, following vim's mode-indicator convention (every mode shows a badge in the theme `accent` color, followed by the mode's hints in `dim`):
+
+- normal:  `-- NORMAL --  hjkl move  v/V select  c/x comment/delete  p preview  q/Esc close`
 - visual (char): `-- VISUAL --  hjkl extend  o swap  c comment  Esc cancel`
 - visual (line): `-- VISUAL LINE --  hjkl extend  o swap  c comment  Esc cancel`
 - comment: `-- COMMENT --  Enter submit  ctrl+j newline  Esc cancel`
@@ -79,8 +81,8 @@ Footer content by mode, following vim's mode-indicator convention (normal mode s
 
 Pill tokens are a deterministic function of path + range, so editing a comment never invalidates the pill already sitting in the composer.
 
-- `c` (normal mode, cursor inside a pending annotation's range; a no-op on lines without pending annotations): enters comment mode anchored to that draft's range with the existing comment pre-filled. Submit calls a new `store.updateComment(draftId, comment)`; the range, snapshot text, and token are untouched. Esc cancels without changes. If the same lines are covered by several overlapping drafts, the most recently added one is edited.
-- `x` (normal mode, same targeting rule): removes the draft from the store and strips its pill token from the composer text (first occurrence). Removing the draft directly is safe because pruning is token-driven; the reverse direction (pill deleted in composer) already prunes via `pruneFromText`.
+- `c` (normal mode, cursor position inside a pending annotation's range (column-precise: on a boundary line the cursor column must be within `[startCol, endCol]`; a no-op on lines/columns without pending annotations): enters comment mode anchored to that draft's range with the existing comment pre-filled. Submit calls a new `store.updateComment(draftId, comment)`; the range, snapshot text, and token are untouched. Esc cancels without changes. If the same position is covered by several overlapping drafts, the most recently added one is edited.
+- `x` (normal mode, same column-precise targeting rule): removes the draft from the store and strips its pill token from the composer text (first occurrence). Removing the draft directly is safe because pruning is token-driven; the reverse direction (pill deleted in composer) already prunes via `pruneFromText`.
 - The pending-count title and gutter markers reflect edits and deletions on the next render because the card's `pending` getter already re-reads the store.
 
 ### Input
@@ -89,15 +91,15 @@ Pill tokens are a deterministic function of path + range, so editing a comment n
 
 ### Structure
 
-- Rendering splits into pure helpers in `src/card-chrome.ts`: `framePanel(rows, width, { title, footer, colors })`, `frameCommentBox(lines, width, colors, title)`, `commentBoxPlacement(selTop, selBottom, selCol, boxH, boxW, innerW, viewH)`, and a generic `draftAtCursor(cursorLine, pending)` returning the most recent draft covering the cursor line (shared by preview, `c`, and `x`). `FOOTER_HINTS` maps each card mode to a separately exported badge and hints string. All take color functions as parameters so they are unit-testable without a live theme.
+- Rendering splits into pure helpers in `src/card-chrome.ts`: `framePanel(rows, width, { title, footer, colors })`, `frameCommentBox(lines, width, colors, title)`, `commentBoxPlacement(selTop, selBottom, selCol, boxH, boxW, innerW, viewH)`, and a column-precise `draftAtCursor(line, col, pending)` returning the most recent draft covering the cursor position (shared by preview, `c`, and `x`; boundary lines compare columns, inner lines hit anywhere). `FOOTER_HINTS` maps each card mode to a separately exported badge and hints string. All take color functions as parameters so they are unit-testable without a live theme. Comment text wrapping and the emulated cursor live in `src/comment-input.ts` as pure helpers (`wrapCommentLines(text, width, cursor) -> { lines, cursorRow, cursorCol }`, `withCursorCell(line, col)`).
 - `AnnotateCard` receives the pi `Theme` from the `ctx.ui.custom` factory (already available there) and maps it to the color functions the helpers need.
 
 ## Acceptance
 
-- Card shows border, background, embedded title with path and live pending count, and a mode-correct footer hint line in all three modes.
+- Card shows border, embedded title with path and live pending count, and a mode-correct footer (badge in accent, hints in dim) in all four modes, including `-- NORMAL --`. Background is transparent by design (overlays repaint every cell).
 - No bleed-through of underlying content at any card row.
-- Comment input floats adjacent to the selection (below, flipping above near the bottom; left edge aligned to selection start, clamped to the panel); Enter/Esc/ctrl+j behavior unchanged.
-- Pending annotations still marked with gutter `*` and underline, now in the theme warning color.
+- Comment input floats adjacent to the selection (below, flipping above near the bottom; left edge aligned to selection start, clamped to the panel), fixed-width with soft wrap, 8-row cap, and an emulated inverse cursor; Enter/Esc/ctrl+j behavior unchanged.
+- Pending annotations still marked with gutter `*` in the theme warning color; the range text is underlined via raw SGR 4.
 - `node --test test/` and `npx tsc --noEmit` stay green; new helper tests cover border geometry with wide characters and long-path truncation.
 - Editing a comment updates the draft in place: token unchanged, composer pill untouched, snapshot unchanged. Deleting removes the draft and strips its pill from the composer.
 - Normal-mode preview: cursor on a pending line shows the comment in a read-only floating box next to the line; moving away dismisses it; `c` converts the preview into the pre-filled editor.

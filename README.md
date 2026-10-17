@@ -47,7 +47,7 @@ pi --extension /path/to/pi-annotate-anything
 | `Esc` | Cancel the selection or comment box; otherwise close the card |
 | `q` | Close the card (normal mode only) |
 
-The card is a bordered panel: the title bar shows the file path and live pending count, and the footer shows a vim-style mode badge (`-- VISUAL --`, `-- VISUAL LINE --`, `-- COMMENT --`) plus the keys available in that mode. In normal mode, resting the cursor on a line with a pending annotation shows a read-only preview of its comment; press `c` to edit it in place.
+The card is a bordered panel: the title bar shows the file path and live pending count, and the footer shows a vim-style mode badge (`-- NORMAL --`, `-- VISUAL --`, `-- VISUAL LINE --`, `-- COMMENT --`) plus the keys available in that mode. In normal mode, resting the cursor on a line with a pending annotation shows a read-only preview of its comment; press `c` to edit it in place.
 
 The cursor clamps to the last column of the current line: `l` at the end of a line does not wrap to the next line. Reversed selections (bottom-up) are normalized automatically.
 
@@ -82,7 +82,7 @@ Label variants:
 ## Behavior notes
 
 - The card stays open after submitting an annotation so you can mark several ranges in one pass. Close it with `Esc` or `q`, then compose prose around the pills in the composer. Sending always happens from the composer.
-- Pending (unsent) annotations render as theme-colored gutter markers and underlines; resting the cursor on one previews its comment.
+- Pending (unsent) annotations render as an SGR-underlined range with a warning-colored `*` gutter marker; resting the cursor on one previews its comment.
 - An empty comment is allowed: the annotation is sent without a `Comment:` line.
 - Deleting a pill from the composer deletes that annotation; its markers disappear from the card.
 - Sending the message expands every remaining pill into its payload and clears them.
