@@ -1,7 +1,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { visibleWidth } from "@earendil-works/pi-tui";
-import { recolorTokens } from "../src/editor.ts";
+import { visibleWidth, type EditorComponent } from "@earendil-works/pi-tui";
+import { recolorTokens, withTokenRecolor } from "../src/editor.ts";
 
 // Visible marker wrapper for content assertions (per task brief).
 const marker = (s: string) => `<${s}>`;
@@ -38,4 +38,28 @@ test("recolorTokens: prefix token does not shadow its longer form", () => {
   const line = "see [a.ts:1-2] and [a.ts:1-2 ~2]";
   const out = recolorTokens(line, ["[a.ts:1-2]", "[a.ts:1-2 ~2]"], marker);
   assert.equal(out, "see <[a.ts:1-2]> and <[a.ts:1-2 ~2]>");
+});
+
+test("withTokenRecolor decorates render output and returns the same instance", () => {
+  const base = {
+    renderCalls: 0,
+    render(_width: number): string[] {
+      this.renderCalls += 1;
+      return ["annotate [src/a.ts:1-2] please", "plain"];
+    },
+  };
+  const tokens = ["[src/a.ts:1-2]"];
+  const decorated = withTokenRecolor(base as unknown as EditorComponent, () => tokens);
+  assert.equal(decorated, base); // same instance, predecessor preserved
+  const lines = decorated.render(80);
+  assert.equal(lines[0], `annotate ${inverse("[src/a.ts:1-2]")} please`);
+  assert.equal(lines[1], "plain");
+  assert.equal(base.renderCalls, 1); // base render still drives the output
+});
+
+test("withTokenRecolor passes lines through when no tokens are pending", () => {
+  const original = ["nothing to recolor"];
+  const base = { render: (_width: number) => [...original] };
+  const decorated = withTokenRecolor(base as unknown as EditorComponent, () => []);
+  assert.deepEqual(decorated.render(80), original);
 });

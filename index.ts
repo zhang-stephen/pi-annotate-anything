@@ -1,7 +1,10 @@
 // Extension entry point: wires the annotate flow together.
 //
-// - session_start creates the draft store and installs AnnotateEditor as the
-//   composer (pill recoloring); session_shutdown restores the default editor.
+// - The AnnotateEditor composer (pill recoloring) is installed lazily by
+//   /annotate, saving any previously configured editor factory (e.g. another
+//   extension's custom composer), and restored once no pill tokens remain in
+//   the composer (card closed with no pending annotations, or after submit).
+//   session_shutdown restores the saved factory as well.
 // - /annotate <path> opens AnnotateCard in an overlay; annotations land in
 //   the store and their token pill is pasted into the composer.
 // - The "input" event expands tokens into full payload blocks. Pi clears the
@@ -14,9 +17,9 @@
 //   own send the composer is empty, so drafts are retired; pills still
 //   present (unrelated messages) keep their drafts. Never blind-clear.
 
-import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";
+import type { ExtensionAPI, ExtensionContext } from "@earendil-works/pi-coding-agent";
 
-import { AnnotateEditor } from "./src/editor.ts";
+import { AnnotateEditor, withTokenRecolor } from "./src/editor.ts";
 import { extractRange, loadFile, resolvePath } from "./src/file-range.ts";
 import { tokenLabel } from "./src/message.ts";
 import { AnnotationStore } from "./src/store.ts";
@@ -24,19 +27,50 @@ import { expandTokens } from "./src/transform.ts";
 import { AnnotateCard } from "./src/viewer.ts";
 
 export default function (pi: ExtensionAPI) {
-  // Assigned by session_start, which always runs before commands and events
-  // can reach the handlers below.
+  // The composer override is installed on demand by /annotate and removed
+  // once no pill tokens remain pending (card closed with nothing pending,
+  // or after submit), so the user's configured editor is untouched in
+  // ordinary sessions. While installed it is PREDECESSOR-PRESERVING: the
+  // factory decorates whatever editor the previous factory (e.g. zentui's)
+  // produces instead of replacing it, so other extensions' composer styling
+  // keeps working underneath the pill recoloring.
   let store: AnnotationStore;
+  let composerInstalled = false;
+  // EditorFactory is not re-exported from the package root; derive it.
+  type EditorFactory = NonNullable<ReturnType<ExtensionContext["ui"]["getEditorComponent"]>>;
 
-  pi.on("session_start", (_event, ctx) => {
-    store = new AnnotationStore();
+  let savedFactory: EditorFactory | undefined;
+
+  const getTokens = () => store.list().map((d) => d.token);
+
+  const installComposer = (ctx: ExtensionContext) => {
+    if (composerInstalled) return;
+    savedFactory = ctx.ui.getEditorComponent();
+    const predecessor = savedFactory;
     ctx.ui.setEditorComponent((tui, theme, keybindings) =>
-      new AnnotateEditor(tui, theme, keybindings, () => store.list().map((d) => d.token)),
+      predecessor
+        ? withTokenRecolor(predecessor(tui, theme, keybindings), getTokens)
+        : new AnnotateEditor(tui, theme, keybindings, getTokens),
     );
+    composerInstalled = true;
+  };
+
+  // Restore the saved editor once the composer holds no pill tokens. Call
+  // only when the store mirrors composer truth (right after pruneFromText,
+  // or at card close where add/delete keep them in sync).
+  const restoreComposerIfIdle = (ctx: ExtensionContext) => {
+    if (!composerInstalled || store.list().length > 0) return;
+    ctx.ui.setEditorComponent(savedFactory);
+    savedFactory = undefined;
+    composerInstalled = false;
+  };
+
+  pi.on("session_start", () => {
+    store = new AnnotationStore();
   });
 
   pi.on("session_shutdown", (_event, ctx) => {
-    ctx.ui.setEditorComponent(undefined);
+    if (composerInstalled) ctx.ui.setEditorComponent(savedFactory);
   });
 
   pi.registerCommand("annotate", {
@@ -58,6 +92,8 @@ export default function (pi: ExtensionAPI) {
       // getter, re-read on every render, so annotations created while the
       // card stays open show their marker immediately.
       store.pruneFromText(ctx.ui.getEditorText());
+      // Take over the composer for pill recoloring while annotations exist.
+      installComposer(ctx);
       // Live getters, re-read on every render: pending drives the gutter/
       // underline markers; pendingDrafts carries token/range/comment for the
       // card's edit (c) and delete (x) targeting. Both list this file's
@@ -114,6 +150,9 @@ export default function (pi: ExtensionAPI) {
           ),
         { overlay: true, overlayOptions: { width: "80%", maxHeight: "80%", anchor: "center" } },
       );
+      // Card closed: if the composer holds no pill tokens (no annotations
+      // pending), hand the composer back to the previously configured editor.
+      restoreComposerIfIdle(ctx);
     },
   });
 
@@ -130,5 +169,8 @@ export default function (pi: ExtensionAPI) {
 
   pi.on("message_start", (_event, ctx) => {
     store.pruneFromText(ctx.ui.getEditorText());
+    // After a submitted message the composer is empty: pills are gone, so
+    // the user's configured editor can take over again.
+    restoreComposerIfIdle(ctx);
   });
 }
