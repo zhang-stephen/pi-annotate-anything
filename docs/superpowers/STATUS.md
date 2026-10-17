@@ -6,7 +6,7 @@ marked `done` unless the current work touches that area.
 ## Active
 
 - plan: `docs/superpowers/plans/2026-10-17-annotate-anything-mvp.md` --
-  in progress (10/12)
+  in progress (11/12)
   spec: `docs/superpowers/specs/2026-10-17-annotate-anything-mvp-design.md`
   (approved)
 

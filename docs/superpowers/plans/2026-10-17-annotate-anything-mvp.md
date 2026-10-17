@@ -531,7 +531,7 @@ export class AnnotateCard {
 **Files:**
 - Create: `index.ts`
 
-- [ ] **Step 1: Implement the extension** (no unit tests; verified by e2e in
+- [x] **Step 1: Implement the extension** (no unit tests; verified by e2e in
   Task 12):
 
 ```ts
@@ -603,9 +603,9 @@ export default function (pi: ExtensionAPI) {
     own send the editor is empty, so this clears everything; an unrelated
     RPC/extension message_start keeps drafts whose pills are still present.
 
-- [ ] **Step 2: Typecheck** -- `npx tsc --noEmit` clean.
+- [x] **Step 2: Typecheck** -- `npx tsc --noEmit` clean.
 
-- [ ] **Step 3: Commit** -- `feat: wire annotate extension entry point`
+- [x] **Step 3: Commit** -- `feat: wire annotate extension entry point`
 
 ---
 
