@@ -472,7 +472,7 @@ The pi-tui `Component` that renders the card and wires the reducer.
 - Create: `src/viewer.ts`
 - Create: `test/viewer.test.ts` (render helpers only)
 
-- [ ] **Step 1: Write failing tests** for the pure display helpers:
+- [x] **Step 1: Write failing tests** for the pure display helpers:
 
 ```ts
 export function tabExpanded(s: string, tabSize?: number): string;
@@ -485,9 +485,9 @@ export function gutterWidth(lineCount: number): number;
   expansion. Test tabs at various positions and wide chars via
   `visibleWidth`.
 
-- [ ] **Step 2: Run tests, expect failure. Implement helpers.**
+- [x] **Step 2: Run tests, expect failure. Implement helpers.**
 
-- [ ] **Step 3: Implement `AnnotateCard`** (`implements Component`):
+- [x] **Step 3: Implement `AnnotateCard`** (`implements Component`):
 
 ```ts
 export class AnnotateCard {
@@ -522,7 +522,7 @@ export class AnnotateCard {
 
   All width clipping via `truncateToWidth` / `sliceByColumn` from pi-tui.
 
-- [ ] **Step 4: Typecheck + run all tests. Commit** -- `feat(viewer): add annotate card component`
+- [x] **Step 4: Typecheck + run all tests. Commit** -- `feat(viewer): add annotate card component`
 
 ---
 
