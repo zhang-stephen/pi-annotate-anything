@@ -8,13 +8,13 @@ Target: release 1.1.0 (release-please)
 
 Files: `src/viewer-state.ts`, `test/viewer-state.test.ts`
 
-- [ ] Add `cycleOrdinal` (default 0) to viewer state.
-- [ ] Stack helper: ordered list (newest first) of pending drafts covering (cursor.line, cursor.col), reusing draftAtCursor coverage rules.
-- [ ] Normal-mode Tab: advance ordinal modulo stack length; no-op when stack < 2.
-- [ ] Reset ordinal to 0 on: cursor move, mode change, draft added.
-- [ ] `c` / `x` act on the current target (stack[ordinal]) instead of most-recent.
-- [ ] Succession on delete: ordinal stays when < new length, wraps to 0 when it was the oldest; empty stack clears target.
-- [ ] Unit tests: cycling order, wrap-around, resets, target-aware c/x, succession incl. oldest-delete wrap and empty-stack boundary, stack of 1 Tab no-op.
+- [x] Add `cycleOrdinal` (default 0) to viewer state.
+- [x] Stack helper: ordered list (newest first) of pending drafts covering (cursor.line, cursor.col), reusing draftAtCursor coverage rules.
+- [x] Normal-mode Tab: advance ordinal modulo stack length; no-op when stack < 2.
+- [x] Reset ordinal to 0 on: cursor move, mode change, draft added.
+- [x] `c` / `x` act on the current target (stack[ordinal]) instead of most-recent.
+- [x] Succession on delete: ordinal stays when < new length, wraps to 0 when it was the oldest; empty stack clears target.
+- [x] Unit tests: cycling order, wrap-around, resets, target-aware c/x, succession incl. oldest-delete wrap and empty-stack boundary, stack of 1 Tab no-op.
 
 ## Task 2: paint (target emphasis + gutter semantics + preview indicator)
 
@@ -32,6 +32,6 @@ Files: `src/viewer.ts`, `src/card-chrome.ts`, `test/viewer.test.ts`, `test/card-
 
 Files: `README.md`, `AGENTS.md`, `docs/superpowers/STATUS.md`
 
-- [ ] README rewrite: npm install (`npm i pi-annotate-anything`), npm version + CI badges, refreshed key tables (Tab cycling, p, c, x), stacked cycling behavior, new gutter semantics with worked example.
+- [ ] README rewrite (structure: title + one-liner + badges, Highlights [Vim-like modal, Annotate anything], Demo placeholder, Install, Features, Usage, How it works, Development/Release, License). Install uses ONLY `pi install npm:pi-annotate-anything` (never bare npm install). Refreshed key tables (Tab cycling, p, c, x), stacked cycling behavior, new gutter semantics with worked example.
 - [ ] AGENTS.md: Releases section (release-please flow, no manual version/CHANGELOG edits, npm trusted publishing).
 - [ ] STATUS.md: plan done (3/3); merge bookkeeping.

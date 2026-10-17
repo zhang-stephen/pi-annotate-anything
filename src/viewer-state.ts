@@ -32,6 +32,14 @@ export interface ViewerState {
   // Hover preview toggle (normal-mode p). Card-session state: survives mode
   // changes but is deliberately not persisted; defaults to true.
   previewOn: boolean;
+  // Ordinal of the current cycle target within the stack of pending drafts
+  // covering the cursor (see stackAtCursor; newest first), normal mode only:
+  // 0 targets the most recent draft. Reset to 0 on cursor move, mode change,
+  // or a newly added draft; Tab advances it modulo the stack length. Session
+  // state like previewOn: never persisted. Optional so callers that construct
+  // this state without the field (pre-cycle callers) stay valid; the reducer
+  // treats undefined like 0.
+  cycleOrdinal?: number;
 }
 
 // Minimal view of a pending annotation the reducer needs for edit (c) and
@@ -56,6 +64,62 @@ export interface ViewerResult {
 }
 
 const HALF_PAGE = (vh: number) => Math.floor(vh / 2);
+
+// cycleOrdinal defaults to 0 (newest target) for states constructed without
+// the field, mirroring how editingDraftId treats undefined like null.
+function ordinalOf(state: ViewerState): number {
+  return state.cycleOrdinal ?? 0;
+}
+
+// All pending drafts covering the cursor position, newest first (pending
+// arrives oldest first). Peels the most-recent hit repeatedly with
+// draftAtCursor, so coverage follows exactly the draftAtCursor rules:
+// column-precise on boundary lines, whole-line V-mode drafts hit anywhere.
+export function stackAtCursor<
+  T extends { range: { startLine: number; startCol: number; endLine: number; endCol: number } },
+>(cursorLine: number, cursorCol: number, pending: readonly T[]): T[] {
+  const remaining = [...pending];
+  const stack: T[] = [];
+  for (
+    let hit = draftAtCursor(cursorLine, cursorCol, remaining);
+    hit !== undefined;
+    hit = draftAtCursor(cursorLine, cursorCol, remaining)
+  ) {
+    stack.push(hit);
+    remaining.splice(remaining.indexOf(hit), 1);
+  }
+  return stack;
+}
+
+// The current cycle target: stackAtCursor(...)[ordinal], with the ordinal
+// taken modulo the stack length so a stale ordinal can never point past the
+// end. Undefined when the cursor is on no pending draft (no target).
+// Exported so the viewer can query the same target the reducer edits and
+// previews.
+export function cycleTarget<T extends PendingDraft>(
+  cursorLine: number,
+  cursorCol: number,
+  ordinal: number,
+  pending: readonly T[],
+): T | undefined {
+  const stack = stackAtCursor(cursorLine, cursorCol, pending);
+  if (stack.length === 0) return undefined;
+  return stack[ordinal % stack.length];
+}
+
+// cycleOrdinal lifecycle: the ordinal only survives keys that change neither
+// the cursor nor the mode (Tab cycling, x deletion); any cursor move or mode
+// change snaps it back to 0 (newest target) - which also covers a newly
+// added draft, since the annotate flow submits out of comment mode. Applied
+// post-reducer by comparing the incoming and outgoing cursor/mode, so every
+// movement and mode branch is covered without touching each one.
+function resetCycleOnMove(res: ViewerResult, prev: ViewerState): ViewerResult {
+  const st = res.state;
+  const movedOrMode =
+    st.mode !== prev.mode || st.cursor.line !== prev.cursor.line || st.cursor.col !== prev.cursor.col;
+  if (!movedOrMode || ordinalOf(st) === 0) return res;
+  return { ...res, state: { ...st, cycleOrdinal: 0 } };
+}
 
 
 // Clamps scrollTop into [0, lines.length - vh], then nudges it so the cursor
@@ -172,9 +236,10 @@ function handleMode(state: ViewerState, key: string, lines: string[], vh: number
       return { state: { ...state, anchor: state.cursor, cursor: state.anchor ?? state.cursor } };
     case "c":
       if (state.mode === "normal") {
-        // Editing flow: on a position a pending draft covers, reopen its
-        // comment pre-filled; elsewhere a no-op.
-        const draft = draftAtCursor(state.cursor.line, state.cursor.col, pending);
+        // Editing flow: on a position a pending draft covers, reopen the
+        // CURRENT cycle target's comment pre-filled; elsewhere a no-op.
+        // Editing never reorders the stack (ordering is by creation time).
+        const draft = cycleTarget(state.cursor.line, state.cursor.col, ordinalOf(state), pending);
         if (draft === undefined) return { state };
         return {
           state: { ...state, mode: "comment", comment: { text: draft.comment }, editingDraftId: draft.token },
@@ -182,11 +247,29 @@ function handleMode(state: ViewerState, key: string, lines: string[], vh: number
       }
       return { state: { ...state, mode: "comment", comment: { text: "" } } };
     case "x":
-      // Delete flow: normal mode only, on a position a pending draft covers.
+      // Delete flow: normal mode only, deleting the CURRENT cycle target.
       if (state.mode !== "normal") return { state };
-      const victim = draftAtCursor(state.cursor.line, state.cursor.col, pending);
-      if (victim === undefined) return { state };
-      return { state, effect: { type: "delete", draftId: victim.token } };
+      const targets = stackAtCursor(state.cursor.line, state.cursor.col, pending);
+      if (targets.length === 0) return { state };
+      const ordinal = ordinalOf(state) % targets.length;
+      // Succession: keep the slot (the next-older draft slides up) unless the
+      // target was the oldest, which wraps to 0; an emptied stack leaves no
+      // target at ordinal 0. Written only when it differs, so a lone-draft
+      // delete leaves the state untouched.
+      const nextOrdinal = ordinal === targets.length - 1 ? 0 : ordinal;
+      return {
+        state: nextOrdinal === ordinalOf(state) ? state : { ...state, cycleOrdinal: nextOrdinal },
+        effect: { type: "delete", draftId: targets[ordinal].token },
+      };
+    case "\t":
+      // Stack cycling: advance the target through the drafts covering the
+      // cursor, newest first, wrapping around. No-op unless at least two
+      // drafts stack here; visual and comment modes never target a draft,
+      // so Tab stays inert there.
+      if (state.mode !== "normal") return { state };
+      const stack = stackAtCursor(state.cursor.line, state.cursor.col, pending);
+      if (stack.length < 2) return { state };
+      return { state: { ...state, cycleOrdinal: (ordinalOf(state) + 1) % stack.length } };
     case "p":
       // Hover preview toggle: normal mode only. The value rides along through
       // every other mode-changing branch via state spread, so it survives
@@ -215,7 +298,7 @@ export function reduceViewer(
 ): ViewerResult {
   const vh = Math.max(1, viewport.height);
 
-  if (state.mode === "comment") return commentStep(state, key, lines, vh);
+  if (state.mode === "comment") return resetCycleOnMove(commentStep(state, key, lines, vh), state);
 
   // Two-stroke sequences: "g" arms "gg". A second "g" completes the jump to
   // line 0; any other key clears the pending and falls through to regular
@@ -223,10 +306,13 @@ export function reduceViewer(
   let current = state;
   if (current.pending !== null) {
     if (key === current.pending) {
-      return moved({ ...current, pending: null }, { line: 0, col: current.cursor.col }, lines, vh);
+      return resetCycleOnMove(
+        moved({ ...current, pending: null }, { line: 0, col: current.cursor.col }, lines, vh),
+        state,
+      );
     }
     current = { ...current, pending: null };
   }
 
-  return handleMode(current, key, lines, vh, pending);
+  return resetCycleOnMove(handleMode(current, key, lines, vh, pending), state);
 }

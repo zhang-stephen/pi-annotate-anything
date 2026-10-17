@@ -1,7 +1,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 
-import { reduceViewer } from "../src/viewer-state.ts";
+import { cycleTarget, reduceViewer, stackAtCursor } from "../src/viewer-state.ts";
 import type { PendingDraft, ViewerState } from "../src/viewer-state.ts";
 
 // 30-line fixture: "line 0" .. "line 29" (col max 6 for single-digit lines).
@@ -455,6 +455,25 @@ const DRAFT_B: PendingDraft = {
   range: { startLine: 3, startCol: 1, endLine: 3, endCol: 4 },
   comment: "second",
 };
+// Third draft stacked on (3,2), for three-deep cycling tests.
+const DRAFT_C: PendingDraft = {
+  token: "[a.ts:4-4]#2",
+  range: { startLine: 3, startCol: 2, endLine: 3, endCol: 2 },
+  comment: "third",
+};
+// A draft created after A/B/C, landing on (3,2) as the new newest.
+const DRAFT_NEW: PendingDraft = {
+  token: "[a.ts:4-4]#3",
+  range: { startLine: 3, startCol: 2, endLine: 3, endCol: 5 },
+  comment: "newest",
+};
+// Whole-line (V-mode) draft over line 5: startCol 0 / endCol = line length
+// ("line 5".length = 6), so it hits anywhere on the line.
+const DRAFT_V: PendingDraft = {
+  token: "[a.ts:6-6]",
+  range: { startLine: 5, startCol: 0, endLine: 5, endCol: 6 },
+  comment: "vline",
+};
 
 function editingState(draft: PendingDraft, text: string): ViewerState {
   return viewer({
@@ -545,6 +564,144 @@ test("reduceViewer: c/x respect draft columns on boundary lines", () => {
   assert.deepEqual(pastEnd.state, viewer({ cursor: { line: 3, col: 5 } }));
   const inside = view(viewer({ cursor: { line: 3, col: 4 } }), "c", [DRAFT_B]);
   assert.equal(inside.state.editingDraftId, DRAFT_B.token);
+});
+
+// Stack cycling (normal-mode Tab) + target-aware c/x -------------------------
+
+// Pending arrives oldest first, so [A, B, C] stacks at (3,2) as [C, B, A].
+
+test("stackAtCursor: lists covering drafts newest first with draftAtCursor coverage rules", () => {
+  assert.deepEqual(
+    stackAtCursor(3, 2, [DRAFT_A, DRAFT_B, DRAFT_C]).map((d) => d.token),
+    [DRAFT_C.token, DRAFT_B.token, DRAFT_A.token],
+  );
+  // Column-precise on boundary lines: at col 0 only DRAFT_A covers.
+  assert.deepEqual(stackAtCursor(3, 0, [DRAFT_A, DRAFT_B, DRAFT_C]).map((d) => d.token), [DRAFT_A.token]);
+  // Whole-line V-mode draft hits anywhere on its line.
+  assert.deepEqual(stackAtCursor(5, 3, [DRAFT_V]).map((d) => d.token), [DRAFT_V.token]);
+  // Off every range: empty stack.
+  assert.deepEqual(stackAtCursor(10, 0, [DRAFT_A, DRAFT_B]), []);
+});
+
+test("cycleTarget: resolves stack[ordinal], undefined off any stack", () => {
+  const pending = [DRAFT_A, DRAFT_B, DRAFT_C]; // oldest first
+  assert.equal(cycleTarget(3, 2, 0, pending)?.token, DRAFT_C.token);
+  assert.equal(cycleTarget(3, 2, 1, pending)?.token, DRAFT_B.token);
+  assert.equal(cycleTarget(3, 2, 2, pending)?.token, DRAFT_A.token);
+  assert.equal(cycleTarget(10, 0, 0, pending), undefined);
+});
+
+test("reduceViewer: Tab cycles the target newest-first and wraps around", () => {
+  const start = viewer({ cursor: { line: 3, col: 2 } });
+  const pending = [DRAFT_A, DRAFT_B, DRAFT_C]; // stack [C, B, A]
+  // Each Tab advances one slot older; the edit probe confirms the target.
+  const one = view(start, "\t", pending);
+  assert.equal(one.state.cycleOrdinal, 1);
+  assert.equal(view(one.state, "c", pending).state.editingDraftId, DRAFT_B.token);
+  const two = view(one.state, "\t", pending);
+  assert.equal(two.state.cycleOrdinal, 2);
+  assert.equal(view(two.state, "c", pending).state.editingDraftId, DRAFT_A.token);
+  // A third Tab wraps back to the newest.
+  const three = view(two.state, "\t", pending);
+  assert.equal(three.state.cycleOrdinal, 0);
+});
+
+test("reduceViewer: Tab is a no-op on a stack of 1 and off any stack", () => {
+  const lone = viewer({ cursor: { line: 3, col: 2 } });
+  assert.deepEqual(view(lone, "\t", [DRAFT_A]).state, lone);
+  const off = viewer({ cursor: { line: 10, col: 0 } });
+  const none = view(off, "\t", [DRAFT_A, DRAFT_B]);
+  assert.deepEqual(none.state, off);
+  assert.equal(none.effect, undefined);
+});
+
+test("reduceViewer: Tab is inert in visual and comment modes", () => {
+  const visStart = viewer({ mode: "visual-char", cursor: { line: 3, col: 2 }, anchor: { line: 3, col: 1 } });
+  assert.deepEqual(view(visStart, "\t", [DRAFT_A, DRAFT_B]).state, visStart);
+  const com = view(commentState("ab"), "\t", [DRAFT_A, DRAFT_B]);
+  assert.deepEqual(com.state.comment, { text: "ab" });
+});
+
+test("reduceViewer: cursor movement resets the cycle ordinal", () => {
+  const start = viewer({ cursor: { line: 3, col: 2 }, cycleOrdinal: 1 });
+  assert.equal(view(start, "j").state.cycleOrdinal, 0);
+  // Even a column move that stays inside the stack resets.
+  const stillOnStack = viewer({ cursor: { line: 3, col: 1 }, cycleOrdinal: 1 });
+  assert.equal(view(stillOnStack, "l").state.cycleOrdinal, 0);
+  // Two-stroke gg jumps too.
+  assert.equal(view(view(start, "g").state, "g").state.cycleOrdinal, 0);
+});
+
+test("reduceViewer: mode changes reset the cycle ordinal", () => {
+  const start = viewer({ cursor: { line: 3, col: 2 }, cycleOrdinal: 1 });
+  assert.equal(view(start, "v").state.cycleOrdinal, 0); // into visual
+  const vis = viewer({ mode: "visual-char", cursor: { line: 3, col: 2 }, anchor: { line: 3, col: 2 }, cycleOrdinal: 1 });
+  assert.equal(view(vis, "\x1b").state.cycleOrdinal, 0); // Esc back to normal
+  // Entering the comment editor via c resets as well.
+  assert.equal(view(start, "c", [DRAFT_A, DRAFT_B]).state.cycleOrdinal, 0);
+});
+
+test("reduceViewer: a newly added draft snaps the target back to newest", () => {
+  // Cycle onto the older draft, then create a third draft over the same
+  // spot through the visual annotate flow; afterwards the new draft is the
+  // target.
+  let res = view(viewer({ cursor: { line: 3, col: 2 } }), "\t", [DRAFT_A, DRAFT_B]);
+  assert.equal(res.state.cycleOrdinal, 1);
+  res = view(res.state, "v", [DRAFT_A, DRAFT_B]); // mode change resets
+  res = view(res.state, "c", [DRAFT_A, DRAFT_B]); // fresh comment on the selection
+  res = view(res.state, "!", [DRAFT_A, DRAFT_B]);
+  res = view(res.state, "\r", [DRAFT_A, DRAFT_B]);
+  assert.equal(res.effect?.type, "annotate");
+  const target = view(res.state, "c", [DRAFT_A, DRAFT_B, DRAFT_NEW]);
+  assert.equal(target.state.editingDraftId, DRAFT_NEW.token);
+});
+
+test("reduceViewer: x deletes the current cycle target, not the newest", () => {
+  // Ordinal 1 of [B, A] is the older draft A.
+  const start = viewer({ cursor: { line: 3, col: 2 }, cycleOrdinal: 1 });
+  const res = view(start, "x", [DRAFT_A, DRAFT_B]);
+  assert.deepEqual(res.effect, { type: "delete", draftId: DRAFT_A.token });
+  assert.deepEqual(res.state, { ...start, cycleOrdinal: 0 }); // was the oldest: wrapped
+  // Ordinal 0 still targets the newest.
+  const newest = view(viewer({ cursor: { line: 3, col: 2 } }), "x", [DRAFT_A, DRAFT_B]);
+  assert.deepEqual(newest.effect, { type: "delete", draftId: DRAFT_B.token });
+});
+
+test("reduceViewer: deleting a middle target keeps the ordinal on the next-older draft", () => {
+  const start = viewer({ cursor: { line: 3, col: 2 } });
+  const pending = [DRAFT_A, DRAFT_B, DRAFT_C]; // stack [C, B, A]
+  const cycled = view(start, "\t", pending);
+  assert.equal(cycled.state.cycleOrdinal, 1);
+  const del = view(cycled.state, "x", pending);
+  assert.deepEqual(del.effect, { type: "delete", draftId: DRAFT_B.token });
+  assert.equal(del.state.cycleOrdinal, 1); // A slides into slot 1
+  const edit = view(del.state, "c", [DRAFT_A, DRAFT_C]);
+  assert.equal(edit.state.editingDraftId, DRAFT_A.token);
+});
+
+test("reduceViewer: deleting the oldest target wraps the ordinal to 0", () => {
+  const cycled = view(viewer({ cursor: { line: 3, col: 2 } }), "\t", [DRAFT_A, DRAFT_B]);
+  assert.equal(cycled.state.cycleOrdinal, 1); // target A, the oldest
+  const del = view(cycled.state, "x", [DRAFT_A, DRAFT_B]);
+  assert.deepEqual(del.effect, { type: "delete", draftId: DRAFT_A.token });
+  assert.equal(del.state.cycleOrdinal, 0);
+  const edit = view(del.state, "c", [DRAFT_B]);
+  assert.equal(edit.state.editingDraftId, DRAFT_B.token);
+});
+
+test("reduceViewer: deleting the last stacked draft leaves no target", () => {
+  const start = viewer({ cursor: { line: 3, col: 2 } });
+  const del = view(start, "x", [DRAFT_B]);
+  assert.deepEqual(del.effect, { type: "delete", draftId: DRAFT_B.token });
+  assert.deepEqual(del.state, start); // lone-draft delete: state untouched
+  // Empty stack afterwards: c, x, and Tab are all no-ops.
+  const edit = view(del.state, "c", []);
+  assert.deepEqual(edit.state, del.state);
+  assert.equal(edit.effect, undefined);
+  const gone = view(del.state, "x", []);
+  assert.deepEqual(gone.state, del.state);
+  assert.equal(gone.effect, undefined);
+  assert.deepEqual(view(del.state, "\t", []).state, del.state);
 });
 
 // Hover preview toggle (normal-mode p) --------------------------------------
