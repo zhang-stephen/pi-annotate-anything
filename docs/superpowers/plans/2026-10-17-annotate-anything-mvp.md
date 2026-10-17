@@ -419,7 +419,7 @@ Pure vim reducer -- the card's brain, fully unit-tested.
 - Create: `src/viewer-state.ts`
 - Create: `test/viewer-state.test.ts`
 
-- [ ] **Step 1: Write failing tests** covering the key table below plus:
+- [x] **Step 1: Write failing tests** covering the key table below plus:
   cursor clamping (no wrap past end of line); viewport scrolls to keep the
   cursor visible; `v`/`V` enter/toggle/exit modes; `o` swaps ends; Esc in
   visual mode exits to normal, in normal mode requests close; `q` in normal
@@ -454,13 +454,13 @@ export function reduceViewer(state: ViewerState, key: string, lines: string[], v
   mode, keys route to `reduceComment` (Enter = `\r`, ctrl+j = `\n`,
   shift+enter = `\x1b\r`).
 
-- [ ] **Step 2: Run tests, expect failure.**
+- [x] **Step 2: Run tests, expect failure.**
 
-- [ ] **Step 3: Implement.** Two-stroke keys (`gg`) tracked with a pending-key
+- [x] **Step 3: Implement.** Two-stroke keys (`gg`) tracked with a pending-key
   field. Selection during visual modes derives from `anchor` + `cursor` via
   `normalize()`.
 
-- [ ] **Step 4: Commit** -- `feat(viewer): add vim-style viewer state machine`
+- [x] **Step 4: Commit** -- `feat(viewer): add vim-style viewer state machine`
 
 ---
 
