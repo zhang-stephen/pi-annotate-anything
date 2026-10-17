@@ -2,7 +2,7 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import { visibleWidth as tuiVisibleWidth } from "@earendil-works/pi-tui";
 
-import { reduceComment, renderCommentBox } from "../src/comment-input.ts";
+import { reduceComment } from "../src/comment-input.ts";
 import type { CommentState } from "../src/comment-input.ts";
 
 // ANSI inverse-video wrapper, same shape the plan uses for width-preservation
@@ -67,58 +67,8 @@ test("reduceComment: does not mutate the input state", () => {
   assert.equal(state.text, "keep");
 });
 
-test("renderCommentBox: bordered box with prompt line and raw text lines", () => {
-  const lines = renderCommentBox({ text: "hello\nworld" }, 20, (s) => s);
-  assert.equal(lines.length, 5);
-  assert.equal(lines[0], "+" + "-".repeat(18) + "+");
-  assert.equal(lines[1], "| Comment:" + " ".repeat(9) + "|");
-  assert.equal(lines[2], "| hello" + " ".repeat(12) + "|");
-  assert.equal(lines[3], "| world" + " ".repeat(12) + "|");
-  assert.equal(lines[4], "+" + "-".repeat(18) + "+");
-  for (const line of lines) {
-    assert.equal(visibleWidth(line), 20);
-  }
-});
 
-test("renderCommentBox: empty text renders a single empty content line", () => {
-  const lines = renderCommentBox({ text: "" }, 12, (s) => s);
-  assert.equal(lines.length, 4);
-  assert.equal(lines[2], "|" + " ".repeat(10) + "|");
-  for (const line of lines) {
-    assert.equal(visibleWidth(line), 12);
-  }
-});
 
-test("renderCommentBox: theme styles the border and the prompt label", () => {
-  const lines = renderCommentBox({ text: "" }, 12, style);
-  assert.equal(lines[0], style("+" + "-".repeat(10) + "+"));
-  assert.equal(lines[1], "| " + style("Comment:") + " ".repeat(1) + "|");
-  assert.equal(lines[lines.length - 1], style("+" + "-".repeat(10) + "+"));
-  for (const line of lines) {
-    assert.equal(visibleWidth(line), 12);
-  }
-});
 
-test("renderCommentBox: trailing newline renders an empty trailing line", () => {
-  const lines = renderCommentBox({ text: "a\n" }, 14, (s) => s);
-  assert.equal(lines.length, 5);
-  assert.equal(lines[2], "| a" + " ".repeat(10) + "|");
-  assert.equal(lines[3], "|" + " ".repeat(12) + "|");
-  for (const line of lines) {
-    assert.equal(visibleWidth(line), 14);
-  }
-});
 
-test("renderCommentBox: text wider than the box is never truncated", () => {
-  const long = "x".repeat(30);
-  const lines = renderCommentBox({ text: long }, 10, (s) => s);
-  assert.ok(lines.join("\n").includes(long));
-});
 
-test("renderCommentBox: wide chars do not break the right border", () => {
-  // Two wide chars occupy 4 display columns (4 code units), so padding must
-  // shrink by visible width or the border would land past column 14.
-  const lines = renderCommentBox({ text: "\u4e00\u4e00" }, 14, (s) => s);
-  assert.equal(lines[2], "| \u4e00\u4e00" + " ".repeat(7) + "|");
-  assert.equal(tuiVisibleWidth(lines[2]), 14);
-});

@@ -29,6 +29,9 @@ export interface ViewerState {
   // callers that construct this state without the field (pre-edit callers)
   // stay valid; the reducer treats undefined like null.
   editingDraftId?: string | null;
+  // Hover preview toggle (normal-mode p). Card-session state: survives mode
+  // changes but is deliberately not persisted; defaults to true.
+  previewOn: boolean;
 }
 
 // Minimal view of a pending annotation the reducer needs for edit (c) and
@@ -183,6 +186,12 @@ function handleMode(state: ViewerState, key: string, lines: string[], vh: number
       const victim = draftAtCursor(state.cursor.line, pending);
       if (victim === undefined) return { state };
       return { state, effect: { type: "delete", draftId: victim.token } };
+    case "p":
+      // Hover preview toggle: normal mode only. The value rides along through
+      // every other mode-changing branch via state spread, so it survives
+      // visual/comment round-trips within the card session.
+      if (state.mode !== "normal") return { state };
+      return { state: { ...state, previewOn: !state.previewOn } };
     case "q":
       return state.mode === "normal" ? { state, effect: { type: "close" } } : { state };
     case "\x1b":

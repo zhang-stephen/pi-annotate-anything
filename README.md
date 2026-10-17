@@ -41,9 +41,13 @@ pi --extension /path/to/pi-annotate-anything
 | `v` | Start char-wise selection; in visual mode, switch to char-wise or exit |
 | `V` | Start line-wise selection; in visual mode, switch to line-wise or exit |
 | `o` | Swap the anchor and cursor ends (visual mode only) |
-| `c` | Open the comment box for the current selection (visual mode only) |
+| `c` | Visual mode: comment the selection. Normal mode on a line with a pending annotation: edit its comment (pre-filled) |
+| `x` | Delete the pending annotation under the cursor (normal mode); also removes its pill from the composer |
+| `p` | Toggle the hover preview of pending comments (normal mode) |
 | `Esc` | Cancel the selection or comment box; otherwise close the card |
 | `q` | Close the card (normal mode only) |
+
+The card is a bordered panel: the title bar shows the file path and live pending count, and the footer shows a vim-style mode badge (`-- VISUAL --`, `-- VISUAL LINE --`, `-- COMMENT --`) plus the keys available in that mode. In normal mode, resting the cursor on a line with a pending annotation shows a read-only preview of its comment; press `c` to edit it in place.
 
 The cursor clamps to the last column of the current line: `l` at the end of a line does not wrap to the next line. Reversed selections (bottom-up) are normalized automatically.
 
@@ -55,7 +59,7 @@ The cursor clamps to the last column of the current line: `l` at the end of a li
 | `ctrl+j` or `shift+enter` | Insert a newline |
 | `Esc` | Cancel and return to the selection |
 
-An empty comment is allowed: the annotation is sent without a `Comment:` line.
+The comment box is a floating panel that opens next to the selection (below it, or above when space runs out).
 
 ## Payload format
 
@@ -78,7 +82,8 @@ Label variants:
 ## Behavior notes
 
 - The card stays open after submitting an annotation so you can mark several ranges in one pass. Close it with `Esc` or `q`, then compose prose around the pills in the composer. Sending always happens from the composer.
-- Reopening `/annotate <path>` re-renders pending (unsent) annotations as gutter markers and underlines.
+- Pending (unsent) annotations render as theme-colored gutter markers and underlines; resting the cursor on one previews its comment.
+- An empty comment is allowed: the annotation is sent without a `Comment:` line.
 - Deleting a pill from the composer deletes that annotation; its markers disappear from the card.
 - Sending the message expands every remaining pill into its payload and clears them.
 - Multiple annotations of the same range are allowed; each gets its own disambiguated token.

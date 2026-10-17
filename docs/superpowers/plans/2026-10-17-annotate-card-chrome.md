@@ -35,10 +35,10 @@ Branch: feat/card-chrome off master. TDD: failing test first, then implementatio
 
 ## Task 4: hover preview + p toggle
 
-- [ ] **Step 1: failing reducer tests**: normal mode `p` toggles state.previewOn (default true); toggle state survives mode changes within the card session.
-- [ ] **Step 2: failing viewer tests**: normal mode + previewOn + draftAtCursor hit -> rendered output contains a read-only frameCommentBox (title `Comment`) placed by commentBoxPlacement anchored to the cursor line; preview off -> absent; cursor off pending lines -> absent; comment longer than 6 box rows -> capped.
-- [ ] **Step 3: implement** the preview rendering in viewer.ts to green (reuses Task 1/2 seams only; no new input handling beyond `p`).
-- [ ] **Step 4: verify** full suite + tsc.
+- [x] **Step 1: failing reducer tests**: normal mode `p` toggles state.previewOn (default true); toggle state survives mode changes within the card session.
+- [x] **Step 2: failing viewer tests**: normal mode + previewOn + draftAtCursor hit -> rendered output contains a read-only frameCommentBox (title `Comment`) placed by commentBoxPlacement anchored to the cursor line; preview off -> absent; cursor off pending lines -> absent; comment longer than 6 box rows -> capped.
+- [x] **Step 3: implement** the preview rendering in viewer.ts to green (reuses Task 1/2 seams only; no new input handling beyond `p`).
+- [x] **Step 4: verify** full suite + tsc.
 
 ## Task 5: docs and e2e
 

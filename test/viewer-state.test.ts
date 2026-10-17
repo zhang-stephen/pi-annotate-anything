@@ -18,6 +18,7 @@ function viewer(overrides: Partial<ViewerState> = {}): ViewerState {
     pending: null,
     visualMode: "char",
     editingDraftId: null,
+    previewOn: true,
     ...overrides,
   };
 }
@@ -522,6 +523,52 @@ test("reduceViewer: x in visual mode is a no-op even on a pending line", () => {
   const res = view(start, "x", [DRAFT_A]);
   assert.deepEqual(res.state, start);
   assert.equal(res.effect, undefined);
+});
+
+// Hover preview toggle (normal-mode p) --------------------------------------
+
+test("reduceViewer: p in normal mode toggles previewOn off and back on", () => {
+  const start = viewer({ cursor: { line: 3, col: 0 } });
+  assert.equal(start.previewOn, true); // session default
+  const off = view(start, "p");
+  assert.equal(off.state.previewOn, false);
+  assert.equal(off.effect, undefined);
+  const on = view(off.state, "p");
+  assert.equal(on.state.previewOn, true);
+  assert.equal(on.effect, undefined);
+});
+
+test("reduceViewer: previewOn survives visual and comment mode round-trips", () => {
+  let res = view(viewer({ cursor: { line: 3, col: 0 } }), "p");
+  assert.equal(res.state.previewOn, false);
+  // Through visual-char: extend the selection, then Esc back to normal.
+  res = view({ ...res.state, mode: "visual-char", anchor: { line: 3, col: 0 } }, "j");
+  assert.equal(res.state.previewOn, false);
+  res = view(res.state, "\x1b");
+  assert.equal(res.state.mode, "normal");
+  assert.equal(res.state.previewOn, false);
+  // Through the edit flow (c on a pending line, submit updates the draft).
+  res = view(res.state, "c", [DRAFT_A]);
+  assert.equal(res.state.mode, "comment");
+  res = view(res.state, "\r", [DRAFT_A]);
+  assert.equal(res.state.mode, "normal");
+  assert.equal(res.state.previewOn, false);
+});
+
+test("reduceViewer: p is a no-op in visual modes", () => {
+  const visStart = viewer({ mode: "visual-char", cursor: { line: 3, col: 2 }, anchor: { line: 3, col: 1 } });
+  const vis = view(visStart, "p");
+  assert.deepEqual(vis.state, visStart);
+  const vlineStart = viewer({ mode: "visual-line", cursor: { line: 3, col: 2 }, anchor: { line: 3, col: 1 } });
+  const vline = view(vlineStart, "p");
+  assert.deepEqual(vline.state, vlineStart);
+  assert.equal(vline.effect, undefined);
+});
+
+test("reduceViewer: p in comment mode types into the comment, previewOn untouched", () => {
+  const com = view(commentState("x"), "p");
+  assert.deepEqual(com.state.comment, { text: "xp" });
+  assert.equal(com.effect, undefined);
 });
 
 // Purity -------------------------------------------------------------------

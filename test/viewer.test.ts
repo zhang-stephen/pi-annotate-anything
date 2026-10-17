@@ -373,3 +373,96 @@ test("update and delete effects still dispatch through the Task 3 seams", () => 
   h.card.handleInput("q");
   assert.equal(h.calls.closed, 1);
 });
+
+// Hover preview (normal mode, p toggle) ----------------------------------------
+// In normal mode with previewOn, a cursor resting on a pending line renders a
+// read-only Comment box for that draft, placed like the comment-mode box and
+// occluding (not pushing down) content rows. p toggles it off and on.
+
+test("hover preview: cursor on a pending line shows a read-only Comment box below it", () => {
+  const lines = ["alpha", "beta", "gamma", "delta", "epsilon"];
+  const h = makeCard({ lines });
+  const range = { startLine: 0, startCol: 0, endLine: 0, endCol: 5 };
+  h.drafts.push({ token: "[a.ts:1]", range, comment: "note" });
+  h.pending.push(range);
+  const width = 40;
+  const bare = h.card.render(width).map(strip);
+  const tail = " ".repeat(width - 2 - 17); // gutter 4 + box 13
+  // Box opens one row below the cursor row (row 0), left edge at the draft's
+  // start display column (gutter 4 + col 0): same chrome and placement as
+  // the comment-mode box.
+  assert.equal(bare[2], "│2   ╭─ Comment ─╮" + tail + "│");
+  assert.equal(bare[3], "│3   │note       │" + tail + "│");
+  assert.equal(bare[4], "│4   ╰───────────╯" + tail + "│");
+  // Occlusion, not push-down: 5 content rows + 3 chrome rows, unchanged.
+  assert.equal(bare.length, 8);
+});
+
+test("hover preview: p hides it and p brings it back", () => {
+  const lines = ["alpha", "beta", "gamma", "delta", "epsilon"];
+  const h = makeCard({ lines });
+  const range = { startLine: 0, startCol: 0, endLine: 0, endCol: 5 };
+  h.drafts.push({ token: "[a.ts:1]", range, comment: "note" });
+  h.pending.push(range);
+  h.card.handleInput("p");
+  let bare = h.card.render(40).map(strip);
+  for (const row of bare) assert.ok(!row.includes("Comment"), "preview hidden after p");
+  h.card.handleInput("p");
+  bare = h.card.render(40).map(strip);
+  assert.ok(bare[2].includes("╭─ Comment"), "preview returns after p again");
+});
+
+test("hover preview: cursor off pending lines shows nothing", () => {
+  const lines = ["alpha", "beta", "gamma", "delta", "epsilon"];
+  const h = makeCard({ lines });
+  const range = { startLine: 0, startCol: 0, endLine: 0, endCol: 5 };
+  h.drafts.push({ token: "[a.ts:1]", range, comment: "note" });
+  h.pending.push(range);
+  h.card.handleInput("j"); // cursor onto line 1, no draft covers it
+  const bare = h.card.render(40).map(strip);
+  for (const row of bare) assert.ok(!row.includes("Comment"), "no box off pending lines");
+  assert.ok(strip(bare[2]).startsWith("│2   beta")); // content row intact
+});
+
+test("hover preview: comments longer than 6 box rows are capped", () => {
+  const lines = Array.from({ length: 8 }, (_, i) => `ln ${i}`);
+  const h = makeCard({ lines });
+  const range = { startLine: 0, startCol: 0, endLine: 0, endCol: 2 };
+  h.drafts.push({ token: "[a.ts:1]", range, comment: "c0\nc1\nc2\nc3\nc4\nc5\nc6" });
+  h.pending.push(range);
+  const bare = h.card.render(40).map(strip);
+  // 6 box rows total including borders: top + 4 comment lines + bottom.
+  assert.ok(bare[2].includes("╭─ Comment"));
+  assert.ok(bare[3].includes("│c0"));
+  assert.ok(bare[6].includes("│c3"));
+  assert.ok(bare[7].includes("╰"));
+  for (const row of bare) assert.ok(!row.includes("c4"), "comment capped at 6 box rows");
+});
+
+test("hover preview: multi-line draft anchors to the draft's start column, not the cursor", () => {
+  const lines = ["lorem", "ipsum", "dolor", "sit", "amet"];
+  const h = makeCard({ lines });
+  const range = { startLine: 0, startCol: 2, endLine: 1, endCol: 1 };
+  h.drafts.push({ token: "[a.ts:1-2]", range, comment: "note" });
+  h.pending.push(range);
+  const bare = h.card.render(40).map(strip);
+  // Left edge = border 1 + gutter 4 + draft startCol 2 (not the cursor col 0).
+  assert.equal(bare[2].indexOf("╭─ Comment"), 1 + 4 + 2);
+});
+
+test("hover preview: c on the pending line replaces it with the pre-filled editor", () => {
+  const lines = ["alpha", "beta", "gamma", "delta", "epsilon"];
+  const h = makeCard({ lines });
+  const range = { startLine: 0, startCol: 0, endLine: 0, endCol: 5 };
+  h.drafts.push({ token: "[a.ts:1]", range, comment: "prefill" });
+  h.pending.push(range);
+  h.card.handleInput("c"); // edit flow: comment mode, exactly one box
+  let bare = h.card.render(40).map(strip);
+  assert.equal(bare.filter((r) => r.includes("╭─ Comment")).length, 1);
+  assert.ok(bare.some((r) => r.includes("│prefill")));
+  assert.ok(bare[bare.length - 2].startsWith("│-- COMMENT --"));
+  // Esc back to normal: the read-only preview is shown again.
+  h.card.handleInput("\x1b");
+  bare = h.card.render(40).map(strip);
+  assert.ok(bare[2].includes("╭─ Comment"));
+});

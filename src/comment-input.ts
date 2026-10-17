@@ -42,24 +42,3 @@ export function reduceComment(state: CommentState, key: CommentKey): CommentResu
       return { state, effect: { type: "cancel" } };
   }
 }
-
-// Renders the embedded comment box: styled top border, "Comment:" prompt
-// line, one raw line per source line, styled bottom border. Text lines are
-// never truncated (the caller owns clipping/scrolling); padding guards keep
-// degenerate widths from crashing.
-export function renderCommentBox(
-  state: CommentState,
-  width: number,
-  theme: (s: string) => string,
-): string[] {
-  const inner = Math.max(0, width - 2);
-  const border = "+" + "-".repeat(inner) + "+";
-  const label = "Comment:";
-  // Pad with visible width, not code-unit length: wide chars occupy 2 display
-  // columns per code unit, so code-unit padding would overpad and push the
-  // right border out of alignment.
-  const pad = (visibleLength: number) => " ".repeat(Math.max(0, inner - 1 - visibleLength));
-  const prompt = "| " + theme(label) + pad(visibleWidth(label)) + "|";
-  const rows = state.text.split("\n").map((line) => "| " + line + pad(visibleWidth(line)) + "|");
-  return [theme(border), prompt, ...rows, theme(border)];
-}

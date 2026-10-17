@@ -89,7 +89,7 @@ Pill tokens are a deterministic function of path + range, so editing a comment n
 
 ### Structure
 
-- Rendering splits into pure helpers in a new `src/card-chrome.ts`: `framePanel(rows, width, title, footer, colors)` and `frameCommentBox(lines, width, colors)` plus a placement function `commentBoxPlacement(selRowTop, selRowBottom, selColStart, boxHeight, boxWidth, innerWidth, viewportRows)`, and `draftAtCursor(cursor, pending)` returning the most recent draft covering the cursor line (shared by preview, `c`, and `x`). All take color functions as parameters so they are unit-testable without a live theme.
+- Rendering splits into pure helpers in `src/card-chrome.ts`: `framePanel(rows, width, { title, footer, colors })`, `frameCommentBox(lines, width, colors, title)`, `commentBoxPlacement(selTop, selBottom, selCol, boxH, boxW, innerW, viewH)`, and a generic `draftAtCursor(cursorLine, pending)` returning the most recent draft covering the cursor line (shared by preview, `c`, and `x`). `FOOTER_HINTS` maps each card mode to a separately exported badge and hints string. All take color functions as parameters so they are unit-testable without a live theme.
 - `AnnotateCard` receives the pi `Theme` from the `ctx.ui.custom` factory (already available there) and maps it to the color functions the helpers need.
 
 ## Acceptance

@@ -12,7 +12,7 @@ import type { Theme } from "@earendil-works/pi-coding-agent";
 import type { Component, Focusable, TUI } from "@earendil-works/pi-tui";
 import { matchesKey, sliceByColumn, truncateToWidth, visibleWidth } from "@earendil-works/pi-tui";
 
-import { FOOTER_HINTS, commentBoxPlacement, frameCommentBox, framePanel } from "./card-chrome.ts";
+import { FOOTER_HINTS, commentBoxPlacement, draftAtCursor, frameCommentBox, framePanel } from "./card-chrome.ts";
 import type { CardMode, ChromeColors } from "./card-chrome.ts";
 import { displayPath } from "./message.ts";
 import { normalize } from "./selection.ts";
@@ -33,6 +33,10 @@ const MAX_VIEWPORT_ROWS = 30;
 
 // The comment box title (read-only previews in Task 4 reuse the same title).
 const COMMENT_BOX_TITLE = "Comment";
+
+// Hover preview cap: 6 box rows including the 2 borders, i.e. at most 4
+// comment lines (spec goal 7). The editor box instead caps at the viewport.
+const PREVIEW_MAX_INNER_ROWS = 4;
 
 // Smallest multiple of tabSize strictly greater than width (tab behavior).
 function nextTabStop(width: number, tabSize: number): number {
@@ -203,6 +207,7 @@ export class AnnotateCard implements Component, Focusable {
       pending: null,
       visualMode: "char",
       editingDraftId: null,
+      previewOn: true,
     };
   }
 
@@ -222,6 +227,7 @@ export class AnnotateCard implements Component, Focusable {
       rows.push(truncateToWidth(this.gutter(i) + this.renderLine(i, selection, cursorOn), inner, "...", true));
     }
     if (this.state.mode === "comment") this.overlayCommentBox(rows, first, inner);
+    else if (this.state.mode === "normal" && this.state.previewOn) this.overlayPreview(rows, first, inner);
 
     const count = this.pending().length;
     const title = "Annotate: " + displayPath(this.file.path, this.cwd) + (count > 0 ? ` (${count})` : "");
@@ -269,33 +275,69 @@ export class AnnotateCard implements Component, Focusable {
     return Math.max(MIN_VIEWPORT_ROWS, Math.min(available, MAX_VIEWPORT_ROWS));
   }
 
-  // Renders the floating comment box over the content rows at
-  // commentBoxPlacement: occluded rows are replaced in place, not pushed
-  // down. The placement clamps the box within the content rows, and
-  // framePanel puts the footer directly below `rows`, so the box never
-  // crosses the border or footer. Anchor: the active selection in annotate
-  // flow; the cursor line when editing a pending draft (no selection).
+  // Renders the floating comment box over the content rows: occluded rows
+  // are replaced in place, not pushed down. Anchor: the active selection in
+  // annotate flow; the cursor line when editing a pending draft (no
+  // selection). Painting and placement are shared with the normal-mode
+  // preview via paintCommentBox.
   private overlayCommentBox(rows: string[], first: number, inner: number): void {
-    const vh = rows.length;
     const sel = this.activeSelection();
-    const topLine = sel ? sel.startLine : this.state.cursor.line;
-    const bottomLine = sel ? sel.endLine : this.state.cursor.line;
-    const colLine = sel ? sel.startLine : this.state.cursor.line;
-    const selRawCol = sel ? sel.startCol : this.state.cursor.col;
+    const anchor = sel
+      ? { topLine: sel.startLine, bottomLine: sel.endLine, colLine: sel.startLine, rawCol: sel.startCol }
+      : {
+          topLine: this.state.cursor.line,
+          bottomLine: this.state.cursor.line,
+          colLine: this.state.cursor.line,
+          rawCol: this.state.cursor.col,
+        };
+    this.paintCommentBox(rows, first, inner, (this.state.comment?.text ?? "").split("\n"), anchor);
+  }
+
+  // Normal-mode hover preview: read-only Comment box for the draft under the
+  // cursor (most recent wins, the same targeting rule as c/x). Anchored to
+  // the cursor line and aligned to the draft's start display column; comment
+  // lines are capped at PREVIEW_MAX_INNER_ROWS (head kept). The render caller
+  // gates on previewOn, so preview-off renders nothing; comment mode never
+  // reaches here, so the edit flow replaces the preview.
+  private overlayPreview(rows: string[], first: number, inner: number): void {
+    const draft = draftAtCursor(this.state.cursor.line, this.pendingDrafts());
+    if (draft === undefined) return;
+    this.paintCommentBox(rows, first, inner, draft.comment.split("\n").slice(0, PREVIEW_MAX_INNER_ROWS), {
+      topLine: this.state.cursor.line,
+      bottomLine: this.state.cursor.line,
+      colLine: draft.range.startLine,
+      rawCol: draft.range.startCol,
+    });
+  }
+
+  // Paints a floating Comment box over the content rows at
+  // commentBoxPlacement: occluded rows are replaced in place, not pushed
+  // down. The anchor is expressed in file lines (clamped to the viewport
+  // here) plus a raw column resolved on colLine, so the editor (selection or
+  // cursor) and the preview (cursor line, draft start column) share one
+  // placement path.
+  private paintCommentBox(
+    rows: string[],
+    first: number,
+    inner: number,
+    textLines: string[],
+    anchor: { topLine: number; bottomLine: number; colLine: number; rawCol: number },
+  ): void {
+    const vh = rows.length;
 
     // Fit the box to its content (at least as wide as the title needs) and
-    // cap it at the viewport: when the comment grows past the viewport, the
-    // last lines stay visible (that is where typing lands).
-    const textLines = (this.state.comment?.text ?? "").split("\n");
+    // cap it at the viewport: the editor keeps the last lines (that is where
+    // typing lands); the preview passes pre-capped lines, so this only bites
+    // in degenerate viewports.
     const capped = textLines.slice(Math.max(0, textLines.length - Math.max(1, vh - 2)));
     const widest = Math.max(...capped.map((l) => visibleWidth(l)), 0);
     const boxW = Math.min(inner, Math.max(widest + 3, COMMENT_BOX_TITLE.length + 6));
     const box = frameCommentBox(capped, boxW, this.colors, COMMENT_BOX_TITLE);
 
     const anchorRow = (line: number) => Math.min(Math.max(line - first, 0), Math.max(0, vh - 1));
-    const selTop = anchorRow(topLine);
-    const selBottom = anchorRow(bottomLine);
-    const selCol = gutterWidth(this.file.lines.length) + rawColToDisplayCol(this.file.lines[colLine] ?? "", selRawCol);
+    const selTop = anchorRow(anchor.topLine);
+    const selBottom = anchorRow(anchor.bottomLine);
+    const selCol = gutterWidth(this.file.lines.length) + rawColToDisplayCol(this.file.lines[anchor.colLine] ?? "", anchor.rawCol);
     // commentBoxPlacement clamps the box inside the viewport [0, viewH - boxH]
     // and against the right border, so border and footer rows stay clear.
     const place = commentBoxPlacement(selTop, selBottom, selCol, box.length, boxW, inner, vh);
