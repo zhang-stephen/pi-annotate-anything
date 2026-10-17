@@ -7,13 +7,13 @@ Branch: feat/card-chrome off master. TDD: failing test first, then implementatio
 
 ## Task 1: src/card-chrome.ts - pure rendering helpers
 
-- [ ] **Step 1: failing tests** for `framePanel(rows, width, opts)` where opts = { title, footer, colors }; assert: rounded border rows, title embedded in the top border (`╭─ <title> ─...─╮`) with left-truncation of long titles, every row padded to full width and passed through colors.bg, footer as last inner row, wide-char titles/footers handled by display width.
-- [ ] **Step 2: failing tests** for `frameCommentBox(lines, width, colors, title)`: bordered box with embedded title, inner lines padded to width, colors.bg on every row, long lines truncated by display width.
-- [ ] **Step 3: failing tests** for `commentBoxPlacement(selTop, selBottom, selCol, boxH, boxW, innerW, viewH)`: below-selection default, flip above when boxH does not fit above the footer, left edge aligned to selCol clamped to [0, innerW - boxW], never overlaps border columns.
-- [ ] **Step 4: failing tests** for `draftAtCursor(cursorLine, pending)`: returns the last (most recent) draft whose range covers cursorLine, undefined otherwise; char-wise and line-wise ranges both covered.
-- [ ] **Step 5: failing tests** for FOOTER_HINTS: normal has no mode badge; visualChar -> `-- VISUAL --`; visualLine -> `-- VISUAL LINE --`; comment -> `-- COMMENT --`; normal hints mention c/x/p/q; keys match the spec tables exactly.
-- [ ] **Step 6: implement** src/card-chrome.ts to green. Colors injected as a { bg, border, dim, accent, warning } record of (text) => string functions; helpers never import theme modules.
-- [ ] **Step 7: verify** `node --test test/` green, `npx tsc --noEmit` clean.
+- [x] **Step 1: failing tests** for `framePanel(rows, width, opts)` where opts = { title, footer, colors }; assert: rounded border rows, title embedded in the top border (`╭─ <title> ─...─╮`) with left-truncation of long titles, every row padded to full width and passed through colors.bg, footer as last inner row, wide-char titles/footers handled by display width.
+- [x] **Step 2: failing tests** for `frameCommentBox(lines, width, colors, title)`: bordered box with embedded title, inner lines padded to width, colors.bg on every row, long lines truncated by display width.
+- [x] **Step 3: failing tests** for `commentBoxPlacement(selTop, selBottom, selCol, boxH, boxW, innerW, viewH)`: below-selection default, flip above when boxH does not fit above the footer, left edge aligned to selCol clamped to [0, innerW - boxW], never overlaps border columns.
+- [x] **Step 4: failing tests** for `draftAtCursor(cursorLine, pending)`: returns the last (most recent) draft whose range covers cursorLine, undefined otherwise; char-wise and line-wise ranges both covered.
+- [x] **Step 5: failing tests** for FOOTER_HINTS: normal has no mode badge; visualChar -> `-- VISUAL --`; visualLine -> `-- VISUAL LINE --`; comment -> `-- COMMENT --`; normal hints mention c/x/p/q; keys match the spec tables exactly.
+- [x] **Step 6: implement** src/card-chrome.ts to green. Colors injected as a { bg, border, dim, accent, warning } record of (text) => string functions; helpers never import theme modules.
+- [x] **Step 7: verify** `node --test test/` green, `npx tsc --noEmit` clean.
 
 ## Task 2: viewer.ts chrome integration
 

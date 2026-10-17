@@ -1,0 +1,142 @@
+// Pure rendering helpers for the annotate card chrome: framed panel and
+// floating comment box, box placement geometry, cursor-draft lookup, and
+// mode-keyed footer hints. All colors are injected as (text) => string
+// functions so these helpers are unit-testable without a live theme and
+// never import pi theme modules; AnnotateCard maps the active pi Theme to
+// the ChromeColors record.
+
+import { sliceByColumn, truncateToWidth, visibleWidth } from "@earendil-works/pi-tui";
+
+import type { Draft } from "./store.ts";
+
+// Color functions the chrome needs, mapped from the active pi theme by the
+// caller. bg fills full rows, border paints border glyphs; dim, accent, and
+// warning style footer hints, mode badges, and pending markers on the
+// caller's side, so one record covers every chrome color use.
+export interface ChromeColors {
+  bg: (text: string) => string;
+  border: (text: string) => string;
+  dim: (text: string) => string;
+  accent: (text: string) => string;
+  warning: (text: string) => string;
+}
+
+export interface PanelOptions {
+  title?: string;
+  footer?: string;
+  colors: ChromeColors;
+}
+
+// Top border with the title embedded: `╭─ <title> ─...─╮`. Overlong titles
+// are truncated from the left (tail kept) so a trailing file name stays
+// visible. All budgets are display columns, so wide chars count double and
+// the row always comes out exactly `width` columns wide.
+function topBorder(width: number, title: string | undefined): string {
+  const inner = width - 2;
+  if (!title) return "╭" + "─".repeat(inner) + "╮";
+  const budget = width - 6; // room for `╭─ `, the trailing space, and one dash
+  if (budget <= 0) return "╭" + "─".repeat(inner) + "╮";
+  const total = visibleWidth(title);
+  const kept = total > budget ? sliceByColumn(title, total - budget, budget) : title;
+  const dashes = "─".repeat(width - 5 - visibleWidth(kept));
+  return "╭─ " + kept + " " + dashes + "╮";
+}
+
+// One inner row: border gutters around content padded with spaces to the
+// full display width (ANSI-aware via visibleWidth), the whole row
+// background-filled so nothing behind the panel bleeds through.
+function innerRow(content: string, width: number, colors: ChromeColors): string {
+  const pad = " ".repeat(Math.max(0, width - 2 - visibleWidth(content)));
+  return colors.bg(colors.border("│") + content + pad + colors.border("│"));
+}
+
+function bottomBorder(width: number): string {
+  return "╰" + "─".repeat(width - 2) + "╯";
+}
+
+// Frames the panel rows: rounded border with an optional embedded title in
+// the top border, each row padded to the full display width and passed
+// through colors.bg, and the footer (when given) as the last inner row.
+// Rows are expected to fit the inner width; overlong rows get zero padding
+// rather than being silently rewritten.
+export function framePanel(rows: string[], width: number, opts: PanelOptions): string[] {
+  const out: string[] = [opts.colors.bg(opts.colors.border(topBorder(width, opts.title)))];
+  for (const row of rows) out.push(innerRow(row, width, opts.colors));
+  if (opts.footer) out.push(innerRow(opts.footer, width, opts.colors));
+  out.push(opts.colors.bg(opts.colors.border(bottomBorder(width))));
+  return out;
+}
+
+// Frames comment-box lines as a bordered sub-panel with an embedded title.
+// Inner lines are truncated to the inner display width (ANSI-aware, with
+// the pi-tui default ellipsis), padded to full width, and every row is
+// background-filled.
+export function frameCommentBox(lines: string[], width: number, colors: ChromeColors, title: string): string[] {
+  const inner = width - 2;
+  const out: string[] = [colors.bg(colors.border(topBorder(width, title)))];
+  for (const line of lines) out.push(innerRow(truncateToWidth(line, inner), width, colors));
+  out.push(colors.bg(colors.border(bottomBorder(width))));
+  return out;
+}
+
+export interface BoxPlacement {
+  top: number;
+  left: number;
+}
+
+// Places the floating comment box inside the panel viewport: below the
+// selection's last row by default; flipped above the selection's first row
+// when the box would run past the viewport (the footer sits directly below
+// viewH content rows). The left edge aligns with the selection's start
+// display column, clamped to [0, innerW - boxW] so the box never crosses
+// the panel's border columns. Degenerate sizes are clamped rather than
+// trusted: top is clamped into [0, max(0, viewH - boxH)] so an oversized
+// box or a forced flip at row 0 cannot go negative, and left clamps at 0
+// when boxW exceeds innerW (callers should pre-clamp boxW to innerW).
+export function commentBoxPlacement(
+  selTop: number,
+  selBottom: number,
+  selCol: number,
+  boxH: number,
+  boxW: number,
+  innerW: number,
+  viewH: number,
+): BoxPlacement {
+  const fitsBelow = selBottom + 1 + boxH <= viewH;
+  const rawTop = fitsBelow ? selBottom + 1 : selTop - boxH;
+  const top = Math.max(0, Math.min(rawTop, Math.max(0, viewH - boxH)));
+  const left = Math.max(0, Math.min(selCol, Math.max(0, innerW - boxW)));
+  return { top, left };
+}
+
+// The most recent pending draft whose line range covers cursorLine (both
+// ends inclusive, 0-based lines; column bounds ignored). Pending order is
+// insertion order, so keeping the last hit while scanning forward returns
+// the most recently added draft - the same draft `c` and `x` target.
+export function draftAtCursor(cursorLine: number, pending: readonly Draft[]): Draft | undefined {
+  let hit: Draft | undefined;
+  for (const d of pending) {
+    if (cursorLine >= d.range.startLine && cursorLine <= d.range.endLine) hit = d;
+  }
+  return hit;
+}
+
+export type CardMode = "normal" | "visualChar" | "visualLine" | "comment";
+
+export interface FooterHints {
+  // null in normal mode: vim's convention that normal mode shows no badge.
+  badge: string | null;
+  hints: string;
+}
+
+// Footer content by mode. Badge and hints are separate fields so callers
+// can color them differently (badge in accent, hints in dim).
+export const FOOTER_HINTS: Record<CardMode, FooterHints> = {
+  normal: {
+    badge: null,
+    hints: "hjkl move  v/V select  c/x comment/delete  p preview  q/Esc close",
+  },
+  visualChar: { badge: "-- VISUAL --", hints: "hjkl extend  o swap  c comment  Esc cancel" },
+  visualLine: { badge: "-- VISUAL LINE --", hints: "hjkl extend  o swap  c comment  Esc cancel" },
+  comment: { badge: "-- COMMENT --", hints: "Enter submit  ctrl+j newline  Esc cancel" },
+};
