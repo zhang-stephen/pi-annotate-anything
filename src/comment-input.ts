@@ -1,8 +1,11 @@
 // Pure comment-input state machine and renderer for the annotation card.
-// No pi imports: the box is plain ANSI-styled strings and the caller supplies
-// the styling function (theme), so this module stays testable without a TUI.
-// The viewer state machine (viewer-state.ts) imports reduceComment and the
-// CommentState/CommentKey types from here.
+// The box is plain ANSI-styled strings and the caller supplies the styling
+// function (theme); the only pi import is pi-tui's pure visibleWidth, so
+// this module stays testable without a TUI. The viewer state machine
+// (viewer-state.ts) imports reduceComment and the CommentState/CommentKey
+// types from here.
+
+import { visibleWidth } from "@earendil-works/pi-tui";
 
 export interface CommentState {
   text: string;
@@ -52,8 +55,11 @@ export function renderCommentBox(
   const inner = Math.max(0, width - 2);
   const border = "+" + "-".repeat(inner) + "+";
   const label = "Comment:";
+  // Pad with visible width, not code-unit length: wide chars occupy 2 display
+  // columns per code unit, so code-unit padding would overpad and push the
+  // right border out of alignment.
   const pad = (visibleLength: number) => " ".repeat(Math.max(0, inner - 1 - visibleLength));
-  const prompt = "| " + theme(label) + pad(label.length) + "|";
-  const rows = state.text.split("\n").map((line) => "| " + line + pad(line.length) + "|");
+  const prompt = "| " + theme(label) + pad(visibleWidth(label)) + "|";
+  const rows = state.text.split("\n").map((line) => "| " + line + pad(visibleWidth(line)) + "|");
   return [theme(border), prompt, ...rows, theme(border)];
 }

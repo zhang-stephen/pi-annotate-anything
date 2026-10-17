@@ -53,15 +53,22 @@ function moved(state: ViewerState, to: Position, lines: string[], vh: number): V
 }
 
 // Comment mode routes every key through reduceComment's key set:
-// \r submits, \n and \x1b\r insert newlines, \x7f backspaces, \x1b cancels,
-// single printable chars append. Anything else is ignored.
+// \r submits, \n and \x1b\r insert newlines, \x7f backspaces, \x1b cancels.
+// Any other chunk free of control characters is appended whole, so
+// multi-char input (pastes, astral chars) is not dropped; chunks containing
+// Esc or C0 controls (except \t) are ignored so terminal escape sequences
+// never leak into the text.
 function toCommentKey(key: string): CommentKey | null {
   if (key === "\r") return { kind: "submit" };
   if (key === "\n" || key === "\x1b\r") return { kind: "newline" };
   if (key === "\x7f") return { kind: "backspace" };
   if (key === "\x1b") return { kind: "cancel" };
-  if (key.length === 1 && key >= " ") return { kind: "char", ch: key };
-  return null;
+  if (key.length === 0) return null;
+  for (const ch of key) {
+    const code = ch.codePointAt(0) as number;
+    if (ch === "\x1b" || (code < 0x20 && ch !== "\t")) return null;
+  }
+  return { kind: "char", ch: key };
 }
 
 function commentStep(state: ViewerState, key: string, lines: string[], vh: number): ViewerResult {

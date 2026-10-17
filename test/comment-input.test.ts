@@ -1,5 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
+import { visibleWidth as tuiVisibleWidth } from "@earendil-works/pi-tui";
 
 import { reduceComment, renderCommentBox } from "../src/comment-input.ts";
 import type { CommentState } from "../src/comment-input.ts";
@@ -112,4 +113,12 @@ test("renderCommentBox: text wider than the box is never truncated", () => {
   const long = "x".repeat(30);
   const lines = renderCommentBox({ text: long }, 10, (s) => s);
   assert.ok(lines.join("\n").includes(long));
+});
+
+test("renderCommentBox: wide chars do not break the right border", () => {
+  // Two wide chars occupy 4 display columns (4 code units), so padding must
+  // shrink by visible width or the border would land past column 14.
+  const lines = renderCommentBox({ text: "\u4e00\u4e00" }, 14, (s) => s);
+  assert.equal(lines[2], "| \u4e00\u4e00" + " ".repeat(7) + "|");
+  assert.equal(tuiVisibleWidth(lines[2]), 14);
 });

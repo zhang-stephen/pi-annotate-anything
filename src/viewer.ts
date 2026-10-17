@@ -141,11 +141,17 @@ export class AnnotateCard implements Component, Focusable {
     this.pending = pending;
     this.onAnnotate = onAnnotate;
     this.done = done;
-    // Tabs are expanded BEFORE highlighting so display columns agree between
-    // the highlighted content and the raw/selection rendering below; the
-    // cache is computed once and sliced per frame (theme is stable for the
-    // card's lifetime, so invalidate() is a no-op).
-    this.highlighted = highlightCode(tabExpanded(file.lines.join("\n")), getLanguageFromPath(file.path));
+    // Tabs are expanded PER LINE before highlighting so display columns agree
+    // between the highlighted content and the raw/selection rendering below
+    // (renderLine styles against per-line tabExpanded too). Expanding the
+    // whole file as one string would carry each line's width across its
+    // "\n" and shift the tab stops of every later line. The cache is
+    // computed once and sliced per frame (theme is stable for the card's
+    // lifetime, so invalidate() is a no-op).
+    this.highlighted = highlightCode(
+      file.lines.map((l) => tabExpanded(l)).join("\n"),
+      getLanguageFromPath(file.path),
+    );
     this.state = {
       mode: "normal",
       cursor: { line: 0, col: 0 },
@@ -193,9 +199,16 @@ export class AnnotateCard implements Component, Focusable {
 
   invalidate(): void {}
 
-  // Terminal rows minus headroom, clamped to the file-area budget.
+  // Terminal rows minus headroom, clamped to the file-area budget. When the
+  // comment box is open, its rendered height is subtracted from the file
+  // viewport so file lines plus box always fit the overlay together. The
+  // box height is width-independent (one line per text line plus borders
+  // and the prompt line), so a probe width of 0 is fine here.
   private viewportHeight(): number {
-    const available = this.tui.terminal.rows - RESERVED_ROWS;
+    let available = this.tui.terminal.rows - RESERVED_ROWS;
+    if (this.state.mode === "comment") {
+      available -= renderCommentBox(this.state.comment ?? { text: "" }, 0, (s) => s).length;
+    }
     return Math.max(MIN_VIEWPORT_ROWS, Math.min(available, MAX_VIEWPORT_ROWS));
   }
 

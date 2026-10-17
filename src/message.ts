@@ -37,8 +37,11 @@ function isSingleLine(range: Range): boolean {
   return range.startLine === range.endLine;
 }
 
-// "lines 10-20" | "lines 10" | "lines 10:5-12:20" | "lines 10:5-10:12".
+// "lines 10-20" | "lines 10" | "lines 10:5-12:19" | "lines 10:5-10:11".
 // Char-wise never collapses: column precision is the point of the mode.
+// Both char columns print 1-based inclusive: endCol already equals the
+// 1-based column of the last selected char (it is the 0-based exclusive
+// slice bound, one past the cursor char), so only the start column gets +1.
 export function rangeLabel(range: Range, mode: VisualMode): string {
   const s = range.startLine + 1;
   const e = range.endLine + 1;
@@ -46,7 +49,7 @@ export function rangeLabel(range: Range, mode: VisualMode): string {
     return isSingleLine(range) ? `lines ${s}` : `lines ${s}-${e}`;
   }
   const sc = range.startCol + 1;
-  const ec = range.endCol + 1;
+  const ec = range.endCol;
   return `lines ${s}:${sc}-${e}:${ec}`;
 }
 
@@ -61,13 +64,15 @@ export function displayPath(absPath: string, cwd: string): string {
 }
 
 // Compact form without the "lines" word: "[src/a.ts:10-20]",
-// "[src/a.ts:10]", "[src/a.ts:10:5-12:20]", "[src/a.ts:10:5-10:12]".
+// "[src/a.ts:10]", "[src/a.ts:10:5-12:19]", "[src/a.ts:10:5-10:11]".
 export function tokenLabel(absPath: string, cwd: string, range: Range, mode: VisualMode): string {
   const p = displayPath(absPath, cwd);
   const s = range.startLine + 1;
   const e = range.endLine + 1;
   if (mode === "char") {
-    return `[${p}:${s}:${range.startCol + 1}-${e}:${range.endCol + 1}]`;
+    // endCol prints as-is: 0-based exclusive slice bound == 1-based inclusive
+    // column of the last selected char.
+    return `[${p}:${s}:${range.startCol + 1}-${e}:${range.endCol}]`;
   }
   return isSingleLine(range) ? `[${p}:${s}]` : `[${p}:${s}-${e}]`;
 }

@@ -19,9 +19,14 @@ export function expandTokens(text: string, store: AnnotationStore, cwd: string):
 
   const byToken = new Map(drafts.map((d) => [d.token, d]));
   // Tokens contain regex metacharacters ("[", "."), so escape before
-  // building the alternation pattern.
+  // building the alternation pattern. Longest-first ordering (mirrors
+  // recolorTokens in editor.ts) keeps a token that is a prefix of a longer
+  // token from shadowing it.
   const pattern = new RegExp(
-    drafts.map((d) => d.token.replace(/[.*+?^${}()[\]\\|]/g, "\\$&")).join("|"),
+    [...byToken.keys()]
+      .sort((a, b) => b.length - a.length)
+      .map((t) => t.replace(/[.*+?^${}()[\]\\|]/g, "\\$&"))
+      .join("|"),
     "g",
   );
   const matches = [...text.matchAll(pattern)];

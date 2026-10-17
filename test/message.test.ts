@@ -27,11 +27,11 @@ test("rangeLabel: line-wise single line collapses", () => {
 });
 
 test("rangeLabel: char-wise multi-line shows 1-based lines and columns", () => {
-  assert.equal(rangeLabel(range(9, 4, 11, 19), "char"), "lines 10:5-12:20");
+  assert.equal(rangeLabel(range(9, 4, 11, 19), "char"), "lines 10:5-12:19");
 });
 
 test("rangeLabel: char-wise single line keeps columns", () => {
-  assert.equal(rangeLabel(range(9, 4, 9, 11), "char"), "lines 10:5-10:12");
+  assert.equal(rangeLabel(range(9, 4, 9, 11), "char"), "lines 10:5-10:11");
 });
 
 test("displayPath: file inside cwd is relative without leading ./", () => {
@@ -67,11 +67,11 @@ test("tokenLabel: line-wise single line has one number", () => {
 });
 
 test("tokenLabel: char-wise multi-line uses line:col pairs", () => {
-  assert.equal(tokenLabel("/repo/src/a.ts", "/repo", range(9, 4, 11, 19), "char"), "[src/a.ts:10:5-12:20]");
+  assert.equal(tokenLabel("/repo/src/a.ts", "/repo", range(9, 4, 11, 19), "char"), "[src/a.ts:10:5-12:19]");
 });
 
 test("tokenLabel: char-wise single line keeps columns", () => {
-  assert.equal(tokenLabel("/repo/src/a.ts", "/repo", range(9, 4, 9, 11), "char"), "[src/a.ts:10:5-10:12]");
+  assert.equal(tokenLabel("/repo/src/a.ts", "/repo", range(9, 4, 9, 11), "char"), "[src/a.ts:10:5-10:11]");
 });
 
 test("tokenLabel: file outside cwd uses the absolute path", () => {
@@ -90,7 +90,7 @@ test("formatPayload: char-wise payload with comment matches the layout", () => {
   assert.equal(
     payload,
     [
-      "In `src/a.ts` (lines 10:5-12:20):",
+      "In `src/a.ts` (lines 10:5-12:19):",
       "```ts",
       "alpha",
       "beta",

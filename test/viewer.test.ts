@@ -44,6 +44,24 @@ test("tabExpanded output has the visible width rawColToDisplayCol predicts", () 
   assert.equal(visibleWidth(tabExpanded(line)), rawColToDisplayCol(line, line.length));
 });
 
+// Highlight cache invariant ---------------------------------------------------
+
+test("highlight cache: per-line tab expansion keeps later lines' tab stops independent", () => {
+  // AnnotateCard caches highlightCode over the lines expanded per line and
+  // joined with "\n" (constructor), while renderLine styles spans against
+  // rawColToDisplayCol of each raw line expanded on its own. Expanding the
+  // whole file as one string would carry line 1's width across the newline
+  // and shift line 2's tab stops, breaking that agreement; the invariant is
+  // that the cached text splits back into exactly the per-line expansions.
+  const lines = ["abcdef", "\tx"];
+  const cached = lines.map((l) => tabExpanded(l)).join("\n");
+  const perLine = cached.split("\n");
+  for (let i = 0; i < lines.length; i++) {
+    assert.equal(perLine[i], tabExpanded(lines[i]));
+  }
+  assert.equal(perLine[1], "    x"); // tab stop 4, not 4 + "abcdef".length
+});
+
 // rawColToDisplayCol ----------------------------------------------------------
 
 test("rawColToDisplayCol is identity on tab-free lines", () => {

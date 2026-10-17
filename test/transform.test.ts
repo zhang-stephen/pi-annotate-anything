@@ -149,3 +149,31 @@ test("expandTokens: expansion is blank-line separated and trims preceding whites
 
   assert.deepEqual(result, { changed: true, text: `before\n\n${payload}\n\nafter` });
 });
+
+test("expandTokens: longest token wins when one token is a prefix of another", () => {
+  const store = new AnnotationStore();
+  // Prefix pair crafted via explicit base tokens (real tokenLabel output is
+  // never a strict prefix of another token): the short token added first
+  // must not shadow the longer one in the alternation.
+  const short = store.add(
+    { absPath: "/repo/src/a.ts", range: range(9, 19), mode: "line", snapshot: "short\n", comment: "" },
+    "[src/a.ts:10-20]",
+  );
+  const long = store.add(
+    { absPath: "/repo/src/b.ts", range: range(0, 4), mode: "line", snapshot: "long\n", comment: "" },
+    "[src/a.ts:10-20] long]",
+  );
+  const pLong = formatPayload({
+    absPath: long.absPath,
+    cwd: CWD,
+    range: long.range,
+    mode: long.mode,
+    snapshot: long.snapshot,
+    comment: long.comment,
+  });
+
+  const result = expandTokens(`see ${long.token} now`, store, CWD);
+
+  assert.equal(result.changed, true);
+  assert.equal(result.text, `see\n\n${pLong}\n\n now`);
+});

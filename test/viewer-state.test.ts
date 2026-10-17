@@ -344,6 +344,25 @@ test("reduceViewer: q types 'q' in comment mode", () => {
   assert.equal(res.effect, undefined);
 });
 
+test("reduceViewer: multi-char paste chunk is appended whole in comment mode", () => {
+  const res = view(commentState(""), "hello world");
+  assert.deepEqual(res.state.comment, { text: "hello world" });
+});
+
+test("reduceViewer: astral-plane chars append in comment mode", () => {
+  const res = view(commentState(""), "\u{10348}");
+  assert.deepEqual(res.state.comment, { text: "\u{10348}" });
+});
+
+test("reduceViewer: chunks with Esc or C0 controls are ignored in comment mode", () => {
+  const start = commentState("a");
+  for (const key of ["\x1b[200~", "pasted \x1b[B", "\x01"]) {
+    const res = view(start, key);
+    assert.deepEqual(res.state.comment, { text: "a" });
+    assert.equal(res.effect, undefined);
+  }
+});
+
 test("reduceViewer: unmapped escape sequences are ignored in comment mode", () => {
   const start = commentState("a");
   const res = view(start, "\x1b[A");
@@ -375,7 +394,7 @@ test("reduceViewer: char-wise submit carries the normalized range; o-swap invari
   }), "\r");
   assert.deepEqual(forward.effect, {
     type: "annotate",
-    range: { startLine: 2, startCol: 1, endLine: 3, endCol: 2 },
+    range: { startLine: 2, startCol: 1, endLine: 3, endCol: 3 }, // char-wise: cursor col 2 + 1, vim-inclusive
     mode: "char",
     comment: "x",
   });
