@@ -1,5 +1,18 @@
 # Changelog
 
+## [1.1.0](https://github.com/zhang-stephen/pi-annotate-anything/compare/pi-annotate-anything-v1.0.0...pi-annotate-anything-v1.1.0) (2026-10-17)
+
+
+### Features
+
+* **card:** Tab-cycling stack targeting state machine ([187dff4](https://github.com/zhang-stephen/pi-annotate-anything/commit/187dff4ec7467f9c5a0750d1f53e0d148ba48a47))
+* **card:** target emphasis, start-line gutter counts, stacked preview indicator ([2c155f1](https://github.com/zhang-stephen/pi-annotate-anything/commit/2c155f1e44a066e0f91b18f6fe2dda8510a6c5e3))
+
+
+### Bug Fixes
+
+* **card:** emphasis precedence - target must not nest non-target dim ([f3b6304](https://github.com/zhang-stephen/pi-annotate-anything/commit/f3b63049cb0d9f27d3fd357077a0c3ccd19d02bc))
+
 ## 1.0.0 (2026-10-17)
 
 
