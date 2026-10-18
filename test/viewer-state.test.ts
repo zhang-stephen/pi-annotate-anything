@@ -830,3 +830,19 @@ test("reduceViewer: scrollLeft defaults to 0 for states without the field", () =
   assert.deepEqual(res.state.cursor, { line: 0, col: 6 });
   assert.equal(res.state.scrollLeft ?? 0, 0);
 });
+
+test("reduceViewer: o swap runs cursor follow, pulling the window back to the anchor", () => {
+  // Anchor at col 2, cursor pushed right so scrollLeft followed to 81; o
+  // swaps the cursor back onto the anchor and the window must follow it.
+  const state = viewer({ mode: "visual-char", anchor: { line: 0, col: 2 }, cursor: { line: 0, col: 90 }, scrollLeft: 81 });
+  const res = reduceViewer(state, "o", [LONG_LINE], vpv(10, 100));
+  assert.equal(res.state.cursor.col, 2);
+  assert.equal(res.state.anchor?.col, 90);
+  assert.equal(res.state.scrollLeft, 2); // displayCol 2 < 81 -> pinned to it
+});
+
+test("reduceViewer: non-motion keys still re-clamp a stale scrollLeft", () => {
+  // "p" never reaches keepVisible; the per-reduce clamp must handle it.
+  const res = reduceViewer(viewer({ scrollLeft: 500 }), "p", [LONG_LINE], vpv(10, 100));
+  assert.equal(res.state.scrollLeft, 91); // max(0, 100 - 10 + 1)
+});

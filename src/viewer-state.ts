@@ -272,7 +272,10 @@ function handleMode(state: ViewerState, key: string, lines: string[], viewport: 
       return { state: { ...state, mode: "visual-line", visualMode: "line" } };
     case "o":
       if (!visual) return { state };
-      return { state: { ...state, anchor: state.cursor, cursor: state.anchor ?? state.cursor } };
+      // The swap moves the cursor too, so it must go through keepVisible:
+      // without it, o back to a scrolled-away anchor leaves the cursor (and
+      // the row, vertically) off-screen.
+      return { state: keepVisible({ ...state, anchor: state.cursor, cursor: state.anchor ?? state.cursor }, lines, viewport) };
     case "c":
       if (state.mode === "normal") {
         // Editing flow: on a position a pending draft covers, reopen the
@@ -335,6 +338,14 @@ export function reduceViewer(
   // drafts may omit it.
   pending: PendingDraft[] = [],
 ): ViewerResult {
+  // Re-clamp scrollLeft on EVERY reduce (spec): non-motion keys never reach
+  // keepVisible, so without this a stale scrollLeft (e.g. after a resize with
+  // no keypress, clamped only at render time) would linger in the state.
+  const cw = Math.max(1, viewport.contentWidth);
+  const bound = Math.max(0, viewport.maxLineWidth - cw + 1);
+  const sl = Math.min(Math.max(state.scrollLeft ?? 0, 0), bound);
+  if (sl !== (state.scrollLeft ?? 0)) state = { ...state, scrollLeft: sl };
+
   if (state.mode === "comment") return resetCycleOnMove(commentStep(state, key, lines, viewport), state);
 
   // Two-stroke sequences: "g" arms "gg". A second "g" completes the jump to
