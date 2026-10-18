@@ -1,5 +1,29 @@
 # Changelog
 
+## [1.3.0](https://github.com/zhang-stephen/pi-annotate-anything/compare/pi-annotate-anything-v1.2.0...pi-annotate-anything-v1.3.0) (2026-10-18)
+
+
+### Features
+
+* **annotate:** add filesystem path completion helper ([9f8a301](https://github.com/zhang-stephen/pi-annotate-anything/commit/9f8a301c3c69703ec2c284d35d5311c481fd3ef1))
+* **annotate:** wire path completion into /annotate command ([1efc8e1](https://github.com/zhang-stephen/pi-annotate-anything/commit/1efc8e10d0815c05926635dbdb8378e0804b7eaf))
+* **viewer:** add pure search primitives module ([69b8ca8](https://github.com/zhang-stephen/pi-annotate-anything/commit/69b8ca8730f722cc7180dfe953ff04618cbe9926))
+* **viewer:** add search mode, count prefix, and transient messages ([f2dfaf4](https://github.com/zhang-stephen/pi-annotate-anything/commit/f2dfaf4cc95fea4571e2e2c96033a5b182f537ff))
+* **viewer:** highlight search matches and wire the search UI ([7b488b8](https://github.com/zhang-stephen/pi-annotate-anything/commit/7b488b8dffd745d0ae05d0c2eba7d86e80732fb3))
+* **viewer:** pad framed rows inside the vertical borders ([6bfea39](https://github.com/zhang-stephen/pi-annotate-anything/commit/6bfea395408117060f1040c8e5983881595a3afa))
+* **viewer:** render search segment, cmdline input, and messages ([0469273](https://github.com/zhang-stephen/pi-annotate-anything/commit/046927316d62f4355a2a5faaa4f0484fb32a11ef))
+* **viewer:** report a zero-match submit as a transient message ([9afd540](https://github.com/zhang-stephen/pi-annotate-anything/commit/9afd540196dd8f79209e238acf6b2d6979525afa))
+* **viewer:** vim-style / search with smartcase, incremental jump, and persistent highlight ([3202bbe](https://github.com/zhang-stephen/pi-annotate-anything/commit/3202bbe2d127923e03495c149f339fd375eb044c))
+
+
+### Bug Fixes
+
+* **annotate:** complete paths against session cwd, not process cwd ([e0e0067](https://github.com/zhang-stephen/pi-annotate-anything/commit/e0e00670489ff38206710a7649c4eee07b322e3d))
+* **viewer:** show the compile error on the cmdline input row ([e0ee5fe](https://github.com/zhang-stephen/pi-annotate-anything/commit/e0ee5fe0085dad041712fa88c454390fa1696394))
+* **viewer:** style search matches with the theme searchMatch tokens ([e80ad67](https://github.com/zhang-stephen/pi-annotate-anything/commit/e80ad67126fad3e19af18e8429bc7ba00b03ccc5))
+* **viewer:** two-level search match styling per the theme convention ([b144e28](https://github.com/zhang-stephen/pi-annotate-anything/commit/b144e280bd2dc1ac29fd1f1bea38b3fbad2d65c7))
+* **viewer:** viewport-only incremental match mapping; doc amendments ([765eb02](https://github.com/zhang-stephen/pi-annotate-anything/commit/765eb0286cf8e24adddf60485e573c3e068e6cd1))
+
 ## [1.2.0](https://github.com/zhang-stephen/pi-annotate-anything/compare/pi-annotate-anything-v1.1.1...pi-annotate-anything-v1.2.0) (2026-10-18)
 
 
