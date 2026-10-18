@@ -35,6 +35,9 @@ export const FOOTER_HINTS: Record<CardMode, FooterHints> = {
 export function cardModeOf(mode: ViewerMode): CardMode {
   if (mode === "visual-char") return "visualChar";
   if (mode === "visual-line") return "visualLine";
+  // Bridge until Task 4: search mode renders with the normal badge because
+  // CardMode has no "search" yet; Task 4 adds the real mapping and badge.
+  if (mode === "search") return "normal";
   return mode;
 }
 
