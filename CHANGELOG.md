@@ -1,5 +1,24 @@
 # Changelog
 
+## [1.2.0](https://github.com/zhang-stephen/pi-annotate-anything/compare/pi-annotate-anything-v1.1.1...pi-annotate-anything-v1.2.0) (2026-10-18)
+
+
+### Features
+
+* **status-line:** add statusline/cmdline renderers and multi-row panel footers ([366d5c7](https://github.com/zhang-stephen/pi-annotate-anything/commit/366d5c7cb658ed66e26324284a73bd72e93d4256))
+* **viewer-state:** horizontal cursor-follow scrolling with scrollLeft ([139a10a](https://github.com/zhang-stephen/pi-annotate-anything/commit/139a10a5477fbb48e25db55bf4d3446ce7cfb7b7))
+* **viewer:** render horizontally scrolled content window with overflow indicators ([8d5aae4](https://github.com/zhang-stephen/pi-annotate-anything/commit/8d5aae4d124b784129db733d3f068cec6f4eedf5))
+* **viewer:** wire statusline/cmdline rows into annotate card ([fed1a7f](https://github.com/zhang-stephen/pi-annotate-anything/commit/fed1a7f7a88d88f7c36022b35cc7acbfa3f7a93d))
+
+
+### Bug Fixes
+
+* **status-line:** drop the forced gap when the row cannot fit it ([8c4cc0a](https://github.com/zhang-stephen/pi-annotate-anything/commit/8c4cc0a568d85def0796f380534b0e3f4f8aabcb))
+* **viewer-state:** follow cursor on anchor swap and clamp scrollLeft on every reduce ([b0bf299](https://github.com/zhang-stephen/pi-annotate-anything/commit/b0bf299b1f8e37be1415bb467fca7bb5c6492f99))
+* **viewer:** keep cursor visible over scroll indicators; robustness fixes ([0c31f96](https://github.com/zhang-stephen/pi-annotate-anything/commit/0c31f96cc93bf9bdb0592ad57cffaeb1a8c62789))
+* **viewer:** remove overflow indicators and fix wide-char splice alignment ([796d646](https://github.com/zhang-stephen/pi-annotate-anything/commit/796d646259125529ef6e4506dc631accd39fc8ee))
+* **viewer:** treat kitty key-repeat sequences as presses so held arrow keys scroll ([610cc3b](https://github.com/zhang-stephen/pi-annotate-anything/commit/610cc3b887ad83ae7009c9020d017c5d5e0d975b))
+
 ## [1.1.1](https://github.com/zhang-stephen/pi-annotate-anything/compare/pi-annotate-anything-v1.1.0...pi-annotate-anything-v1.1.1) (2026-10-17)
 
 
