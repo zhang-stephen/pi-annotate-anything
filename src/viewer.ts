@@ -3,14 +3,15 @@
 // (viewer-state.ts): handleInput feeds reduceViewer and dispatches its
 // effects (annotate/update/delete/close). Rendering frames the file as a
 // bordered panel via the card-chrome helpers (framePanel, frameCommentBox,
-// commentBoxPlacement, FOOTER_HINTS); all chrome colors come from the pi
+// commentBoxPlacement) with the two-row bottom area from status-line.ts
+// (renderStatusLine, renderCommandLine); all chrome colors come from the pi
 // theme passed by the ctx.ui.custom factory, and syntax colors come from
 // pi's highlightCode with the same theme.
 
 import { getLanguageFromPath, highlightCode } from "@earendil-works/pi-coding-agent";
 import type { Theme } from "@earendil-works/pi-coding-agent";
 import type { Component, Focusable, TUI } from "@earendil-works/pi-tui";
-import { matchesKey, sliceByColumn, truncateToWidth, visibleWidth } from "@earendil-works/pi-tui";
+import { matchesKey, sliceByColumn, visibleWidth } from "@earendil-works/pi-tui";
 
 import { commentBoxPlacement, frameCommentBox, framePanel } from "./card-chrome.ts";
 import type { ChromeColors } from "./card-chrome.ts";
@@ -19,7 +20,8 @@ import { rawColToDisplayCol, tabExpanded } from "./display.ts";
 import { displayPath } from "./message.ts";
 import { normalize } from "./selection.ts";
 import type { Range, VisualMode } from "./selection.ts";
-import { cardModeOf, FOOTER_HINTS } from "./status-line.ts";
+import { cardModeOf, renderCommandLine, renderStatusLine } from "./status-line.ts";
+import type { StatusLineInput } from "./status-line.ts";
 import { reduceViewer, stackAtCursor } from "./viewer-state.ts";
 import type { PendingDraft, ViewerMode, ViewerState } from "./viewer-state.ts";
 
@@ -32,11 +34,12 @@ const BOLD_ON = "\x1b[1m";
 const DIM_ON = "\x1b[2m";
 const INTENSITY_OFF = "\x1b[22m";
 
-// File-area height budget: the panel chrome fixes 3 rows (top + bottom
-// border, footer), and the card is capped on tall terminals. The floating
-// comment box occludes content rows and does not consume this budget.
+// File-area height budget: the panel chrome fixes 4 rows (top + bottom
+// border, statusline, cmdline), and the card is capped on tall terminals.
+// The floating comment box occludes content rows and does not consume this
+// budget.
 const MIN_VIEWPORT_ROWS = 1;
-const CHROME_ROWS = 3;
+const CHROME_ROWS = 4;
 const MAX_VIEWPORT_ROWS = 30;
 
 // The comment box title (read-only previews in Task 4 reuse the same title).
@@ -289,13 +292,35 @@ export class AnnotateCard implements Component, Focusable {
 
     const count = this.pending().length;
     const title = "Annotate: " + displayPath(this.file.path, this.cwd) + (count > 0 ? ` (${count})` : "");
-    const hints = FOOTER_HINTS[cardModeOf(this.state.mode)];
-    // Hints are fixed strings that can exceed narrow panels; truncate the
-    // hints portion by display width (innerRow pads but never truncates).
-    const footer = hints.badge
-      ? this.colors.accent(hints.badge) + "  " + this.colors.dim(truncateToWidth(hints.hints, Math.max(0, inner - visibleWidth(hints.badge) - 2), ""))
-      : this.colors.dim(truncateToWidth(hints.hints, inner, ""));
-    return framePanel(rows, width, { title, footers: [footer], colors: this.colors });
+    // Two-row bottom area (spec): the statusline (mode badge, visual
+    // selection range, 1-based cursor position in display columns) above
+    // the cmdline (per-mode hints). The selection rides only in visual
+    // modes; activeSelection's normalize already puts the smaller position
+    // first, and rawColToDisplayCol preserves that order. Range.endCol is
+    // an end-exclusive slice bound (cursor char included), so the displayed
+    // end position is the LAST selected char (endCol - 1, 1-based) - the
+    // spec's example shows the range end equal to the cursor position.
+    const cursorLine = lines[this.state.cursor.line] ?? "";
+    const visual = this.state.mode === "visual-char" || this.state.mode === "visual-line";
+    const statusSel: StatusLineInput["selection"] =
+      visual && selection !== null
+        ? {
+            start: { line: selection.startLine + 1, col: rawColToDisplayCol(lines[selection.startLine] ?? "", selection.startCol) + 1 },
+            end: { line: selection.endLine + 1, col: rawColToDisplayCol(lines[selection.endLine] ?? "", Math.max(0, selection.endCol - 1)) + 1 },
+            kind: this.state.visualMode === "line" ? "line" : "char",
+          }
+        : null;
+    const statusline = renderStatusLine(
+      {
+        mode: cardModeOf(this.state.mode),
+        cursor: { line: this.state.cursor.line + 1, col: rawColToDisplayCol(cursorLine, this.state.cursor.col) + 1 },
+        selection: statusSel,
+      },
+      inner,
+      this.colors,
+    );
+    const cmdline = renderCommandLine({ kind: "hints", mode: cardModeOf(this.state.mode) }, inner, this.colors);
+    return framePanel(rows, width, { title, footers: [statusline, cmdline], colors: this.colors });
   }
 
   // One content row, windowed horizontally: the gutter stays fixed while the
@@ -372,9 +397,10 @@ export class AnnotateCard implements Component, Focusable {
 
   invalidate(): void {}
 
-  // Terminal rows minus the panel chrome (2 border + 1 footer), clamped to
-  // the file-area budget. The floating comment box occludes content rows and
-  // does NOT consume viewport budget, so this is comment-mode independent.
+  // Terminal rows minus the panel chrome (top + bottom border + statusline
+  // + cmdline), clamped to the file-area budget. The floating comment box
+  // occludes content rows and does NOT consume viewport budget, so this is
+  // comment-mode independent.
   private viewportHeight(): number {
     // pi-tui clips overlays to floor(0.8 * terminal rows) when maxHeight is
     // "80%", so budget against the overlay height rather than the full

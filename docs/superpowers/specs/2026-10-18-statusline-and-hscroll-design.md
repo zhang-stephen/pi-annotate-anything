@@ -1,5 +1,5 @@
 ---
-status: approved
+status: done
 ---
 
 # Status Line and Horizontal Scroll - Design

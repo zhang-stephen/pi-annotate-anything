@@ -1,6 +1,6 @@
 ---
-status: draft
-progress: 0/6
+status: done
+progress: 6/6
 ---
 
 # Statusline + Horizontal Scroll - Implementation Plan
@@ -44,16 +44,16 @@ progress: 0/6
 - Modify: `src/viewer.ts:24,63,83` (`DEFAULT_TAB_SIZE`, `tabExpanded`, `rawColToDisplayCol` move out of here)
 - Modify: import sites of those three symbols in `test/viewer.test.ts` (if any)
 
-- [ ] **Step 1: Create `src/display.ts`**
+- [x] **Step 1: Create `src/display.ts`**
 
 Move `DEFAULT_TAB_SIZE = 4`, `tabExpanded(s, tabSize?)`, `rawColToDisplayCol(line, col, tabSize?)` - including their doc comments - verbatim into `src/display.ts` and export them; `src/viewer.ts` switches to `import { ... } from "./display.ts"` (no re-export; update all import sites). Zero behavior change, pure move.
 
-- [ ] **Step 2: Run the full suite to verify no regression**
+- [x] **Step 2: Run the full suite to verify no regression**
 
 Run: `npm test && npx tsc --noEmit`
 Expected: all PASS, typecheck clean (same as before the change)
 
-- [ ] **Step 3: Commit**
+- [x] **Step 3: Commit**
 
 ```bash
 git add src/display.ts src/viewer.ts test/
@@ -68,7 +68,7 @@ git commit -m "refactor(viewer): extract display-column helpers into src/display
 - Modify: `src/viewer.ts` (new `normalizeKeyRepeat`, wired at the top of `handleInput`)
 - Test: `test/viewer.test.ts`
 
-- [ ] **Step 1: Write the failing test**
+- [x] **Step 1: Write the failing test**
 
 Add a `normalizeKeyRepeat` group to `test/viewer.test.ts` (import from `../src/viewer.ts`):
 
@@ -92,25 +92,25 @@ assert.equal(normalizeKeyRepeat("\x1b[201~"), "\x1b[201~");
 assert.equal(normalizeKeyRepeat("h"), "h");
 ```
 
-- [ ] **Step 2: Run the test to verify it fails**
+- [x] **Step 2: Run the test to verify it fails**
 
 Run: `node --test test/viewer.test.ts`
 Expected: FAIL with `normalizeKeyRepeat is not a function` (or a missing-export compile/import error)
 
-- [ ] **Step 3: Implement `export function normalizeKeyRepeat(data: string): string` in `src/viewer.ts`**
+- [x] **Step 3: Implement `export function normalizeKeyRepeat(data: string): string` in `src/viewer.ts`**
 
 Rule: rewrite only when the entire input is exactly one kitty sequence carrying event type 2 (letter-final `\x1b[<n>;<mod>:2X`, tilde form `\x1b[<n>;<mod>:2~`, CSI-u form `\x1b[<cp>;<mod>:2u`; single anchored match, not a global replace) - drop `:2`; when the modifier field is 1, drop `;1` as well (for the letter form, if the remaining parameter is just `1`, drop the whole parameter section, yielding `\x1b[A` rather than `\x1b[1A`). Everything else returns unchanged.
 
-- [ ] **Step 4: Run the test to verify it passes**
+- [x] **Step 4: Run the test to verify it passes**
 
 Run: `node --test test/viewer.test.ts`
 Expected: PASS
 
-- [ ] **Step 5: Wire into `handleInput`**
+- [x] **Step 5: Wire into `handleInput`**
 
 First line of `AnnotateCard.handleInput` becomes `data = normalizeKeyRepeat(data);`, before the existing escape/ctrl+j normalization.
 
-- [ ] **Step 6: Commit**
+- [x] **Step 6: Commit**
 
 ```bash
 git add src/viewer.ts test/viewer.test.ts
@@ -126,7 +126,7 @@ git commit -m "fix(viewer): treat kitty key-repeat sequences as presses so held 
 - Modify: `src/viewer.ts` (`handleInput` passes the new viewport opts; new `maxLineWidth` cache)
 - Test: `test/viewer-state.test.ts`
 
-- [ ] **Step 1: Write the failing tests**
+- [x] **Step 1: Write the failing tests**
 
 Add a group to `test/viewer-state.test.ts` (state construction follows the file's existing fixture style; `vp` denotes the new viewport argument):
 
@@ -143,24 +143,24 @@ Add a group to `test/viewer-state.test.ts` (state construction follows the file'
 //   (display col 4), cw 4 -> scrollLeft 1 (display col 4 >= 0 + 4)
 ```
 
-- [ ] **Step 2: Run the tests to verify they fail**
+- [x] **Step 2: Run the tests to verify they fail**
 
 Run: `node --test test/viewer-state.test.ts`
 Expected: FAIL (`scrollLeft` assertions unmet / viewport type errors)
 
-- [ ] **Step 3: Implement**
+- [x] **Step 3: Implement**
 
 - `ViewerState` gains `scrollLeft?: number` (`undefined` means 0; follows the `editingDraftId` optional-field precedent to avoid churning existing test fixtures).
 - New `export interface ViewerViewport { height: number; contentWidth: number; maxLineWidth: number }`; `reduceViewer`'s 4th parameter changes from `{ height: number }` to `ViewerViewport`.
 - `keepVisible` appends horizontal follow and clamping after the existing vertical logic (numeric rules in "Global constraints"; display col computed with `rawColToDisplayCol(line, cursor.col)` from Task 1); `moved` and every `keepVisible` call site inside `reduceViewer` pass the viewport through.
 - `src/viewer.ts`: `AnnotateCard` computes `this.maxLineWidth = max over lines of rawColToDisplayCol(line, line.length)` once at construction / file load; new `private contentWidth()` (= the `inner` cached from the latest `render(width)` minus `gutterWidth(this.file.lines.length)`; if never rendered yet, fall back to an estimate from the same terminal-width source `viewportHeight()` uses); in `handleInput`, `{ height: this.viewportHeight() }` becomes `{ height: this.viewportHeight(), contentWidth: this.contentWidth(), maxLineWidth: this.maxLineWidth }`.
 
-- [ ] **Step 4: Run the tests to verify they pass**
+- [x] **Step 4: Run the tests to verify they pass**
 
 Run: `node --test test/viewer-state.test.ts && npx tsc --noEmit`
 Expected: PASS (existing cases pass after adapting to the new signature)
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add src/viewer-state.ts src/viewer.ts test/viewer-state.test.ts
@@ -175,7 +175,7 @@ git commit -m "feat(viewer-state): horizontal cursor-follow scrolling with scrol
 - Modify: `src/viewer.ts` (the row-rendering loop in `render`, `selCol` in `paintCommentBox`)
 - Test: `test/viewer.test.ts`
 
-- [ ] **Step 1: Write the failing tests**
+- [x] **Step 1: Write the failing tests**
 
 ```ts
 // Render a card with scrollLeft=5 (wide lines + narrow panel):
@@ -192,12 +192,12 @@ git commit -m "feat(viewer-state): horizontal cursor-follow scrolling with scrol
 //   the panel (commenting out the scrollLeft correction pushes it off-panel)
 ```
 
-- [ ] **Step 2: Run the tests to verify they fail**
+- [x] **Step 2: Run the tests to verify they fail**
 
 Run: `node --test test/viewer.test.ts`
 Expected: FAIL (current implementation has no windowing / no left indicator)
 
-- [ ] **Step 3: Implement**
+- [x] **Step 3: Implement**
 
 - Render-time safety: `const sl = clampScrollLeft(this.state.scrollLeft ?? 0)` (upper bound `max(0, this.maxLineWidth - contentWidth + 1)`, lower bound 0).
 - The indicators mirror vim's `listchars` `extends`/`precedes` semantics with `wrap` off (dim like `NonText`); keep the indicator characters as specified.
@@ -205,12 +205,12 @@ Expected: FAIL (current implementation has no windowing / no left indicator)
 - The inverse cursor cell is rendered inside `renderLine`, before slicing; the follow logic (Task 3) guarantees it sits inside the window - no extra handling.
 - `paintCommentBox`'s `selCol` becomes `gutterWidth(...) + rawColToDisplayCol(...) - sl` (if `overlayPreview` goes through the same function it is covered automatically; verify and fix its anchor path too).
 
-- [ ] **Step 4: Run the tests to verify they pass**
+- [x] **Step 4: Run the tests to verify they pass**
 
 Run: `node --test test/viewer.test.ts && npm test`
 Expected: PASS (full suite green)
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add src/viewer.ts test/viewer.test.ts
@@ -226,7 +226,7 @@ git commit -m "feat(viewer): render horizontally scrolled content window with ov
 - Modify: `src/card-chrome.ts:23-27` (`PanelOptions`), `:61` (`framePanel`), `:137-159` (`CardMode`/`FooterHints`/`FOOTER_HINTS` move out)
 - Test: create `test/status-line.test.ts`; modify `test/card-chrome.test.ts` (FOOTER_HINTS section migrates, framePanel footer cases switch to `footers`)
 
-- [ ] **Step 1: Write the failing tests (`test/status-line.test.ts`)**
+- [x] **Step 1: Write the failing tests (`test/status-line.test.ts`)**
 
 ```ts
 import { renderStatusLine, renderCommandLine, FOOTER_HINTS, cardModeOf } from "../src/status-line.ts";
@@ -244,12 +244,12 @@ import { renderStatusLine, renderCommandLine, FOOTER_HINTS, cardModeOf } from ".
 // renderCommandLine input (interim): renders prompt + value, truncated right
 ```
 
-- [ ] **Step 2: Run the tests to verify they fail**
+- [x] **Step 2: Run the tests to verify they fail**
 
 Run: `node --test test/status-line.test.ts`
 Expected: FAIL (module does not exist)
 
-- [ ] **Step 3: Create `src/status-line.ts`**
+- [x] **Step 3: Create `src/status-line.ts`**
 
 - Move `CardMode`, `FooterHints`, `FOOTER_HINTS` (strings verbatim) in from `card-chrome.ts`, and `cardModeOf` in from `viewer.ts:157-161` (export it).
 - New types and functions (signatures fixed, bodies up to the implementer):
@@ -269,17 +269,17 @@ export function renderCommandLine(input: CommandLineInput, innerWidth: number, c
 
 The `input` variant only renders `prompt + value` (truncated) for now; the inverse cursor cell lands with the search spec. Note this in a comment.
 
-- [ ] **Step 4: Slim card-chrome + framePanel interface**
+- [x] **Step 4: Slim card-chrome + framePanel interface**
 
 - Delete the three moved symbols from `card-chrome.ts`; `PanelOptions.footer?: string` becomes `footers?: string[]`, and `framePanel` renders each footer as one inner row in order (reuse the existing `innerRow`).
 - `test/card-chrome.test.ts`: the FOOTER_HINTS section moves wholesale to `test/status-line.test.ts` (imports updated); framePanel footer cases switch to `footers: [...]` and gain a "two footers produce two inner rows" case.
 
-- [ ] **Step 5: Run the tests to verify they pass**
+- [x] **Step 5: Run the tests to verify they pass**
 
 Run: `node --test test/status-line.test.ts && node --test test/card-chrome.test.ts`
 Expected: PASS
 
-- [ ] **Step 6: Commit**
+- [x] **Step 6: Commit**
 
 ```bash
 git add src/status-line.ts src/card-chrome.ts test/status-line.test.ts test/card-chrome.test.ts
@@ -295,16 +295,16 @@ git commit -m "feat(status-line): add statusline/cmdline renderers and multi-row
 - Modify: `docs/superpowers/STATUS.md`, this plan's front-matter and checkboxes
 - Test: `test/viewer.test.ts` (footer assertions updated)
 
-- [ ] **Step 1: Write/update the failing tests**
+- [x] **Step 1: Write/update the failing tests**
 
 In `test/viewer.test.ts`, assertions about the old single-line footer change to: the panel's last two rows are the statusline (badge + `L:C`) and the cmdline (hints); in visual-char mode the statusline contains `L:C-L:C`.
 
-- [ ] **Step 2: Run the tests to verify they fail**
+- [x] **Step 2: Run the tests to verify they fail**
 
 Run: `node --test test/viewer.test.ts`
 Expected: FAIL (footer structure changed)
 
-- [ ] **Step 3: Wire it up**
+- [x] **Step 3: Wire it up**
 
 - `CHROME_ROWS` 3 becomes 4.
 - `render` drops the `FOOTER_HINTS[cardModeOf(...)]` assembly and instead calls:
@@ -313,12 +313,12 @@ Expected: FAIL (footer structure changed)
   - `framePanel(rows, width, { title, footers: [statusline, cmdline], colors })`.
 - Remove the `FOOTER_HINTS` import at the top of `viewer.ts`.
 
-- [ ] **Step 4: Full verification**
+- [x] **Step 4: Full verification**
 
 Run: `npm test && npx tsc --noEmit`
 Expected: all PASS
 
-- [ ] **Step 5: Documentation wrap-up + commit**
+- [x] **Step 5: Documentation wrap-up + commit**
 
 Per AGENTS.md: check off all checkboxes in this plan, set front-matter `progress` to `6/6` and `status` to `done`; set spec `2026-10-18-statusline-and-hscroll-design.md` front-matter to `status: done`; move both entries in `STATUS.md` from Active to Done (following that file's existing format).
 

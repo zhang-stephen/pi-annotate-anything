@@ -7,12 +7,12 @@ Do not open docs marked `done` unless the current work touches that area.
 
 ## Active
 
-- spec: `docs/superpowers/specs/2026-10-18-statusline-and-hscroll-design.md`
-- plan: `docs/superpowers/plans/2026-10-18-statusline-and-hscroll.md`
 - spec: `docs/superpowers/specs/2026-10-17-ci-tui-e2e-design.md`
 
 ## Done
 
+- plan: `docs/superpowers/plans/2026-10-18-statusline-and-hscroll.md`
+- spec: `docs/superpowers/specs/2026-10-18-statusline-and-hscroll-design.md`
 - plan: `docs/superpowers/plans/2026-10-18-composer-coexistence.md`
 - plan: `docs/superpowers/plans/2026-10-18-annotate-stacked-and-gutter.md`
 - plan: `docs/superpowers/plans/2026-10-17-annotate-card-chrome.md`
