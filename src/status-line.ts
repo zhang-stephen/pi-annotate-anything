@@ -63,7 +63,8 @@ export type CommandLineInput =
 // "L-L" line-wise (columns are always full width there) - normalized so the
 // smaller position comes first. Truncation order under narrow widths: the
 // selection segment is dropped first, then nothing else; badge and position
-// are always preserved with at least one space of gap between them.
+// are always preserved; when the width cannot fit even a one-space gap the
+// gap drops to zero rather than overflowing the panel.
 export function renderStatusLine(input: StatusLineInput, innerWidth: number, colors: ChromeColors): string {
   const badge = FOOTER_HINTS[input.mode].badge;
   const badgeW = visibleWidth(badge);
@@ -79,10 +80,10 @@ export function renderStatusLine(input: StatusLineInput, innerWidth: number, col
     const pad = " ".repeat(innerWidth - badgeW - 2 - rangeW - posW);
     return colors.accent(badge) + "  " + colors.dim(range) + pad + colors.dim(pos);
   }
-  // Narrow (or non-visual): badge and position only, at least one space of
-  // gap between them; even when innerWidth cannot fit the gap the two
-  // segments are preserved (the frame pads with 0 rather than rewriting).
-  const gap = " ".repeat(Math.max(1, innerWidth - badgeW - posW));
+  // Narrow (or non-visual): badge and position only. The gap shrinks to zero
+  // when the row cannot fit one (spec: worst case is badge + position with no
+  // gap); forcing one space would push the row past the panel's inner width.
+  const gap = " ".repeat(Math.max(0, innerWidth - badgeW - posW));
   return colors.accent(badge) + gap + colors.dim(pos);
 }
 

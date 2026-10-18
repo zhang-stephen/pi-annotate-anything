@@ -78,10 +78,11 @@ test("renderStatusLine drops the selection first on narrow widths, badge and pos
   const row = renderStatusLine(input, 25, colors);
   assert.equal(row, "a(-- VISUAL --)" + " ".repeat(9) + "d(12:4)");
   assert.equal(visibleWidth(renderStatusLine(input, 25, plain)), 25);
-  // Degenerate worst case: narrower than badge + one space + position still
-  // keeps all three pieces with exactly one space of gap.
+  // Degenerate worst case: narrower than badge + one space + position drops
+  // the gap to zero (badge and position survive, no overflow past inner).
   const cramped = renderStatusLine(input, 16, colors);
-  assert.equal(cramped, "a(-- VISUAL --)" + " " + "d(12:4)");
+  assert.equal(cramped, "a(-- VISUAL --)" + "d(12:4)");
+  assert.equal(visibleWidth(renderStatusLine(input, 16, plain)), 16);
 });
 
 // cardModeOf ---------------------------------------------------------------
