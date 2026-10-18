@@ -16,7 +16,7 @@ import { matchesKey, sliceByColumn, visibleWidth } from "@earendil-works/pi-tui"
 import { commentBoxPlacement, frameCommentBox, framePanel, PAD_X, spliceRow } from "./card-chrome.ts";
 import type { ChromeColors } from "./card-chrome.ts";
 import { INVERSE_OFF, INVERSE_ON, withCursorCell, wrapCommentLines } from "./comment-input.ts";
-import { rawColToDisplayCol, sliceWindow, tabExpanded } from "./display.ts";
+import { rawColToDisplayCol, rawColsToDisplayCols, sliceWindow, tabExpanded } from "./display.ts";
 import { displayPath } from "./message.ts";
 import { compilePattern, findMatches } from "./search.ts";
 import { normalize } from "./selection.ts";
@@ -299,9 +299,13 @@ export class AnnotateCard implements Component, Focusable {
     // follows the live query (empty skips), every other mode repeats the
     // last submitted pattern (null skips). One compile + one scan per
     // render; an invalid pattern renders no highlight (its error already
-    // shows as the cmdline message). Each match maps to a display-column
-    // span via rawColToDisplayCol on its raw columns; zero-width spans drop
-    // out in applyStyleSpans' end > start filter - intended.
+    // shows as the cmdline message). Spans are built only for viewport rows
+    // [first, last): off-screen spans are never read. Zero-width matches
+    // render nothing (applyStyleSpans' end > start filter), so they are
+    // skipped here - that keeps pathological patterns like a* cheap. Per
+    // line the sorted match columns map in ONE left-to-right walk
+    // (rawColsToDisplayCols), so a frame costs O(file) for the scan plus
+    // O(viewport lines) for mapping instead of O(matches x line length).
     const query = this.state.mode === "search" ? this.state.search?.query ?? "" : this.state.lastSearch ?? null;
     const matchSpans = new Map<number, StyleSpan[]>();
     let searchStatus: StatusLineInput["search"] = null;
@@ -310,24 +314,38 @@ export class AnnotateCard implements Component, Focusable {
       if (compiled.ok) {
         const matches = findMatches(lines, compiled.re);
         // The match containing the cursor is the "current" one (pi's
-        // two-level searchMatch convention): it swaps the token pair and
-        // bolds, so the cursor's match pops over the plain hlsearch marks.
+        // two-level searchMatch convention): bold + inverse over the plain
+        // pair, so the cursor's match pops over the plain hlsearch marks.
         // Zero-width matches never contain the cursor.
         const currentIdx = matches.findIndex((m) =>
           m.line === this.state.cursor.line && m.startCol <= this.state.cursor.col
             && this.state.cursor.col < m.endCol
         );
-        for (let i = 0; i < matches.length; i++) {
-          const m = matches[i];
-          const raw = lines[m.line] ?? "";
-          const spans = matchSpans.get(m.line);
-          const span: StyleSpan = {
-            start: rawColToDisplayCol(raw, m.startCol),
-            end: rawColToDisplayCol(raw, m.endCol),
-            style: i === currentIdx ? "matchCurrent" : "match",
-          };
-          if (spans === undefined) matchSpans.set(m.line, [span]);
-          else spans.push(span);
+        // findMatches emits matches grouped by line, sorted by startCol.
+        let mi = 0;
+        while (mi < matches.length) {
+          const line = matches[mi].line;
+          let mj = mi + 1;
+          while (mj < matches.length && matches[mj].line === line) mj++;
+          if (line >= first && line < last) {
+            const cols: number[] = [];
+            const refs: number[] = []; // global match index per kept span
+            for (let g = mi; g < mj; g++) {
+              const m = matches[g];
+              if (m.endCol <= m.startCol) continue; // zero-width renders nothing
+              refs.push(g);
+              cols.push(m.startCol, m.endCol);
+            }
+            if (refs.length > 0) {
+              const disp = rawColsToDisplayCols(lines[line] ?? "", cols);
+              matchSpans.set(line, refs.map((g, r) => ({
+                start: disp[2 * r],
+                end: disp[2 * r + 1],
+                style: g === currentIdx ? "matchCurrent" as const : "match" as const,
+              })));
+            }
+          }
+          mi = mj;
         }
         // Segment input (normal with a lastSearch, and search modes only):
         // rank is the 1-based index of the match containing the cursor;

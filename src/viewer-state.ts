@@ -217,8 +217,9 @@ function moved(state: ViewerState, to: Position, lines: string[], viewport: View
 
 // Marks a motion as having consumed the pending count: the state is left
 // with count null (never undefined), so the next keypress starts fresh.
+// The wrapped result's optional extras pass through untouched.
 function consumeCount(res: ViewerResult): ViewerResult {
-  return { state: { ...res.state, count: null } };
+  return { ...res, state: { ...res.state, count: null } };
 }
 
 // Comment mode routes every key through reduceComment's key set:
@@ -312,6 +313,11 @@ function incrementalJump(
   lines: string[],
   viewport: ViewerViewport,
 ): ViewerResult {
+  // An empty query matches everywhere (/ (?:) /g): skip the full-file scan
+  // and just sit on the origin until real input arrives.
+  if (search.query === "") {
+    return { state: keepVisible({ ...state, cursor: search.origin, message: null }, lines, viewport) };
+  }
   const compiled = compilePattern(search.query);
   if (!compiled.ok) {
     return { state: keepVisible({ ...state, cursor: search.origin, message: compiled.error }, lines, viewport) };

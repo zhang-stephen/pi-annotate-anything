@@ -5,7 +5,7 @@ import type { Theme } from "@earendil-works/pi-coding-agent";
 import { stripTerminalSequences, visibleWidth } from "@earendil-works/pi-tui";
 import type { TUI } from "@earendil-works/pi-tui";
 
-import { rawColToDisplayCol, sliceWindow, tabExpanded } from "../src/display.ts";
+import { rawColToDisplayCol, rawColsToDisplayCols, sliceWindow, tabExpanded } from "../src/display.ts";
 import type { Range, VisualMode } from "../src/selection.ts";
 import type { PendingDraft } from "../src/viewer-state.ts";
 import { AnnotateCard, CONTINUATION_MARK, gutterWidth, normalizeKeyRepeat, PENDING_ICON } from "../src/viewer.ts";
@@ -51,6 +51,29 @@ test("tabExpanded accounts for wide chars before the tab", () => {
 test("tabExpanded output has the visible width rawColToDisplayCol predicts", () => {
   const line = "ab\t\u4e00\tcd";
   assert.equal(visibleWidth(tabExpanded(line)), rawColToDisplayCol(line, line.length));
+});
+
+test("rawColsToDisplayCols matches rawColToDisplayCol per column (tabs, CJK, astral)", () => {
+  const line = "a\t\u4e00b\ud83d\ude00c\td";
+  // sorted ascending (the documented contract); -3 clamps to 0, len+10 to len
+  const cols = [-3, 0, 1, 2, 2, 3, 5, 7, 9, 11, line.length, line.length + 10];
+  assert.deepEqual(
+    rawColsToDisplayCols(line, cols),
+    cols.map((c) => rawColToDisplayCol(line, c)),
+  );
+});
+
+test("rawColsToDisplayCols maps a long line's many matches in one walk", () => {
+  // The search-rendering path maps every viewport match's start and end;
+  // this asserts sorted batches stay correct at scale (and stay cheap by
+  // construction: a single left-to-right walk, see display.ts).
+  const line = "x".repeat(10000);
+  const cols = [] as number[];
+  for (let i = 0; i < 1000; i++) cols.push(i * 10, i * 10 + 3);
+  const mapped = rawColsToDisplayCols(line, cols);
+  assert.equal(mapped.length, 2000);
+  assert.equal(mapped[1998], 9990);
+  assert.equal(mapped[1999], 9993);
 });
 
 // Highlight cache invariant ---------------------------------------------------

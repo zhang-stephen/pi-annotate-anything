@@ -239,3 +239,4 @@ test("cmdline input: an over-wide message falls back to truncation", () => {
   assert.equal(visibleWidth(row), 20);
   assert.ok(stripTerminalSequences(row).startsWith("m".repeat(17)));
 });
+
