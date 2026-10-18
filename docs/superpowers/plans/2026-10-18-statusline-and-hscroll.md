@@ -169,7 +169,7 @@ git commit -m "feat(viewer-state): horizontal cursor-follow scrolling with scrol
 
 ---
 
-### Task 4: Content window rendering + overflow indicators + overlay anchor fix
+### Task 4: Content window rendering + ~~overflow indicators~~ + overlay anchor fix  (indicators deprecated post-merge, see Amendment)
 
 **Files:**
 - Modify: `src/viewer.ts` (the row-rendering loop in `render`, `selCol` in `paintCommentBox`)
@@ -200,7 +200,7 @@ Expected: FAIL (current implementation has no windowing / no left indicator)
 - [x] **Step 3: Implement**
 
 - Render-time safety: `const sl = clampScrollLeft(this.state.scrollLeft ?? 0)` (upper bound `max(0, this.maxLineWidth - contentWidth + 1)`, lower bound 0).
-- The indicators mirror vim's `listchars` `extends`/`precedes` semantics with `wrap` off (dim like `NonText`); keep the indicator characters as specified.
+- ~~The indicators mirror vim's `listchars` `extends`/`precedes` semantics with `wrap` off (dim like `NonText`); keep the indicator characters as specified.~~ **Deprecated:** vim's default `listchars` enables neither; removed post-merge (see Amendment below).
 - Row rendering changes from `truncateToWidth(gutter + renderLine(...), inner, "...", true)` to: first window the full styled result of `renderLine(...)` via `sliceByColumn(styled, sl + leftPad, contentWidth - leftPad - rightPad, true)` (`strict=true` so no half wide char), where `leftPad` = `sl > 0 ? 1 : 0` and `rightPad` = `3` when content extends past the window's right edge, else `0`; then join `gutter + (sl > 0 ? colors.dim(<NF chevron>) : "") + windowed + (right overflow ? colors.dim("...") : "")` and space-pad to `inner`. `contentWidth` matches Task 3's `contentWidth()`. Right-overflow test: `rawColToDisplayCol(line, line.length) > sl + contentWidth`.
 - The inverse cursor cell is rendered inside `renderLine`, before slicing; the follow logic (Task 3) guarantees it sits inside the window - no extra handling.
 - `paintCommentBox`'s `selCol` becomes `gutterWidth(...) + rawColToDisplayCol(...) - sl` (if `overlayPreview` goes through the same function it is covered automatically; verify and fix its anchor path too).
@@ -328,6 +328,10 @@ git commit -m "feat(viewer): wire statusline/cmdline rows into annotate card"
 ```
 
 ---
+
+## Amendment (post-merge, user decision after sandbox E2E)
+
+The overflow indicators (left NF chevron / right `...`, Task 4) were removed: vim's default `listchars` enables neither `extends` nor `precedes`, and the indicator cells proved noisy in practice (visible on every short row once scrolled; cursor/indicator collisions at the follow edge). The cursor-wins-over-indicator splice went with them. What remains of Task 4: the display-column windowing itself, the render-time clamp, the wide-char strict slicing, the scroll-corrected comment-box anchor, plus an SGR reset appended when a span's closing code falls outside the sliced window. Orientation now relies on the statusline `L:C` readout.
 
 ## Self-check record
 

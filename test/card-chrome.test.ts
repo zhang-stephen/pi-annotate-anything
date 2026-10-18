@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 
 import { stripTerminalSequences, visibleWidth } from "@earendil-works/pi-tui";
 
-import { commentBoxPlacement, draftAtCursor, frameCommentBox, framePanel } from "../src/card-chrome.ts";
+import { commentBoxPlacement, draftAtCursor, frameCommentBox, framePanel, spliceRow } from "../src/card-chrome.ts";
 import type { ChromeColors } from "../src/card-chrome.ts";
 import type { Draft } from "../src/store.ts";
 
@@ -224,4 +224,31 @@ test("draftAtCursor returns undefined when nothing covers the cursor", () => {
   const d = draft({ range: { startLine: 10, startCol: 0, endLine: 12, endCol: 3 } });
   assert.equal(draftAtCursor(11, 0, []), undefined);
   assert.equal(draftAtCursor(15, 0, [d]), undefined);
+});
+
+// spliceRow ---------------------------------------------------------------
+
+test("spliceRow: plain ASCII splice keeps exact positions", () => {
+  assert.equal(spliceRow("abcdef", 2, 2, "XY"), "abXYef");
+});
+
+test("spliceRow: wide chars straddling the cuts become placeholder spaces", () => {
+  // 中 3 covers cells 4-5 (left cut at 5 straddles it); 中 4 covers cells
+  // 6-7 (right cut at 7 straddles it). Both lose their unrenderable half to
+  // a one-cell placeholder so the replacement still lands at column 5 and
+  // the row keeps its exact width.
+  const out = spliceRow("中".repeat(6), 5, 2, "[]");
+  assert.equal(out, "中中 [] 中中");
+  assert.equal(visibleWidth(out), 12);
+});
+
+test("spliceRow: wide char straddling only the right cut", () => {
+  // Replacement width 3 ends at cell 3, straddling 中 2 (cells 2-3).
+  const out = spliceRow("中".repeat(6), 0, 3, "[x]");
+  assert.equal(out, "[x] 中中中中");
+  assert.equal(visibleWidth(out), 12);
+});
+
+test("spliceRow: base shorter than left is space-filled", () => {
+  assert.equal(spliceRow("ab", 4, 2, "XY"), "ab  XY");
 });

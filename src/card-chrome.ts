@@ -92,6 +92,23 @@ export interface BoxPlacement {
 // viewH content rows). The left edge aligns with the selection's start
 // display column, clamped to [0, innerW - boxW] so the box never crosses
 // the panel's border columns. Degenerate sizes are clamped rather than
+// Splices `replacement` (display width exactly `width`) into `base` at
+// display column `left`. A wide char straddling either cut is replaced by a
+// one-cell space placeholder (terminal convention, same as vim) instead of
+// being dropped or half-rendered, so every spliced row keeps its exact
+// display width and overlay borders stay aligned across rows.
+export function spliceRow(base: string, left: number, width: number, replacement: string): string {
+  const total = visibleWidth(base);
+  const prefix = sliceByColumn(base, 0, left, true);
+  // 1 on a left-cut straddle; more when the base is shorter than left.
+  const leftPad = Math.max(0, left - visibleWidth(prefix));
+  const right = left + width;
+  const rightStraddle = total > right && visibleWidth(sliceByColumn(base, 0, right, true)) < right;
+  const suffixLen = Math.max(0, total - right - (rightStraddle ? 1 : 0));
+  const suffix = sliceByColumn(base, right + (rightStraddle ? 1 : 0), suffixLen, true);
+  return prefix + " ".repeat(leftPad) + replacement + (rightStraddle ? " " : "") + suffix;
+}
+
 // trusted: top is clamped into [0, max(0, viewH - boxH)] so an oversized
 // box or a forced flip at row 0 cannot go negative, and left clamps at 0
 // when boxW exceeds innerW (callers should pre-clamp boxW to innerW).

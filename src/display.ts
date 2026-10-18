@@ -3,7 +3,21 @@
 // module (depends only on pi-tui) so viewer-state can import these without
 // depending back on viewer.ts.
 
-import { visibleWidth } from "@earendil-works/pi-tui";
+import { sliceByColumn, visibleWidth } from "@earendil-works/pi-tui";
+
+// Slices [start, start + len) display columns out of a styled row. When a
+// wide char straddles the left cut, its unrenderable half is replaced by a
+// one-cell space placeholder (terminal convention, same as vim) instead of
+// being dropped, so the slice keeps its display-column alignment with the
+// source. A wide char straddling the right cut is dropped whole; the caller
+// pads, which is visually identical at a row's end.
+export function sliceWindow(styled: string, start: number, len: number): string {
+  if (len <= 0) return "";
+  const straddles =
+    visibleWidth(styled) > start && visibleWidth(sliceByColumn(styled, 0, start, true)) < start;
+  if (!straddles) return sliceByColumn(styled, start, len, true);
+  return " " + sliceByColumn(styled, start + 1, len - 1, true);
+}
 
 export const DEFAULT_TAB_SIZE = 4;
 

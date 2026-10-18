@@ -5,10 +5,10 @@ import type { Theme } from "@earendil-works/pi-coding-agent";
 import { stripTerminalSequences, visibleWidth } from "@earendil-works/pi-tui";
 import type { TUI } from "@earendil-works/pi-tui";
 
-import { rawColToDisplayCol, tabExpanded } from "../src/display.ts";
+import { rawColToDisplayCol, sliceWindow, tabExpanded } from "../src/display.ts";
 import type { Range, VisualMode } from "../src/selection.ts";
 import type { PendingDraft } from "../src/viewer-state.ts";
-import { AnnotateCard, CONTINUATION_MARK, gutterWidth, LEFT_OVERFLOW_ICON, normalizeKeyRepeat, PENDING_ICON } from "../src/viewer.ts";
+import { AnnotateCard, CONTINUATION_MARK, gutterWidth, normalizeKeyRepeat, PENDING_ICON } from "../src/viewer.ts";
 
 // Pending-marker field width: a fixed 2 cells (icon renders 1 cell in NF
 // Mono + 1 count digit).
@@ -280,8 +280,7 @@ test("content rows clip to the inner width (border takes 2 columns)", () => {
   const bare = h.card.render(width).map(strip);
   assert.equal(bare.length, 5);
   assert.equal(bare[1].length, width);
-  assert.ok(bare[1].startsWith("│1     xx"));
-  assert.ok(bare[1].includes("...")); // clipped by the inner-width budget
+  assert.equal(bare[1], "│1     " + "x".repeat(22) + "│"); // cut at the window edge, no indicators
 });
 
 test("viewport budget subtracts border (2) and statusline+cmdline (2) rows", () => {
@@ -306,32 +305,30 @@ test("the floating comment box does not consume viewport budget", () => {
 
 // Horizontal content window ---------------------------------------------------
 // scrollLeft windows the styled content rows by display column: the gutter
-// stays fixed, a dim NF chevron replaces the first content cell when text
-// precedes the window (vim listchars 'precedes'), dim "..." fills the last
-// three cells when content extends past the window's right edge ('extends'),
-// and sliceByColumn(strict) never half-renders a wide char at an edge.
+// stays fixed and sliceByColumn(strict) never half-renders a wide char at an
+// edge. No edge indicators (vim's default listchars enables neither 'extends'
+// nor 'precedes'; sandbox trials found them noisy).
 
 // Distinct single-digit chars so the visible window can be asserted exactly.
 const digitLine = (n: number) => Array.from({ length: n }, (_, i) => String(i % 10)).join("");
 
-test("render windows the content at scrollLeft behind a fixed gutter with a dim chevron", () => {
+test("render windows the content at scrollLeft behind a fixed gutter", () => {
   const h = makeCard({ lines: [digitLine(100)] });
   h.card.render(30); // inner 28, gutter 6, contentWidth 22
   for (let i = 0; i < 30; i++) h.card.handleInput("l"); // cursor 30 -> scrollLeft 9
   const rows = h.card.render(30);
-  // Window [10, 28) behind the fixed gutter, chevron in the first content
-  // cell (replacing display col 9), dots in the last three - except the
-  // cursor (col 30, window col 21) wins the last dot cell: ".." + cursor.
-  assert.equal(strip(rows[1]), "│1     " + LEFT_OVERFLOW_ICON + "012345678901234567" + "..0" + "│");
+  // Window [9, 31) behind the fixed gutter; the cursor (col 30) sits on the
+  // last window cell.
+  assert.equal(strip(rows[1]), "│1     " + "9012345678901234567890" + "│");
   assert.equal(visibleWidth(rows[1]), 30);
-  assert.ok(h.fgCalls.some((c) => c.token === "dim" && c.text === LEFT_OVERFLOW_ICON), "chevron is theme dim");
+  assert.ok(rows[1].includes("\x1b[7m0\x1b[0m"), "cursor cell on the last window cell");
 });
 
-test("rows still end with ... when content extends past the window's right edge", () => {
+test("rows are cut at the window's right edge without indicators", () => {
   const h = makeCard({ lines: [digitLine(100)] });
   const rows = h.card.render(30).map(strip);
-  // No scroll: window [0, 19) (three cells reserved for the dots).
-  assert.equal(rows[1], "│1     " + digitLine(19) + "..." + "│");
+  // No scroll: window [0, 22), plain cut - no dots.
+  assert.equal(rows[1], "│1     " + digitLine(22) + "│");
 });
 
 test("the inverse cursor cell stays visible inside the window", () => {
@@ -346,10 +343,10 @@ test("the inverse cursor cell stays visible inside the window", () => {
 test("wide chars straddling the window edge are dropped whole, rows keep exact width", () => {
   const wide = "a" + "中".repeat(20) + "b"; // display width 42
   const h = makeCard({ lines: [wide] });
-  // scrollLeft 0: the 中 straddling the right edge (cols 19-21 vs window
-  // [0, 19)) is dropped whole, and the row still fills exactly 30 columns.
+  // scrollLeft 0: the 中 straddling the right edge (cols 21-23 vs window
+  // [0, 22)) is dropped whole, and the row still fills exactly 30 columns.
   let rows = h.card.render(30);
-  assert.equal(strip(rows[1]), "│1     " + "a" + "中".repeat(9) + "..." + "│");
+  assert.equal(strip(rows[1]), "│1     " + "a" + "中".repeat(10) + " " + "│");
   assert.equal(visibleWidth(rows[1]), 30);
   // scrollLeft 21: the 中 straddling the LEFT edge is dropped whole too. The
   // row ends with the virtual cursor cell (end-exclusive cursor) plus pad,
@@ -357,7 +354,7 @@ test("wide chars straddling the window edge are dropped whole, rows keep exact w
   h.card.render(30);
   for (let i = 0; i < 22; i++) h.card.handleInput("l"); // cursor clamps at 22 (end-exclusive), scrollLeft 21
   rows = h.card.render(30);
-  assert.equal(strip(rows[1]), "│1     " + LEFT_OVERFLOW_ICON + "中".repeat(9) + "b" + "  │");
+  assert.equal(strip(rows[1]), "│1     " + "中".repeat(10) + "b " + "│");
   assert.equal(visibleWidth(rows[1]), 30);
 });
 
@@ -371,7 +368,6 @@ test("render-time clamp: stale scrollLeft beyond the bound renders without overf
   const rows = h.card.render(120);
   assert.equal(strip(rows[1]), "│1     " + "x".repeat(100) + " ".repeat(12) + "│");
   assert.equal(visibleWidth(rows[1]), 120);
-  assert.ok(!rows[1].includes(LEFT_OVERFLOW_ICON), "no chevron after the clamp");
 });
 
 test("comment box anchors to the scroll-corrected display column", () => {
@@ -1030,29 +1026,40 @@ test("kitty CSI-u ctrl+j and shift+enter insert a newline in comment mode", () =
   assert.equal(h2.calls.annotate[0].comment, "a\nb");
 });
 
-test("the cursor cell wins over the right ... indicator at the follow edge", () => {
-  const h = makeCard({ lines: [digitLine(100)] });
-  h.card.render(30); // inner 28, gutter 6, contentWidth 22
-  for (let i = 0; i < 22; i++) h.card.handleInput("l"); // cursor 22 -> scrollLeft 1, window col 21
-  const row = h.card.render(30)[1];
-  // The cursor sits on the last window cell: the dots shrink to ".." and the
-  // inverse cursor cell takes the final cell instead of the third dot.
-  // Cursor at col 22 is pinned to the last window cell: the dots lose their
-  // third cell to the inverse cursor cell (the cursor wins over indicators).
-  assert.equal(strip(row), "│1     " + LEFT_OVERFLOW_ICON + "234567890123456789" + "..2│");
-  assert.ok(row.includes("\x1b[7m2\x1b[0m"), `cursor cell over the dots, got: ${JSON.stringify(strip(row))}`);
-  assert.equal(visibleWidth(row), 30);
+
+// sliceWindow ---------------------------------------------------------------
+
+test("sliceWindow: wide char straddling the left cut becomes a placeholder space", () => {
+  // 中 1 covers cells 0-1; cutting at 1 straddles it. The placeholder keeps
+  // the slice aligned with the source's display columns.
+  assert.equal(sliceWindow("中".repeat(10), 1, 6), " 中中"); // placeholder + 2 whole 中; 中 5 at 6-7 straddles the right cut and is dropped
+  assert.equal(sliceWindow("中".repeat(10), 2, 6), "中中中"); // no straddle
+  assert.equal(sliceWindow("abc", 0, 6), "abc"); // short row, no straddle
 });
 
-test("the cursor cell wins over the left chevron at the follow edge", () => {
-  const h = makeCard({ lines: [digitLine(100)] });
-  h.card.render(30);
-  for (let i = 0; i < 22; i++) h.card.handleInput("l"); // cursor 22, scrollLeft 1
-  for (let i = 0; i < 21; i++) h.card.handleInput("h"); // cursor 1: displayCol 1, window col 0
-  const row = h.card.render(30)[1];
-  // The cursor replaces the chevron; the window text still starts at col 2.
-  assert.equal(strip(row), "│1     " + "1" + "234567890123456789" + "...│");
-  assert.ok(row.includes("\x1b[7m1\x1b[0m"), `cursor cell over the chevron, got: ${JSON.stringify(strip(row))}`);
-  assert.ok(!row.includes(LEFT_OVERFLOW_ICON), "chevron hidden behind the cursor");
-  assert.equal(visibleWidth(row), 30);
+test("comment box borders stay column-aligned when a cut straddles a wide char", () => {
+  const h = makeCard({ lines: ["h", "b".repeat(50), "中".repeat(40), "c".repeat(50), "tail"] });
+  h.card.render(120);
+  h.card.handleInput("j");
+  for (let i = 0; i < 11; i++) h.card.handleInput("l");
+  h.card.handleInput("v");
+  h.card.handleInput("l"); // select two b's
+  h.card.handleInput("c");
+  const raw = h.card.render(120);
+  const rows = raw.map(strip);
+  // The box overlays rows 3-5 (CJK line, ASCII line, short line). Its left
+  // border must sit in the same DISPLAY column on every row: panel border
+  // (1) + gutter (6) + anchor col 11 = 18. (String indices differ on the
+  // CJK row - measure display columns.)
+  const colOf = (row: string, ch: string) => {
+    const i = row.indexOf(ch, 1);
+    return i < 0 ? i : visibleWidth(row.slice(0, i));
+  };
+  const top = colOf(rows[3], "╭");
+  const mid = colOf(rows[4], "│");
+  const bot = colOf(rows[5], "╰");
+  assert.equal(top, 18, `top border column, row: ${JSON.stringify(rows[3])}`);
+  assert.equal(mid, 18, `middle border column, row: ${JSON.stringify(rows[4])}`);
+  assert.equal(bot, 18, `bottom border column, row: ${JSON.stringify(rows[5])}`);
+  for (const [i, r] of raw.entries()) assert.equal(visibleWidth(r), 120, `row ${i} width`);
 });

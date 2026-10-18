@@ -13,10 +13,10 @@ import type { Theme } from "@earendil-works/pi-coding-agent";
 import type { Component, Focusable, TUI } from "@earendil-works/pi-tui";
 import { matchesKey, sliceByColumn, visibleWidth } from "@earendil-works/pi-tui";
 
-import { commentBoxPlacement, frameCommentBox, framePanel } from "./card-chrome.ts";
+import { commentBoxPlacement, frameCommentBox, framePanel, spliceRow } from "./card-chrome.ts";
 import type { ChromeColors } from "./card-chrome.ts";
 import { INVERSE_OFF, INVERSE_ON, withCursorCell, wrapCommentLines } from "./comment-input.ts";
-import { rawColToDisplayCol, tabExpanded } from "./display.ts";
+import { rawColToDisplayCol, sliceWindow, tabExpanded } from "./display.ts";
 import { displayPath } from "./message.ts";
 import { normalize } from "./selection.ts";
 import type { Range, VisualMode } from "./selection.ts";
@@ -72,7 +72,6 @@ const MARKER_FIELD_WIDTH = 3; // icon + spacer + count digit
 // Left overflow indicator (vim listchars 'precedes' with wrap off): a dim NF
 // chevron replacing the first content cell when text precedes the window
 // (scrollLeft > 0). The right counterpart keeps today's dim "...".
-export const LEFT_OVERFLOW_ICON = "\u{F104}"; // nf-fa-angle_left
 
 // Render-time safety net: clamps a (possibly stale) scrollLeft into
 // [0, max(0, maxLineWidth - contentWidth + 1)]; the +1 covers the virtual
@@ -200,8 +199,8 @@ export class AnnotateCard implements Component, Focusable {
     pending: () => Range[],
     onAnnotate: (range: Range, mode: VisualMode, comment: string) => void,
     done: () => void,
-    onUpdateComment: (draftId: string, comment: string) => void = () => {},
-    onDeleteDraft: (draftId: string) => void = () => {},
+    onUpdateComment: (draftId: string, comment: string) => void = () => { },
+    onDeleteDraft: (draftId: string) => void = () => { },
     pendingDrafts: () => PendingDraft[] = () => [],
     theme: Theme,
     cwd: string,
@@ -307,10 +306,10 @@ export class AnnotateCard implements Component, Focusable {
     const statusSel: StatusLineInput["selection"] =
       visual && selection !== null
         ? {
-            start: { line: selection.startLine + 1, col: rawColToDisplayCol(lines[selection.startLine] ?? "", selection.startCol) + 1 },
-            end: { line: selection.endLine + 1, col: rawColToDisplayCol(lines[selection.endLine] ?? "", Math.max(0, selection.endCol - 1)) + 1 },
-            kind: this.state.visualMode === "line" ? "line" : "char",
-          }
+          start: { line: selection.startLine + 1, col: rawColToDisplayCol(lines[selection.startLine] ?? "", selection.startCol) + 1 },
+          end: { line: selection.endLine + 1, col: rawColToDisplayCol(lines[selection.endLine] ?? "", Math.max(0, selection.endCol - 1)) + 1 },
+          kind: this.state.visualMode === "line" ? "line" : "char",
+        }
         : null;
     const statusline = renderStatusLine(
       {
@@ -328,12 +327,10 @@ export class AnnotateCard implements Component, Focusable {
   // One content row, windowed horizontally: the gutter stays fixed while the
   // already-styled line is sliced to the display-column window [sl, sl+cw)
   // (strict, so a wide char straddling an edge is dropped whole and the row
-  // is never half-rendered). Indicators mirror vim's listchars 'precedes'/
-  // 'extends' with wrap off, dim like NonText: a chevron replaces the first
-  // content cell when text precedes the window (scrollLeft > 0, the window
-  // shifts right one cell to make room), and dim "..." fills the last three
-  // cells when content extends past the window's right edge. The inverse
-  // cursor cell is styled inside renderLine before slicing; the follow logic
+  // is never half-rendered). No edge indicators: vim's default listchars
+  // enables neither 'extends' nor 'precedes', and sandbox trials showed the
+  // chevron/dots caused more confusion than value. The inverse cursor cell
+  // is styled inside renderLine before slicing; the follow logic
   // (reduceViewer) guarantees it sits inside the window.
   private renderRow(
     line: number,
@@ -345,41 +342,12 @@ export class AnnotateCard implements Component, Focusable {
     inner: number,
   ): string {
     const styled = this.renderLine(line, selection, cursorOn, emphasis);
-    const leftPad = sl > 0 ? 1 : 0;
-    // Right overflow: the line's display width extends past the window's
-    // right edge.
-    const raw = this.file.lines[line] ?? "";
-    const rightPad = rawColToDisplayCol(raw, raw.length) > sl + cw ? 3 : 0;
-    // Guard the length: on very narrow panels leftPad + rightPad can reach
-    // contentWidth, and sliceByColumn rejects negative lengths.
-    const windowed = sliceByColumn(styled, sl + leftPad, Math.max(0, cw - leftPad - rightPad), true);
-    let row =
-      this.gutter(line)
-      + (sl > 0 ? this.colors.dim(LEFT_OVERFLOW_ICON) : "")
-      + windowed
-      + (rightPad > 0 ? this.colors.dim("...") : "");
-    // Follow can pin the cursor exactly onto an indicator cell (the chevron
-    // at the left edge, one of the "..." cells at the right edge). The
-    // cursor wins: splice its already-inverse cell from the styled full line
-    // over the indicator cell, so held h/l never loses the cursor.
-    if (cursorOn && this.state.cursor.line === line && cw > 0) {
-      const cursorWinCol = rawColToDisplayCol(raw, this.state.cursor.col) - sl;
-      const onChevron = sl > 0 && cursorWinCol === 0;
-      const onDots = rightPad > 0 && cursorWinCol >= cw - rightPad;
-      if ((onChevron || onDots) && cursorWinCol < cw) {
-        const cellIdx = inner - cw + cursorWinCol; // gutter width = inner - cw
-        let cell = sliceByColumn(styled, sl + cursorWinCol, 1, true);
-        if (visibleWidth(cell) === 0) {
-          cell = INVERSE_ON + " " + INVERSE_OFF; // wide-char edge / virtual EOL cell
-        } else if (cell.includes("\x1b[")) {
-          // The 1-column slice keeps the span's opening SGR but drops its
-          // closing code; reset explicitly so inverse/underline cannot bleed
-          // into the rest of the row.
-          cell += "\x1b[0m";
-        }
-        row = sliceByColumn(row, 0, cellIdx) + cell + sliceByColumn(row, cellIdx + 1, Math.max(0, inner - cellIdx - 1));
-      }
-    }
+    const windowed = sliceWindow(styled, sl, Math.max(0, cw));
+    // A span ending exactly at the window's right edge (e.g. the inverse
+    // cursor cell on the last window cell) loses its closing SGR to the
+    // slice; reset explicitly so inverse/underline cannot bleed into the
+    // padding that follows.
+    const row = this.gutter(line) + windowed + (windowed.includes("\x1b[") ? "\x1b[0m" : "");
     return row + " ".repeat(Math.max(0, inner - visibleWidth(row)));
   }
 
@@ -394,7 +362,7 @@ export class AnnotateCard implements Component, Focusable {
     const key = matchesKey(data, "escape")
       ? "\x1b"
       : this.state.mode === "comment" &&
-          (matchesKey(data, "ctrl+j") || matchesKey(data, "shift+enter"))
+        (matchesKey(data, "ctrl+j") || matchesKey(data, "shift+enter"))
         ? "\n"
         : data;
     const result = reduceViewer(
@@ -419,7 +387,7 @@ export class AnnotateCard implements Component, Focusable {
     // requestRender is needed here.
   }
 
-  invalidate(): void {}
+  invalidate(): void { }
 
   // Terminal rows minus the panel chrome (top + bottom border + statusline
   // + cmdline), clamped to the file-area budget. The floating comment box
@@ -456,11 +424,11 @@ export class AnnotateCard implements Component, Focusable {
     const anchor = sel
       ? { topLine: sel.startLine, bottomLine: sel.endLine, colLine: sel.startLine, rawCol: sel.startCol }
       : {
-          topLine: this.state.cursor.line,
-          bottomLine: this.state.cursor.line,
-          colLine: this.state.cursor.line,
-          rawCol: this.state.cursor.col,
-        };
+        topLine: this.state.cursor.line,
+        bottomLine: this.state.cursor.line,
+        colLine: this.state.cursor.line,
+        rawCol: this.state.cursor.col,
+      };
     // Fixed-width editor: the box never resizes while typing; the text
     // soft-wraps to the box's inner content width instead.
     const boxW = Math.min(inner, EDITOR_BOX_MAX_WIDTH);
@@ -545,8 +513,7 @@ export class AnnotateCard implements Component, Focusable {
       // cuts in half); close underline + inverse so the box border glyphs do
       // not inherit the open attributes. The right sliver re-opens its
       // carried state itself (sliceByColumn).
-      rows[idx] =
-        sliceByColumn(base, 0, place.left) + UNDERLINE_OFF + INVERSE_OFF + box[k] + sliceByColumn(base, place.left + boxW, inner - place.left - boxW);
+      rows[idx] = spliceRow(base, place.left, boxW, UNDERLINE_OFF + INVERSE_OFF + box[k]);
     }
   }
 
