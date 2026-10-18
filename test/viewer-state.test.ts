@@ -971,3 +971,14 @@ test("count: any other key clears it without effect; {count}n repeats the search
   assert.deepEqual(jump.state.cursor, { line: 20, col: 5 });
   assert.equal(jump.state.count ?? null, null);
 });
+
+test("search: Enter on a zero-match pattern stores lastSearch, stays at origin, and reports", () => {
+  let st = view(viewer({ cursor: { line: 2, col: 3 } }), "/").state;
+  st = view(st, "z").state;
+  st = view(st, "z").state;
+  const res = view(st, "\r");
+  assert.equal(res.state.mode, "normal");
+  assert.equal(res.state.lastSearch, "zz");
+  assert.deepEqual(res.state.cursor, { line: 2, col: 3 });
+  assert.equal(res.state.message, "Pattern not found: zz");
+});

@@ -340,6 +340,12 @@ function submitSearch(
   if (search.query !== "") {
     const compiled = compilePattern(search.query);
     if (!compiled.ok) return { state: { ...state, message: compiled.error } };
+    // A valid pattern with zero matches stores lastSearch (n repeats it and
+    // fails again, like vim) but reports instead of jumping; the cursor
+    // stays where the incremental scan left it (the origin).
+    if (findMatches(lines, compiled.re).length === 0) {
+      return { state: { ...state, mode: "normal", search: null, lastSearch: search.query, message: "Pattern not found: " + search.query } };
+    }
     return { state: { ...state, mode: "normal", search: null, lastSearch: search.query } };
   }
   if ((state.lastSearch ?? null) === null) {
