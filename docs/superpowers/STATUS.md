@@ -8,8 +8,6 @@ Do not open docs marked `done` unless the current work touches that area.
 
 ## Active
 
-- spec: `docs/superpowers/specs/2026-10-18-viewer-search-design.md`
-- plan: `docs/superpowers/plans/2026-10-19-viewer-search.md`
 - spec: `docs/superpowers/specs/2026-10-17-ci-tui-e2e-design.md`
 
 ## Known issues (deferred, no spec yet)
@@ -24,8 +22,12 @@ Do not open docs marked `done` unless the current work touches that area.
   Cover: Tab completion, directory drill-down, empty-result fallback, and the resume-cwd case (launch pi in directory B, resume a session stored with cwd A, verify relative-path completion and the handler agree - the scenario fix `e0e0067` targets).
   The resume-cwd case is rare and not reproducible in the current environment, so it stays a deferred manual check.
 
+- 2026-10-19: viewer search vim-parity backlog (deferred review minors, no spec yet): arrow keys do not consume a pending count (vim parity; current behavior keeps the brief's consumer list), a digit key during a pending `g` arms the count instead of canceling the two-stroke, findMatches hardening for non-global regexes and jumpTarget count <= 0 (both outside the current contract).
+
 ## Done
 
+- plan: `docs/superpowers/plans/2026-10-19-viewer-search.md`
+- spec: `docs/superpowers/specs/2026-10-18-viewer-search-design.md`
 - plan: `docs/superpowers/plans/2026-10-18-annotate-path-completion.md`
 - spec: `docs/superpowers/specs/2026-10-18-annotate-path-completion-design.md`
 - plan: `docs/superpowers/plans/2026-10-18-statusline-and-hscroll.md`

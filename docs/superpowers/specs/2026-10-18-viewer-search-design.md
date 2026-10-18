@@ -1,6 +1,6 @@
 ---
 title: Viewer Search - Design
-status: approved
+status: done
 plan: ../plans/2026-10-19-viewer-search.md
 ---
 
