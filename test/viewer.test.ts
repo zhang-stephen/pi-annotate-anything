@@ -8,7 +8,7 @@ import type { TUI } from "@earendil-works/pi-tui";
 import { rawColToDisplayCol, tabExpanded } from "../src/display.ts";
 import type { Range, VisualMode } from "../src/selection.ts";
 import type { PendingDraft } from "../src/viewer-state.ts";
-import { AnnotateCard, CONTINUATION_MARK, gutterWidth, PENDING_ICON } from "../src/viewer.ts";
+import { AnnotateCard, CONTINUATION_MARK, gutterWidth, normalizeKeyRepeat, PENDING_ICON } from "../src/viewer.ts";
 
 // Pending-marker field width: a fixed 2 cells (icon renders 1 cell in NF
 // Mono + 1 count digit).
@@ -875,6 +875,43 @@ test("preview on a stack of 1 keeps the plain Comment title", () => {
 });
 
 // Kitty keyboard protocol normalization ---------------------------------------
+
+// normalizeKeyRepeat -------------------------------------------------------
+// Under the kitty keyboard protocol (flags 7 enabled by pi-tui) functional
+// keys repeat as event-type-2 sequences ("\x1b[1;1:2A") instead of the
+// press form ("\x1b[A") the reducer matches; normalizeKeyRepeat rewrites
+// them so held arrow/PgUp/PgDn keys scroll.
+
+test("normalizeKeyRepeat rewrites kitty repeat sequences to press equivalents", () => {
+  assert.equal(normalizeKeyRepeat("\x1b[1;1:2A"), "\x1b[A"); // up
+  assert.equal(normalizeKeyRepeat("\x1b[1;1:2B"), "\x1b[B"); // down
+  assert.equal(normalizeKeyRepeat("\x1b[1;1:2D"), "\x1b[D"); // left
+  assert.equal(normalizeKeyRepeat("\x1b[1;1:2C"), "\x1b[C"); // right
+  assert.equal(normalizeKeyRepeat("\x1b[5;1:2~"), "\x1b[5~"); // PgUp
+  assert.equal(normalizeKeyRepeat("\x1b[6;1:2~"), "\x1b[6~"); // PgDn
+  assert.equal(normalizeKeyRepeat("\x1b[99;1:2u"), "\x1b[99u"); // CSI-u 'c'
+});
+
+test("normalizeKeyRepeat keeps real modifiers and strips only the event field", () => {
+  assert.equal(normalizeKeyRepeat("\x1b[1;2:2A"), "\x1b[1;2A"); // shift+up
+  assert.equal(normalizeKeyRepeat("\x1b[5;5:2~"), "\x1b[5;5~"); // ctrl+PgUp
+});
+
+test("normalizeKeyRepeat passes presses, plain text, and bracketed paste through", () => {
+  assert.equal(normalizeKeyRepeat("\x1b[A"), "\x1b[A");
+  assert.equal(normalizeKeyRepeat("\x1b[200~"), "\x1b[200~");
+  assert.equal(normalizeKeyRepeat("\x1b[201~"), "\x1b[201~");
+  assert.equal(normalizeKeyRepeat("h"), "h");
+});
+
+test("handleInput normalizes kitty repeats so held arrow keys move and scroll", () => {
+  const lines = Array.from({ length: 30 }, (_, i) => `line ${i}`);
+  const h = makeCard({ lines, rows: 24 });
+  for (let i = 0; i < 17; i++) h.card.handleInput("\x1b[1;1:2B"); // held down arrow
+  // 17 downs with 16 content rows: scrollTop 2, first visible line is 3
+  // (1-based, right-aligned in the 2-digit gutter).
+  assert.ok(h.card.render(40).map(strip)[1].startsWith("│ 3"), "held repeat-form arrow scrolled the viewport");
+});
 
 test("kitty CSI-u ctrl+j and shift+enter insert a newline in comment mode", () => {
   const h = makeCard({ lines: ["alpha", "beta"] });

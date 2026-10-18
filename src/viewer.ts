@@ -120,6 +120,31 @@ function cardModeOf(mode: ViewerMode): CardMode {
   return mode;
 }
 
+// Kitty keyboard protocol event-type 2 (repeat) sequences rewritten to the
+// equivalent press form, so held functional keys repeat under pi-tui's kitty
+// mode (presses arrive legacy, repeats arrive as event type 2). The rewrite
+// fires only when the ENTIRE input is exactly one repeat sequence (single
+// anchored match, never a global replace): the `:<event>` field is dropped,
+// and a modifier field of 1 (no real modifier) is dropped too - for the
+// letter-final form a surviving bare parameter "1" is dropped with it,
+// collapsing to "\x1b[A" rather than "\x1b[1A". Real modifiers (field > 1)
+// are kept, only the event field is stripped. Everything else passes through
+// unchanged (presses, releases - filtered upstream anyway, plain text, and
+// the bracketed-paste brackets \x1b[200~ / \x1b[201~).
+const KITTY_REPEAT = /^\x1b\[(\d+);(\d+):2([A-Za-z~u])$/;
+
+export function normalizeKeyRepeat(data: string): string {
+  const m = KITTY_REPEAT.exec(data);
+  if (m === null) return data;
+  const [, first, mod, final] = m;
+  if (mod === "1") {
+    // Letter-final form: "\x1b[1;1:2A" collapses to "\x1b[A"; tilde and
+    // CSI-u forms keep their leading parameter ("\x1b[5;1:2~" -> "\x1b[5~").
+    return first === "1" && final !== "~" && final !== "u" ? `\x1b[${final}` : `\x1b[${first}${final}`;
+  }
+  return `\x1b[${first};${mod}${final}`;
+}
+
 export class AnnotateCard implements Component, Focusable {
   focused = false;
   private readonly tui: TUI;
@@ -246,6 +271,9 @@ export class AnnotateCard implements Component, Focusable {
   }
 
   handleInput(data: string): void {
+    // Kitty repeat sequences become presses first (held arrows must scroll);
+    // then the legacy normalization below maps escape/ctrl+j flavors.
+    data = normalizeKeyRepeat(data);
     // Terminals in kitty keyboard mode deliver the Escape key as a CSI-u
     // sequence (e.g. "\x1b[27u") instead of a bare "\x1b", and modifier
     // combinations like ctrl+j / shift+enter as CSI-u too. Normalize every
