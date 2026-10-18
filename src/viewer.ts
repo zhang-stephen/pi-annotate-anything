@@ -13,7 +13,7 @@ import type { Theme } from "@earendil-works/pi-coding-agent";
 import type { Component, Focusable, TUI } from "@earendil-works/pi-tui";
 import { matchesKey, sliceByColumn, visibleWidth } from "@earendil-works/pi-tui";
 
-import { commentBoxPlacement, frameCommentBox, framePanel, spliceRow } from "./card-chrome.ts";
+import { commentBoxPlacement, frameCommentBox, framePanel, PAD_X, spliceRow } from "./card-chrome.ts";
 import type { ChromeColors } from "./card-chrome.ts";
 import { INVERSE_OFF, INVERSE_ON, withCursorCell, wrapCommentLines } from "./comment-input.ts";
 import { rawColToDisplayCol, sliceWindow, tabExpanded } from "./display.ts";
@@ -265,6 +265,10 @@ export class AnnotateCard implements Component, Focusable {
   render(width: number): string[] {
     const inner = width - 2; // one border column on each side
     this.renderedInner = inner;
+    // Content budget between the padding columns framePanel reserves inside
+    // the vertical borders (PAD_X): every content width below derives from
+    // it so no rendered cell touches a border glyph.
+    const contentW = inner - 2 * PAD_X;
     const vh = this.viewportHeight();
     const lines = this.file.lines;
     const first = Math.min(Math.max(this.state.scrollTop, 0), Math.max(0, lines.length - 1));
@@ -279,17 +283,17 @@ export class AnnotateCard implements Component, Focusable {
     // (e.g. a terminal resize without a keypress), so it is re-clamped
     // against THIS frame's content width before slicing any row.
     const gutterW = gutterWidth(lines.length);
-    const cw = Math.max(1, inner - gutterW);
+    const cw = Math.max(1, contentW - gutterW);
     const sl = clampScrollLeft(this.state.scrollLeft ?? 0, this.maxLineWidth, cw);
-    // Content rows are windowed to the inner width, then space-padded to it
-    // so the floating comment box can replace exact display-column slices
-    // below.
+    // Content rows are windowed to the content width, then space-padded to
+    // it so the floating comment box can replace exact display-column
+    // slices below.
     const rows: string[] = [];
     for (let i = first; i < last; i++) {
-      rows.push(this.renderRow(i, selection, cursorOn, emphasis, sl, cw, inner));
+      rows.push(this.renderRow(i, selection, cursorOn, emphasis, sl, cw, contentW));
     }
-    if (this.state.mode === "comment") this.overlayCommentBox(rows, first, inner, sl);
-    else if (this.state.mode === "normal" && this.state.previewOn) this.overlayPreview(rows, first, inner, sl);
+    if (this.state.mode === "comment") this.overlayCommentBox(rows, first, contentW, sl);
+    else if (this.state.mode === "normal" && this.state.previewOn) this.overlayPreview(rows, first, contentW, sl);
 
     const count = this.pending().length;
     const title = "Annotate: " + displayPath(this.file.path, this.cwd) + (count > 0 ? ` (${count})` : "");
@@ -317,16 +321,17 @@ export class AnnotateCard implements Component, Focusable {
         cursor: { line: this.state.cursor.line + 1, col: rawColToDisplayCol(cursorLine, this.state.cursor.col) + 1 },
         selection: statusSel,
       },
-      inner,
+      contentW,
       this.colors,
     );
-    const cmdline = renderCommandLine({ kind: "hints", mode: cardModeOf(this.state.mode) }, inner, this.colors);
+    const cmdline = renderCommandLine({ kind: "hints", mode: cardModeOf(this.state.mode) }, contentW, this.colors);
     return framePanel(rows, width, { title, footers: [statusline, cmdline], colors: this.colors });
   }
 
   // One content row, windowed horizontally: the gutter stays fixed while the
   // already-styled line is sliced to the display-column window [sl, sl+cw)
-  // (strict, so a wide char straddling an edge is dropped whole and the row
+  // (strict, so a wide char straddling the left edge becomes a placeholder
+  // space and one straddling the right edge is dropped whole, and the row
   // is never half-rendered). No edge indicators: vim's default listchars
   // enables neither 'extends' nor 'precedes', and sandbox trials showed the
   // chevron/dots caused more confusion than value. The inverse cursor cell
@@ -339,7 +344,7 @@ export class AnnotateCard implements Component, Focusable {
     emphasis: Map<Range, SpanStyle>,
     sl: number,
     cw: number,
-    inner: number,
+    contentW: number,
   ): string {
     const styled = this.renderLine(line, selection, cursorOn, emphasis);
     const windowed = sliceWindow(styled, sl, Math.max(0, cw));
@@ -348,7 +353,7 @@ export class AnnotateCard implements Component, Focusable {
     // slice; reset explicitly so inverse/underline cannot bleed into the
     // padding that follows.
     const row = this.gutter(line) + windowed + (windowed.includes("\x1b[") ? "\x1b[0m" : "");
-    return row + " ".repeat(Math.max(0, inner - visibleWidth(row)));
+    return row + " ".repeat(Math.max(0, contentW - visibleWidth(row)));
   }
 
   handleInput(data: string): void {
@@ -403,14 +408,15 @@ export class AnnotateCard implements Component, Focusable {
   }
 
   // Content width for the reducer's horizontal follow: the latest render's
-  // inner width minus the gutter. Before the first render() the inner width
-  // is estimated from the same terminal-size source viewportHeight() uses
-  // (the 80% overlay budget of the terminal width, minus the 2 border
-  // columns); a wrong estimate only mis-aims one follow step - the next
-  // cursor-moving key re-clamps against the freshly rendered width.
+  // inner width minus the padding columns and the gutter. Before the first
+  // render() the inner width is estimated from the same terminal-size source
+  // viewportHeight() uses (the 80% overlay budget of the terminal width,
+  // minus the 2 border columns); a wrong estimate only mis-aims one follow
+  // step - the next cursor-moving key re-clamps against the freshly rendered
+  // width.
   private contentWidth(): number {
     const inner = this.renderedInner ?? Math.floor(this.tui.terminal.columns * 0.8) - 2;
-    return Math.max(1, inner - gutterWidth(this.file.lines.length));
+    return Math.max(1, inner - 2 * PAD_X - gutterWidth(this.file.lines.length));
   }
 
   // Renders the floating comment box over the content rows: occluded rows
@@ -419,7 +425,7 @@ export class AnnotateCard implements Component, Focusable {
   // selection). The editor box is fixed-width with soft-wrapped content and
   // an emulated inverse cursor; painting and placement are shared with the
   // normal-mode preview via paintCommentBox.
-  private overlayCommentBox(rows: string[], first: number, inner: number, sl: number): void {
+  private overlayCommentBox(rows: string[], first: number, contentW: number, sl: number): void {
     const sel = this.activeSelection();
     const anchor = sel
       ? { topLine: sel.startLine, bottomLine: sel.endLine, colLine: sel.startLine, rawCol: sel.startCol }
@@ -430,10 +436,11 @@ export class AnnotateCard implements Component, Focusable {
         rawCol: this.state.cursor.col,
       };
     // Fixed-width editor: the box never resizes while typing; the text
-    // soft-wraps to the box's inner content width instead.
-    const boxW = Math.min(inner, EDITOR_BOX_MAX_WIDTH);
+    // soft-wraps to the box's content budget (its width minus the 2 borders
+    // and the PAD_X padding) instead.
+    const boxW = Math.min(contentW, EDITOR_BOX_MAX_WIDTH);
     const text = this.state.comment?.text ?? "";
-    const wrapped = wrapCommentLines(text, Math.max(1, boxW - 2), text.length);
+    const wrapped = wrapCommentLines(text, Math.max(1, boxW - 2 - 2 * PAD_X), text.length);
     // Height = wrapped rows + 2 borders, capped at 8 rows (and at what the
     // viewport can hold). The scroll window keeps the cursor's row visible.
     const maxInner = Math.min(EDITOR_MAX_INNER_ROWS, Math.max(1, Math.min(wrapped.lines.length, rows.length - 2)));
@@ -443,7 +450,7 @@ export class AnnotateCard implements Component, Focusable {
     if (cursorRow >= 0 && cursorRow < shown.length) {
       shown[cursorRow] = withCursorCell(shown[cursorRow], wrapped.cursorCol);
     }
-    this.paintCommentBox(rows, first, inner, shown, boxW, anchor, COMMENT_BOX_TITLE, sl);
+    this.paintCommentBox(rows, first, contentW, shown, boxW, anchor, COMMENT_BOX_TITLE, sl);
   }
 
   // Normal-mode hover preview: read-only Comment box for the CURRENT cycle
@@ -455,7 +462,7 @@ export class AnnotateCard implements Component, Focusable {
   // cursor is rendered (read-only). The render caller gates on previewOn, so
   // preview-off renders nothing; comment mode never reaches here, so the
   // edit flow replaces the preview.
-  private overlayPreview(rows: string[], first: number, inner: number, sl: number): void {
+  private overlayPreview(rows: string[], first: number, contentW: number, sl: number): void {
     const stack = stackAtCursor(this.state.cursor.line, this.state.cursor.col, this.pendingDrafts());
     if (stack.length === 0) return;
     // The same target the reducer edits via c/x: stack[ordinal % length].
@@ -464,8 +471,8 @@ export class AnnotateCard implements Component, Focusable {
     const title = stack.length >= 2 ? `${COMMENT_BOX_TITLE} (${ordinal + 1}/${stack.length})` : COMMENT_BOX_TITLE;
     const capped = draft.comment.split("\n").slice(0, PREVIEW_MAX_INNER_ROWS);
     const widest = Math.max(...capped.map((l) => visibleWidth(l)), 0);
-    const boxW = Math.min(inner, Math.max(widest + 3, title.length + 6));
-    this.paintCommentBox(rows, first, inner, capped, boxW, {
+    const boxW = Math.min(contentW, Math.max(widest + 3 + 2 * PAD_X, title.length + 6));
+    this.paintCommentBox(rows, first, contentW, capped, boxW, {
       topLine: this.state.cursor.line,
       bottomLine: this.state.cursor.line,
       colLine: draft.range.startLine,
@@ -486,7 +493,7 @@ export class AnnotateCard implements Component, Focusable {
   private paintCommentBox(
     rows: string[],
     first: number,
-    inner: number,
+    contentW: number,
     textLines: string[],
     boxW: number,
     anchor: { topLine: number; bottomLine: number; colLine: number; rawCol: number },
@@ -501,8 +508,9 @@ export class AnnotateCard implements Component, Focusable {
     const selBottom = anchorRow(anchor.bottomLine);
     const selCol = gutterWidth(this.file.lines.length) + rawColToDisplayCol(this.file.lines[anchor.colLine] ?? "", anchor.rawCol) - sl;
     // commentBoxPlacement clamps the box inside the viewport [0, viewH - boxH]
-    // and against the right border, so border and footer rows stay clear.
-    const place = commentBoxPlacement(selTop, selBottom, selCol, box.length, boxW, inner, vh);
+    // and against the content budget, so border, padding, and footer rows
+    // stay clear.
+    const place = commentBoxPlacement(selTop, selBottom, selCol, box.length, boxW, contentW, vh);
     // Degenerate viewports of 1-2 rows cannot fit the 3-row minimum box; the
     // placement clamps the top, and rows past the viewport stay untouched.
     for (let k = 0; k < box.length; k++) {

@@ -42,11 +42,24 @@ test("framePanel draws rounded borders, embedded title, footers as last inner ro
   const rows = framePanel(["ab", "cd"], 10, { title: "T", footers: ["F"], colors });
   assert.deepEqual(rows, [
     "bg(b(╭─ T ────╮))",
-    "bg(b(│)ab      b(│))",
-    "bg(b(│)cd      b(│))",
-    "bg(b(│)F       b(│))",
+    "bg(b(│) ab     b(│))",
+    "bg(b(│) cd     b(│))",
+    "bg(b(│) F      b(│))",
     "bg(b(╰────────╯))",
   ]);
+});
+
+test("inner rows keep one blank padding column inside each border at any width", () => {
+  // Widths where the 8-column content fits the budget (width - 2 - 2 * PAD_X >= 8);
+  // framePanel never rewrites overlong content, so degenerate widths are out of
+  // scope for this invariant.
+  for (const width of [12, 13, 16, 20, 40]) {
+    const rows = framePanel(["abcdefgh"], width, { colors: plain });
+    const inner = rows[1];
+    assert.equal(visibleWidth(inner), width);
+    assert.equal(inner[1], " ");
+    assert.equal(inner[width - 2], " ");
+  }
 });
 
 test("framePanel pads every row to the full display width (wide chars count 2)", () => {
@@ -56,7 +69,7 @@ test("framePanel pads every row to the full display width (wide chars count 2)",
     assert.equal(visibleWidth(row), 12);
   }
   assert.equal(rows[0], "╭─ T ──────╮");
-  assert.equal(rows[2], "│中文      │");
+  assert.equal(rows[2], "│ 中文     │");
 });
 
 test("framePanel left-truncates overlong titles keeping the tail", () => {
@@ -74,7 +87,7 @@ test("framePanel truncates wide-char titles by display width", () => {
 
 test("framePanel omits the title and footers when not given", () => {
   const rows = framePanel(["x"], 8, { colors: plain });
-  assert.deepEqual(rows, ["╭──────╮", "│x     │", "╰──────╯"]);
+  assert.deepEqual(rows, ["╭──────╮", "│ x    │", "╰──────╯"]);
 });
 
 test("framePanel renders footers in order, one inner row each", () => {
@@ -83,9 +96,9 @@ test("framePanel renders footers in order, one inner row each", () => {
   const rows = framePanel(["ab"], 10, { title: "T", footers: ["S", "C"], colors });
   assert.deepEqual(rows, [
     "bg(b(╭─ T ────╮))",
-    "bg(b(│)ab      b(│))",
-    "bg(b(│)S       b(│))",
-    "bg(b(│)C       b(│))",
+    "bg(b(│) ab     b(│))",
+    "bg(b(│) S      b(│))",
+    "bg(b(│) C      b(│))",
     "bg(b(╰────────╯))",
   ]);
 });
@@ -93,7 +106,7 @@ test("framePanel renders footers in order, one inner row each", () => {
 test("framePanel keeps footer geometry on ANSI-styled content", () => {
   const rows = framePanel(["a"], 12, { footers: ["\x1b[2mESC Esc\x1b[22m"], colors: plain });
   assert.equal(rows.length, 4);
-  assert.equal(rows[2], "│\x1b[2mESC Esc\x1b[22m   │");
+  assert.equal(rows[2], "│ \x1b[2mESC Esc\x1b[22m  │");
   assert.equal(visibleWidth(rows[2]), 12);
 });
 
@@ -103,17 +116,18 @@ test("frameCommentBox draws a bordered box with embedded title and padded rows",
   const rows = frameCommentBox(["hello", "world"], 14, colors, "Comment");
   assert.deepEqual(rows, [
     "bg(b(╭─ Comment ──╮))",
-    "bg(b(│)hello       b(│))",
-    "bg(b(│)world       b(│))",
+    "bg(b(│) hello      b(│))",
+    "bg(b(│) world      b(│))",
     "bg(b(╰────────────╯))",
   ]);
 });
 
 test("frameCommentBox truncates long lines by display width", () => {
   const rows = frameCommentBox(["abcdefghijklmnopqrstuvwxyz"], 14, plain, "C");
-  // truncateToWidth fills with the pi-tui default ellipsis; it wraps the
-  // ellipsis in ANSI resets, so compare the ANSI-stripped form.
-  assert.equal(stripTerminalSequences(rows[1]), "│abcdefghi...│");
+  // Inner lines truncate to the padded content budget (width - 2 - 2 * PAD_X);
+  // truncateToWidth fills with the pi-tui default ellipsis, which it wraps in
+  // ANSI resets, so compare the ANSI-stripped form.
+  assert.equal(stripTerminalSequences(rows[1]), "│ abcdefg... │");
   assert.equal(visibleWidth(rows[1]), 14);
 });
 
@@ -121,10 +135,10 @@ test("frameCommentBox backgrounds every row and pads wide-char content", () => {
   const rows = frameCommentBox(["中文"], 12, colors, "");
   assert.equal(rows.length, 3);
   assert.equal(rows[0], "bg(b(╭──────────╮))");
-  assert.equal(rows[1], "bg(b(│)中文      b(│))");
+  assert.equal(rows[1], "bg(b(│) 中文     b(│))");
   assert.equal(rows[2], "bg(b(╰──────────╯))");
-  // The exact strings above already pin the padding (中文 + 6 spaces fills
-  // the 10-column interior), so no separate width loop is needed here.
+  // The exact strings above already pin the padding (中文 + 6 padding columns
+  // fill the 10-column interior), so no separate width loop is needed here.
 });
 
 // commentBoxPlacement -----------------------------------------------------------
