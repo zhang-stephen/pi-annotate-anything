@@ -1068,3 +1068,101 @@ test("comment box borders stay column-aligned when a cut straddles a wide char",
   assert.equal(bot, 19, `bottom border column, row: ${JSON.stringify(rows[5])}`);
   for (const [i, r] of raw.entries()) assert.equal(visibleWidth(r), 120, `row ${i} width`);
 });
+
+// Search highlight and wiring -------------------------------------------------
+//
+// Task 5: matches of the live query (search mode) or lastSearch style as
+// theme accent fg + SGR 1 bold ("match"), composing with pending underlines
+// and losing to inverse selections; the bottom area switches to the / input
+// in search mode, shows the [rank/total] segment, and renders transient
+// reducer messages right-aligned for exactly one keypress.
+
+// The match composite over "foo": accent fg wraps SGR 1 bold. FG_ON+BOLD_ON
+// adjacency is unique to match spans in a rendered row (cursor/selection is
+// raw inverse, pending is raw SGR 4/2), so it also serves as a position
+// anchor for column assertions.
+const MATCH_FOO = FG_ON + BOLD_ON + "foo" + INTENSITY_OFF + FG_OFF;
+
+// Runs "foo" through the real search flow (/foo<Enter>): lastSearch stored,
+// the incremental jump parks the cursor on the first match's first cell.
+function searchFoo(h: CardHarness): CardHarness {
+  for (const key of ["/", "f", "o", "o", "\r"]) h.card.handleInput(key);
+  return h;
+}
+
+test("highlight: matches of lastSearch are styled on tabbed and CJK lines", () => {
+  const h = searchFoo(makeCard({ lines: ["\tfoo bar", "\u4e2dfoo"] }));
+  h.card.handleInput("h"); // park the cursor on the tab cell, off the match
+  const rows = h.card.render(80);
+  assert.ok(rows[1].includes(MATCH_FOO), `line 0 match styled, got: ${JSON.stringify(strip(rows[1]))}`);
+  assert.ok(rows[2].includes(MATCH_FOO), `line 1 match styled, got: ${JSON.stringify(strip(rows[2]))}`);
+  // Column proof: the styled wrap starts at the match's DISPLAY column -
+  // col 4 on the tabbed line (tab -> stop 4) and col 2 on the CJK line (the
+  // wide char counts 2) - behind the frame prefix (2) and the 6-wide gutter.
+  const startCol = (row: string) => visibleWidth(row.slice(0, row.indexOf(FG_ON + BOLD_ON))) - 2 - gutterWidth(2);
+  assert.equal(startCol(rows[1]), 4, `match at display col 4 on the tabbed line, got: ${JSON.stringify(strip(rows[1]))}`);
+  assert.equal(startCol(rows[2]), 2, `match at display col 2 on the CJK line, got: ${JSON.stringify(strip(rows[2]))}`);
+});
+
+test("highlight: match composes with pending underline, loses to inverse selection", () => {
+  const h = searchFoo(makeCard({ lines: ["\tfoo bar", "beta"] }));
+  const r = { startLine: 0, startCol: 1, endLine: 0, endCol: 4 }; // exactly the match
+  h.pending.push(r);
+  h.drafts.push({ token: "[a.ts:2-5]", range: r, comment: "note" });
+  h.card.handleInput("j"); // cursor line 1, off the draft: plain underline
+  const row = h.card.render(80)[1];
+  assert.ok(
+    row.includes(UNDERLINE_ON + MATCH_FOO + UNDERLINE_OFF),
+    `pending underline and match style wrap the same segment, got: ${JSON.stringify(strip(row))}`,
+  );
+  // Selection over the match: the segment renders inverse (selection wins).
+  h.pending.pop();
+  h.drafts.pop();
+  h.card.handleInput("k"); // cursor back to line 0 col 1, the match start
+  h.card.handleInput("v"); // anchor there
+  h.card.handleInput("l");
+  h.card.handleInput("l");
+  h.card.handleInput("l"); // selection [1,5) covers the match; the cursor cell
+  // parks past its end so the match renders as ONE segment (no cell split).
+  const selRow = h.card.render(80)[1];
+  assert.ok(
+    selRow.includes("\x1b[7m" + MATCH_FOO + "\x1b[27m"),
+    `the selected match renders inverse over the match style, got: ${JSON.stringify(strip(selRow))}`,
+  );
+});
+
+test("highlight: persists in comment mode (hlsearch)", () => {
+  const h = searchFoo(makeCard({ lines: ["foo", "a", "b", "c", "d", "foo"] }));
+  h.card.handleInput("v");
+  h.card.handleInput("c"); // comment mode over the line-0 selection
+  const rows = h.card.render(80);
+  // The box floats below the selection start (line 0); the second match on
+  // line 5 stays visible and keeps the match style.
+  assert.ok(rows[6].includes(MATCH_FOO), `match style survives into comment mode, got: ${JSON.stringify(strip(rows[6]))}`);
+});
+
+test("wiring: search mode renders the cmdline input and the [rank/total] segment", () => {
+  const h = makeCard({ lines: ["foo", "bar foo"] });
+  for (const key of ["/", "f", "o", "o"]) h.card.handleInput(key); // typing, not submitted
+  const rows = h.card.render(80);
+  const bare = rows.map(strip);
+  // Statusline: search badge with the rank segment (cursor on match 1 of 2).
+  assert.ok(bare[3].includes("-- SEARCH --"), `search badge, got: ${bare[3]}`);
+  assert.ok(bare[3].includes("[1/2]"), `rank segment, got: ${bare[3]}`);
+  // Cmdline: the / input with the query and the emulated inverse cursor.
+  assert.ok(bare[4].startsWith("│ /foo"), `cmdline input, got: ${bare[4]}`);
+  assert.ok(rows[4].includes("\x1b[7m \x1b[27m"), "inverse cmdline cursor cell");
+});
+
+test("wiring: a transient message renders right-aligned and clears on the next key", () => {
+  const h = searchFoo(makeCard({ lines: ["foo", "x foo"] })); // cursor on match 1
+  h.card.handleInput("n"); // match 2, no wrap
+  h.card.handleInput("n"); // wraps to match 1: the reducer sets the wrap message
+  const bare = h.card.render(80).map(strip);
+  assert.ok(bare[4].includes("search hit BOTTOM, continuing at TOP"), `wrap message shown, got: ${bare[4]}`);
+  assert.ok(bare[4].endsWith("search hit BOTTOM, continuing at TOP │"), `message right-aligned, got: ${bare[4]}`);
+  h.card.handleInput("l"); // any next key drops the message
+  const after = h.card.render(80).map(strip);
+  assert.ok(!after[4].includes("search hit BOTTOM"), `message cleared, got: ${after[4]}`);
+  assert.ok(after[4].includes("hjkl move"), "hints restored");
+});

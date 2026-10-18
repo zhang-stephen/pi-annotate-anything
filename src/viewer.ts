@@ -18,6 +18,7 @@ import type { ChromeColors } from "./card-chrome.ts";
 import { INVERSE_OFF, INVERSE_ON, withCursorCell, wrapCommentLines } from "./comment-input.ts";
 import { rawColToDisplayCol, sliceWindow, tabExpanded } from "./display.ts";
 import { displayPath } from "./message.ts";
+import { compilePattern, findMatches } from "./search.ts";
 import { normalize } from "./selection.ts";
 import type { Range, VisualMode } from "./selection.ts";
 import { cardModeOf, renderCommandLine, renderStatusLine } from "./status-line.ts";
@@ -94,8 +95,9 @@ export function gutterWidth(lineCount: number): number {
 // Display-column spans to style within one rendered line. Styling functions
 // wrap text segments (SGR attributes are additive with independent resets),
 // so overlapping spans of different styles can nest safely. "target" and
-// "dimUnderline" are the stacked-draft emphases of spec section 2.
-type SpanStyle = "inverse" | "underline" | "target" | "dimUnderline";
+// "dimUnderline" are the stacked-draft emphases of spec section 2; "match"
+// is the hlsearch highlight of the active search pattern.
+type SpanStyle = "inverse" | "underline" | "target" | "dimUnderline" | "match";
 interface StyleSpan {
   start: number; // display column, inclusive
   end: number; // display column, exclusive
@@ -109,7 +111,7 @@ interface StyleSpan {
 // (target > dimUnderline > underline; all three include underline, so the
 // weaker ones are visually redundant) - a dim span nested inside the target
 // would dim the warning fg into invisibility on dark terminals. Inverse
-// (selection/cursor) always composes on top.
+// (selection/cursor) and match (hlsearch) always compose on top.
 function applyStyleSpans(line: string, spans: StyleSpan[], styles: Record<SpanStyle, (s: string) => string>): string {
   const total = visibleWidth(line);
   const clamped = spans
@@ -124,7 +126,7 @@ function applyStyleSpans(line: string, spans: StyleSpan[], styles: Record<SpanSt
     const b = bounds[k + 1];
     const active = [...new Set(clamped.filter((s) => s.start <= a && a < s.end).map((s) => s.style))];
     const strongest = active.includes("target") ? "target" : active.includes("dimUnderline") ? "dimUnderline" : active.includes("underline") ? "underline" : null;
-    const final = active.filter((s) => s === "inverse" || s === strongest);
+    const final = active.filter((s) => s === "inverse" || s === "match" || s === strongest);
     const seg = sliceByColumn(line, a, b - a);
     out += final.reduce((text, s) => styles[s](text), seg);
   }
@@ -226,13 +228,16 @@ export class AnnotateCard implements Component, Focusable {
     // Inverse stays raw ANSI (theme-neutral): the cursor/selection highlight.
     // Pending ranges underline with raw SGR 4; the cycle target's range adds
     // SGR 1 bold + the theme warning fg, and non-target stack members dim
-    // their underline (SGR 2). The pending gutter marker keeps the theme
-    // warning color.
+    // their underline (SGR 2). Search matches (hlsearch) paint the theme
+    // accent fg + SGR 1 bold, a combination no other span uses, so they stay
+    // distinct from pending emphases while composing with them. The pending
+    // gutter marker keeps the theme warning color.
     this.spanStyles = {
       inverse: (s) => INVERSE_ON + s + INVERSE_OFF,
       underline: (s) => UNDERLINE_ON + s + UNDERLINE_OFF,
       target: (s) => this.colors.warning(BOLD_ON + UNDERLINE_ON + s + INTENSITY_OFF + UNDERLINE_OFF),
       dimUnderline: (s) => DIM_ON + UNDERLINE_ON + s + INTENSITY_OFF + UNDERLINE_OFF,
+      match: (s) => this.colors.accent(BOLD_ON + s + INTENSITY_OFF),
     };
     // Tabs are expanded PER LINE before highlighting so display columns agree
     // between the highlighted content and the raw/selection rendering below
@@ -256,6 +261,10 @@ export class AnnotateCard implements Component, Focusable {
       visualMode: "char",
       editingDraftId: null,
       previewOn: true,
+      search: null,
+      lastSearch: null,
+      count: null,
+      message: null,
     };
     // A reduce loop, not Math.max(...lines.map(...)): the spread form throws
     // RangeError past V8's argument-count limit on very large files.
@@ -279,6 +288,44 @@ export class AnnotateCard implements Component, Focusable {
     // Target emphasis is resolved once per frame (normal mode only): the
     // cycle target's ranges vs the other stacked drafts (spec section 2).
     const emphasis = this.pendingEmphasis();
+    // Search highlight (hlsearch) is resolved once per frame: search mode
+    // follows the live query (empty skips), every other mode repeats the
+    // last submitted pattern (null skips). One compile + one scan per
+    // render; an invalid pattern renders no highlight (its error already
+    // shows as the cmdline message). Each match maps to a display-column
+    // span via rawColToDisplayCol on its raw columns; zero-width spans drop
+    // out in applyStyleSpans' end > start filter - intended.
+    const query = this.state.mode === "search" ? this.state.search?.query ?? "" : this.state.lastSearch ?? null;
+    const matchSpans = new Map<number, StyleSpan[]>();
+    let searchStatus: StatusLineInput["search"] = null;
+    if (query !== null && query !== "") {
+      const compiled = compilePattern(query);
+      if (compiled.ok) {
+        const matches = findMatches(lines, compiled.re);
+        for (const m of matches) {
+          const raw = lines[m.line] ?? "";
+          const spans = matchSpans.get(m.line);
+          const span: StyleSpan = {
+            start: rawColToDisplayCol(raw, m.startCol),
+            end: rawColToDisplayCol(raw, m.endCol),
+            style: "match",
+          };
+          if (spans === undefined) matchSpans.set(m.line, [span]);
+          else spans.push(span);
+        }
+        // Segment input (normal with a lastSearch, and search modes only):
+        // rank is the 1-based index of the match containing the cursor;
+        // zero-width matches never contain it, and 0 means the cursor sits
+        // on no match.
+        if (this.state.mode === "normal" || this.state.mode === "search") {
+          const rank = matches.findIndex((m) =>
+            m.line === this.state.cursor.line && m.startCol <= this.state.cursor.col
+              && this.state.cursor.col < m.endCol
+          ) + 1;
+          searchStatus = { pattern: query, rank, total: matches.length };
+        }
+      }
+    }
     // Horizontal window for this frame: the state's scrollLeft can be stale
     // (e.g. a terminal resize without a keypress), so it is re-clamped
     // against THIS frame's content width before slicing any row.
@@ -290,7 +337,7 @@ export class AnnotateCard implements Component, Focusable {
     // slices below.
     const rows: string[] = [];
     for (let i = first; i < last; i++) {
-      rows.push(this.renderRow(i, selection, cursorOn, emphasis, sl, cw, contentW));
+      rows.push(this.renderRow(i, selection, cursorOn, emphasis, matchSpans.get(i) ?? [], sl, cw, contentW));
     }
     if (this.state.mode === "comment") this.overlayCommentBox(rows, first, contentW, sl);
     else if (this.state.mode === "normal" && this.state.previewOn) this.overlayPreview(rows, first, contentW, sl);
@@ -320,11 +367,27 @@ export class AnnotateCard implements Component, Focusable {
         mode: cardModeOf(this.state.mode),
         cursor: { line: this.state.cursor.line + 1, col: rawColToDisplayCol(cursorLine, this.state.cursor.col) + 1 },
         selection: statusSel,
+        search: searchStatus,
       },
       contentW,
       this.colors,
     );
-    const cmdline = renderCommandLine({ kind: "hints", mode: cardModeOf(this.state.mode) }, contentW, this.colors);
+    // Cmdline: search mode shows the / input itself (the emulated cursor
+    // cell rides at the end of the query); every other mode shows the
+    // per-mode hints, carrying the reducer's transient message (it survives
+    // exactly one render, right-aligned).
+    const searchInput = this.state.mode === "search" ? this.state.search ?? null : null;
+    const cmdline = searchInput !== null
+      ? renderCommandLine(
+        { kind: "input", prompt: "/", value: searchInput.query, cursorCol: searchInput.query.length },
+        contentW,
+        this.colors,
+      )
+      : renderCommandLine(
+        { kind: "hints", mode: cardModeOf(this.state.mode), message: this.state.message ?? null },
+        contentW,
+        this.colors,
+      );
     return framePanel(rows, width, { title, footers: [statusline, cmdline], colors: this.colors });
   }
 
@@ -342,11 +405,12 @@ export class AnnotateCard implements Component, Focusable {
     selection: Range | null,
     cursorOn: boolean,
     emphasis: Map<Range, SpanStyle>,
+    matchSpans: StyleSpan[],
     sl: number,
     cw: number,
     contentW: number,
   ): string {
-    const styled = this.renderLine(line, selection, cursorOn, emphasis);
+    const styled = this.renderLine(line, selection, cursorOn, emphasis, matchSpans);
     const windowed = sliceWindow(styled, sl, Math.max(0, cw));
     // A span ending exactly at the window's right edge (e.g. the inverse
     // cursor cell on the last window cell) loses its closing SGR to the
@@ -577,11 +641,20 @@ export class AnnotateCard implements Component, Focusable {
   }
 
   // One file line: highlighted content unless the selection covers the line
-  // (selection display wins), then pending underlines (plain, or the frame's
-  // target/dim emphasis where the map says so), then the cursor cell.
-  private renderLine(line: number, selection: Range | null, cursorOn: boolean, emphasis: Map<Range, SpanStyle>): string {
+  // (selection display wins), then search matches, pending underlines (plain,
+  // or the frame's target/dim emphasis where the map says so), then the
+  // cursor cell.
+  private renderLine(
+    line: number,
+    selection: Range | null,
+    cursorOn: boolean,
+    emphasis: Map<Range, SpanStyle>,
+    matchSpans: StyleSpan[],
+  ): string {
     const raw = this.file.lines[line] ?? "";
-    const spans: StyleSpan[] = [];
+    // Search matches go first so the later spans wrap around them: inverse
+    // stays the outermost style on any cell it covers.
+    const spans: StyleSpan[] = [...matchSpans];
 
     let base: string;
     if (selection !== null && line >= selection.startLine && line <= selection.endLine) {
