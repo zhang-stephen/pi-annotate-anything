@@ -9,6 +9,10 @@
 import { sliceByColumn, truncateToWidth, visibleWidth } from "@earendil-works/pi-tui";
 
 
+// Blank columns reserved inside the left and right borders of every framed
+// row, so content never touches the border glyphs.
+export const PAD_X = 1;
+
 // Color functions the chrome needs, mapped from the active pi theme by the
 // caller. bg fills full rows, border paints border glyphs; dim, accent, and
 // warning style footer hints, mode badges, and pending markers on the
@@ -44,12 +48,12 @@ function topBorder(width: number, title: string | undefined): string {
   return "╭─ " + kept + " " + dashes + "╮";
 }
 
-// One inner row: border gutters around content padded with spaces to the
-// full display width (ANSI-aware via visibleWidth), the whole row
-// background-filled so nothing behind the panel bleeds through.
+// One inner row: PAD_X blank columns inside each border, content padded with
+// spaces to the full display width (ANSI-aware via visibleWidth), the whole
+// row background-filled so nothing behind the panel bleeds through.
 function innerRow(content: string, width: number, colors: ChromeColors): string {
-  const pad = " ".repeat(Math.max(0, width - 2 - visibleWidth(content)));
-  return colors.bg(colors.border("│") + content + pad + colors.border("│"));
+  const pad = " ".repeat(Math.max(0, width - 2 - 2 * PAD_X - visibleWidth(content)));
+  return colors.bg(colors.border("│") + " ".repeat(PAD_X) + content + pad + " ".repeat(PAD_X) + colors.border("│"));
 }
 
 function bottomBorder(width: number): string {
@@ -59,8 +63,9 @@ function bottomBorder(width: number): string {
 // Frames the panel rows: rounded border with an optional embedded title in
 // the top border, each row padded to the full display width and passed
 // through colors.bg, and the footer rows (when given) as the last inner
-// rows in order. Rows are expected to fit the inner width; overlong rows
-// get zero padding rather than being silently rewritten.
+// rows in order. Rows are expected to fit the content budget (width - 2 -
+// 2 * PAD_X); overlong rows get zero padding rather than being silently
+// rewritten.
 export function framePanel(rows: string[], width: number, opts: PanelOptions): string[] {
   const out: string[] = [opts.colors.bg(opts.colors.border(topBorder(width, opts.title)))];
   for (const row of rows) out.push(innerRow(row, width, opts.colors));
@@ -70,11 +75,11 @@ export function framePanel(rows: string[], width: number, opts: PanelOptions): s
 }
 
 // Frames comment-box lines as a bordered sub-panel with an embedded title.
-// Inner lines are truncated to the inner display width (ANSI-aware, with
-// the pi-tui default ellipsis), padded to full width, and every row is
-// background-filled.
+// Inner lines are truncated to the padded content budget (width minus the
+// two borders and the PAD_X padding; ANSI-aware, with the pi-tui default
+// ellipsis), padded to full width, and every row is background-filled.
 export function frameCommentBox(lines: string[], width: number, colors: ChromeColors, title: string): string[] {
-  const inner = width - 2;
+  const inner = width - 2 - 2 * PAD_X;
   const out: string[] = [colors.bg(colors.border(topBorder(width, title)))];
   for (const line of lines) out.push(innerRow(truncateToWidth(line, inner), width, colors));
   out.push(colors.bg(colors.border(bottomBorder(width))));

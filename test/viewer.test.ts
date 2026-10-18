@@ -200,12 +200,12 @@ test("render frames the card: title, statusline+cmdline footers, bottom border, 
   const bare = rows.map(strip);
   assert.equal(rows.length, 6); // top border + 2 content rows + statusline + cmdline + bottom border
   assert.equal(bare[0], "╭─ Annotate: src/a.ts " + "─".repeat(57) + "╮");
-  assert.equal(bare[1], "│1     alpha" + " ".repeat(67) + "│");
+  assert.equal(bare[1], "│ 1     alpha" + " ".repeat(65) + " │");
   // The panel's last two inner rows: statusline (badge + cursor position)
   // above the cmdline (per-mode hints).
-  assert.ok(bare[3].startsWith("│-- NORMAL --"));
-  assert.ok(bare[3].endsWith("1:1│"));
-  assert.ok(bare[4].startsWith("│hjkl move"));
+  assert.ok(bare[3].startsWith("│ -- NORMAL --"));
+  assert.ok(bare[3].endsWith("1:1 │"));
+  assert.ok(bare[4].startsWith("│ hjkl move"));
   assert.equal(bare[5], "╰" + "─".repeat(78) + "╯");
   for (const row of rows) assert.equal(visibleWidth(row), width);
 });
@@ -238,9 +238,9 @@ test("chrome colors come from the theme: fg tokens; background transparent by de
 test("statusline and cmdline follow the mode: badge in accent, hints in dim", () => {
   const normal = makeCard({ lines: ["alpha", "beta"] });
   let bare = normal.card.render(84).map(strip);
-  assert.ok(bare[bare.length - 3].startsWith("│-- NORMAL --"));
-  assert.ok(bare[bare.length - 3].endsWith("1:1│"));
-  assert.ok(bare[bare.length - 2].startsWith("│hjkl move  v/V select"));
+  assert.ok(bare[bare.length - 3].startsWith("│ -- NORMAL --"));
+  assert.ok(bare[bare.length - 3].endsWith("1:1 │"));
+  assert.ok(bare[bare.length - 2].startsWith("│ hjkl move  v/V select"));
   assert.ok(normal.fgCalls.some((c) => c.token === "accent" && c.text === "-- NORMAL --"));
   assert.ok(normal.fgCalls.some((c) => c.token === "dim" && c.text === "hjkl move  v/V select  c/x comment/delete  p preview  q/Esc close"));
 
@@ -251,7 +251,7 @@ test("statusline and cmdline follow the mode: badge in accent, hints in dim", ()
   visual.card.handleInput("l");
   visual.card.handleInput("l");
   bare = visual.card.render(80).map(strip);
-  assert.ok(bare[bare.length - 3].startsWith("│-- VISUAL --"));
+  assert.ok(bare[bare.length - 3].startsWith("│ -- VISUAL --"));
   assert.ok(bare[bare.length - 3].includes("1:1-1:4"));
   assert.ok(visual.fgCalls.some((c) => c.token === "accent" && c.text === "-- VISUAL --"));
   assert.ok(visual.fgCalls.some((c) => c.token === "dim" && c.text === "hjkl extend  o swap  c comment  Esc cancel"));
@@ -261,26 +261,26 @@ test("statusline and cmdline follow the mode: badge in accent, hints in dim", ()
   vline.card.handleInput("V");
   vline.card.handleInput("j");
   bare = vline.card.render(80).map(strip);
-  assert.ok(bare[bare.length - 3].startsWith("│-- VISUAL LINE --"));
+  assert.ok(bare[bare.length - 3].startsWith("│ -- VISUAL LINE --"));
   assert.ok(bare[bare.length - 3].includes("1-2"));
 
   const comment = makeCard({ lines: ["alpha", "beta"] });
   comment.card.handleInput("v");
   comment.card.handleInput("c");
   bare = comment.card.render(80).map(strip);
-  assert.ok(bare[bare.length - 3].startsWith("│-- COMMENT --"));
+  assert.ok(bare[bare.length - 3].startsWith("│ -- COMMENT --"));
   assert.ok(bare[bare.length - 2].includes("Enter submit  ctrl+j newline  Esc cancel"));
 });
 
 // Geometry --------------------------------------------------------------------
 
-test("content rows clip to the inner width (border takes 2 columns)", () => {
+test("content rows clip to the content width (borders + padding take 4 columns)", () => {
   const h = makeCard({ lines: ["x".repeat(60)] });
   const width = 30;
   const bare = h.card.render(width).map(strip);
   assert.equal(bare.length, 5);
   assert.equal(bare[1].length, width);
-  assert.equal(bare[1], "│1     " + "x".repeat(22) + "│"); // cut at the window edge, no indicators
+  assert.equal(bare[1], "│ 1     " + "x".repeat(20) + " │"); // cut at the window edge, no indicators
 });
 
 test("viewport budget subtracts border (2) and statusline+cmdline (2) rows", () => {
@@ -314,12 +314,12 @@ const digitLine = (n: number) => Array.from({ length: n }, (_, i) => String(i % 
 
 test("render windows the content at scrollLeft behind a fixed gutter", () => {
   const h = makeCard({ lines: [digitLine(100)] });
-  h.card.render(30); // inner 28, gutter 6, contentWidth 22
-  for (let i = 0; i < 30; i++) h.card.handleInput("l"); // cursor 30 -> scrollLeft 9
+  h.card.render(30); // inner 28, padding 2, gutter 6, content width 20
+  for (let i = 0; i < 30; i++) h.card.handleInput("l"); // cursor 30 -> scrollLeft 11
   const rows = h.card.render(30);
-  // Window [9, 31) behind the fixed gutter; the cursor (col 30) sits on the
+  // Window [11, 31) behind the fixed gutter; the cursor (col 30) sits on the
   // last window cell.
-  assert.equal(strip(rows[1]), "│1     " + "9012345678901234567890" + "│");
+  assert.equal(strip(rows[1]), "│ 1     " + "12345678901234567890" + " │");
   assert.equal(visibleWidth(rows[1]), 30);
   assert.ok(rows[1].includes("\x1b[7m0\x1b[0m"), "cursor cell on the last window cell");
 });
@@ -327,8 +327,8 @@ test("render windows the content at scrollLeft behind a fixed gutter", () => {
 test("rows are cut at the window's right edge without indicators", () => {
   const h = makeCard({ lines: [digitLine(100)] });
   const rows = h.card.render(30).map(strip);
-  // No scroll: window [0, 22), plain cut - no dots.
-  assert.equal(rows[1], "│1     " + digitLine(22) + "│");
+  // No scroll: window [0, 20), plain cut - no dots.
+  assert.equal(rows[1], "│ 1     " + digitLine(20) + " │");
 });
 
 test("the inverse cursor cell stays visible inside the window", () => {
@@ -343,44 +343,45 @@ test("the inverse cursor cell stays visible inside the window", () => {
 test("wide chars straddling the window edge are dropped whole, rows keep exact width", () => {
   const wide = "a" + "中".repeat(20) + "b"; // display width 42
   const h = makeCard({ lines: [wide] });
-  // scrollLeft 0: the 中 straddling the right edge (cols 21-23 vs window
-  // [0, 22)) is dropped whole, and the row still fills exactly 30 columns.
+  // scrollLeft 0: the 中 straddling the right edge (cols 19-20 vs window
+  // [0, 20)) is dropped whole, and the row still fills exactly 30 columns.
   let rows = h.card.render(30);
-  assert.equal(strip(rows[1]), "│1     " + "a" + "中".repeat(10) + " " + "│");
+  assert.equal(strip(rows[1]), "│ 1     " + "a" + "中".repeat(9) + " " + " │");
   assert.equal(visibleWidth(rows[1]), 30);
-  // scrollLeft 21: the 中 straddling the LEFT edge is dropped whole too. The
-  // row ends with the virtual cursor cell (end-exclusive cursor) plus pad,
-  // both plain spaces once stripped.
+  // scrollLeft 23 (the clamp bound 42 - 20 + 1): the left window edge lands
+  // exactly on a wide-char boundary. The row ends with the virtual cursor
+  // cell (end-exclusive cursor), a plain space once stripped.
   h.card.render(30);
-  for (let i = 0; i < 22; i++) h.card.handleInput("l"); // cursor clamps at 22 (end-exclusive), scrollLeft 21
+  for (let i = 0; i < 22; i++) h.card.handleInput("l"); // cursor clamps at 22 (end-exclusive), scrollLeft 23
   rows = h.card.render(30);
-  assert.equal(strip(rows[1]), "│1     " + "中".repeat(10) + "b " + "│");
+  assert.equal(strip(rows[1]), "│ 1     " + "中".repeat(9) + "b " + " │");
   assert.equal(visibleWidth(rows[1]), 30);
 });
 
 test("render-time clamp: stale scrollLeft beyond the bound renders without overflow", () => {
   const h = makeCard({ lines: ["x".repeat(100)] });
-  h.card.render(30); // contentWidth 22
-  h.card.handleInput("$"); // cursor 100 -> scrollLeft 79 (the clamp bound)
-  // Re-render wider: contentWidth 112 shrinks the bound to 0, so the window
+  h.card.render(30); // contentWidth 20
+  h.card.handleInput("$"); // cursor 100 -> scrollLeft 81 (the clamp bound)
+  // Re-render wider: contentWidth 110 shrinks the bound to 0, so the window
   // must re-clamp at render time (no keypress in between) instead of
   // slicing past the end of the line.
   const rows = h.card.render(120);
-  assert.equal(strip(rows[1]), "│1     " + "x".repeat(100) + " ".repeat(12) + "│");
+  assert.equal(strip(rows[1]), "│ 1     " + "x".repeat(100) + " ".repeat(11) + "│");
   assert.equal(visibleWidth(rows[1]), 120);
 });
 
 test("comment box anchors to the scroll-corrected display column", () => {
   const h = makeCard({ lines: ["x".repeat(120)] });
-  h.card.render(100); // inner 98, gutter 6, contentWidth 92
+  h.card.render(100); // inner 98, padding 2, gutter 6, content width 90
   for (let i = 0; i < 20; i++) h.card.handleInput("l"); // cursor 20, scrollLeft 0
   h.card.handleInput("v"); // anchor at col 20
-  for (let i = 0; i < 81; i++) h.card.handleInput("l"); // cursor 101 -> scrollLeft 10
+  for (let i = 0; i < 81; i++) h.card.handleInput("l"); // cursor 101 -> scrollLeft 12
   h.card.handleInput("c"); // comment box anchored at the selection start
   const row = h.card.render(100)[1];
-  // selCol = gutter 6 + display col 20 - scrollLeft 10 = 16. Without the
+  // selCol = gutter 6 + display col 20 - scrollLeft 12 = 14. Without the
   // scrollLeft correction the box would anchor at 26 (raw file coordinates).
-  assert.equal(strip(row).indexOf("╭─ Comment"), 1 + 16);
+  // Stripped row column: border 1 + pad 1 + selCol 14 = 16.
+  assert.equal(strip(row).indexOf("╭─ Comment"), 2 + 14);
   assert.equal(visibleWidth(row), 100);
 });
 
@@ -391,8 +392,9 @@ test("comment box anchors to the scroll-corrected display column", () => {
 // (6 content rows), keeping the cursor's row visible. The read-only preview
 // box stays content-sized with a 6-row cap.
 
-// The editor box at width 80: inner 78, boxW 64, gutter 4 -> left edge 4;
-// top border "╭─ Comment " + 52 dashes + "╮"; right sliver 78 - 4 - 64 = 10.
+// The editor box at width 80: content width 76 (inner minus the border
+// padding), boxW 64, gutter 6 -> left edge 6 in content coordinates;
+// top border "╭─ Comment " + 52 dashes + "╮"; right sliver 76 - 6 - 64 = 6.
 const EDITOR_TOP = "╭─ Comment " + "─".repeat(52) + "╮";
 const EDITOR_BOTTOM = "╰" + "─".repeat(62) + "╯";
 
@@ -408,13 +410,13 @@ test("comment editor box has a fixed 64-column width (empty, no growing while ty
   const bare = renderCommentMode(h, 80);
   // Box floats below the selection (content row 1), left edge at the gutter:
   // the first gutter columns of the occluded row (its gutter) stay visible.
-  assert.equal(bare[2], "│2     " + EDITOR_TOP + " ".repeat(8) + "│");
+  assert.equal(bare[2], "│ 2     " + EDITOR_TOP + " ".repeat(6) + " │");
   // Inner row: emulated cursor renders as an inverse space on the empty box.
-  assert.equal(bare[3], "│3     │" + " ".repeat(62) + "│" + " ".repeat(8) + "│");
-  assert.equal(bare[4], "│4     " + EDITOR_BOTTOM + " ".repeat(8) + "│");
+  assert.equal(bare[3], "│ 3     │" + " ".repeat(62) + "│" + " ".repeat(6) + " │");
+  assert.equal(bare[4], "│ 4     " + EDITOR_BOTTOM + " ".repeat(6) + " │");
   // No push-down: 5 content rows + 4 chrome rows, unchanged by the box.
   assert.equal(bare.length, 9);
-  assert.ok(bare[6].startsWith("│-- COMMENT --"));
+  assert.ok(bare[6].startsWith("│ -- COMMENT --"));
 });
 
 test("comment editor box keeps its fixed width while typing", () => {
@@ -426,7 +428,7 @@ test("comment editor box keeps its fixed width while typing", () => {
   h.card.handleInput("hi");
   const after = h.card.render(80).map(strip);
   assert.equal(after[2], before[2]); // identical top border: same fixed width
-  assert.equal(after[3], "│3     │hi " + " ".repeat(59) + "│" + " ".repeat(8) + "│");
+  assert.equal(after[3], "│ 3     │ hi " + " ".repeat(57) + " │" + " ".repeat(6) + " │");
   // The cursor cell under the just-typed text is the inverse space after it.
   const raw = h.card.render(80);
   assert.ok(raw[3].includes("\x1b[7m \x1b[27m"), "emulated inverse cursor at end of text");
@@ -437,12 +439,12 @@ test("comment text soft-wraps at the box's inner content width", () => {
   const h = makeCard({ lines });
   h.card.handleInput("v");
   h.card.handleInput("c");
-  h.card.handleInput("b".repeat(70)); // wrap width 62 -> 62 + 8
+  h.card.handleInput("b".repeat(70)); // wrap width 60 -> 60 + 10
   const bare = h.card.render(80).map(strip);
-  assert.equal(bare[2], "│2     " + EDITOR_TOP + " ".repeat(8) + "│");
-  assert.equal(bare[3], "│3     │" + "b".repeat(62) + "│" + " ".repeat(8) + "│");
-  assert.equal(bare[4], "│4     │" + "b".repeat(8) + " " + " ".repeat(53) + "│" + " ".repeat(8) + "│");
-  assert.equal(bare[5], "│5     " + EDITOR_BOTTOM + " ".repeat(8) + "│");
+  assert.equal(bare[2], "│ 2     " + EDITOR_TOP + " ".repeat(6) + " │");
+  assert.equal(bare[3], "│ 3     │ " + "b".repeat(60) + " │" + " ".repeat(6) + " │");
+  assert.equal(bare[4], "│ 4     │ " + "b".repeat(10) + " " + " ".repeat(49) + " │" + " ".repeat(6) + " │");
+  assert.equal(bare[5], "│ 5     " + EDITOR_BOTTOM + " ".repeat(6) + " │");
 });
 
 test("comment box caps at 8 rows and keeps the cursor's row visible", () => {
@@ -450,18 +452,18 @@ test("comment box caps at 8 rows and keeps the cursor's row visible", () => {
   const h = makeCard({ lines });
   h.card.handleInput("v");
   h.card.handleInput("c");
-  h.card.handleInput("a".repeat(400)); // wrap width 62 -> 7 rows of 62/62/62/62/62/62/28
+  h.card.handleInput("a".repeat(400)); // wrap width 60 -> 7 rows of 60/60/60/60/60/60/40
   const bare = h.card.render(80).map(strip);
   // Box occupies content rows 1..8 (top + 6 inner + bottom) inside 9 rows.
-  assert.equal(bare[2], "│2     " + EDITOR_TOP + " ".repeat(8) + "│");
+  assert.equal(bare[2], "│ 2     " + EDITOR_TOP + " ".repeat(6) + " │");
   for (let k = 3; k <= 7; k++) {
-    assert.equal(bare[k], `│${k}     │` + "a".repeat(62) + "│" + " ".repeat(8) + "│");
+    assert.equal(bare[k], `│ ${k}     │ ` + "a".repeat(60) + " │" + " ".repeat(6) + " │");
   }
   // Last visible row is the cursor's row (the tail of the text), full width.
-  assert.equal(bare[8], "│8     │" + "a".repeat(28) + " " + " ".repeat(33) + "│" + " ".repeat(8) + "│");
-  assert.equal(bare[9], "│9     " + EDITOR_BOTTOM + " ".repeat(8) + "│");
-  // The scrolled-off head row (the first 62-char row) is not rendered.
-  assert.equal(bare.filter((r) => r.includes("a".repeat(62))).length, 5);
+  assert.equal(bare[8], "│ 8     │ " + "a".repeat(40) + " " + " ".repeat(19) + " │" + " ".repeat(6) + " │");
+  assert.equal(bare[9], "│ 9     " + EDITOR_BOTTOM + " ".repeat(6) + " │");
+  // The scrolled-off head row (the first 60-char row) is not rendered.
+  assert.equal(bare.filter((r) => r.includes("a".repeat(60))).length, 5);
   assert.equal(bare.length, 13); // occlusion, not push-down: 9 content + 4 chrome
 });
 
@@ -477,7 +479,7 @@ test("comment box splices occluded rows ANSI-safely: no cut escapes, SGR state c
   const row = rows[1]; // content row 0 (the styled line) under the box top border
   assert.equal(visibleWidth(row), 80); // splice preserves the display width
   const tail = "a".repeat(6); // display cols 69..74 survive right of the box
-  assert.equal(strip(row), "│1 " + PENDING_ICON + " " + "1 " + EDITOR_TOP + tail + " ".repeat(2) + "│");
+  assert.equal(strip(row), "│ 1 " + PENDING_ICON + " " + "1 " + EDITOR_TOP + tail + " │");
   assert.ok(!strip(row).includes("\x1b"), "no broken escape sequences survive the splice");
   // The right sliver re-opens the carried SGR state before the surviving
   // text: both the inverse (7m) and underline (4m) attributes re-appear.
@@ -490,14 +492,14 @@ test("comment box splices occluded rows ANSI-safely: no cut escapes, SGR state c
 
 test("comment box left sliver closes a cut SGR run before the border glyphs", () => {
   // Line 1 is fully underlined (pending); the box below the selection cuts
-  // that row at display column 14 (inner - boxW clamp), inside the underline
-  // run, so the left sliver would end with SGR 4 open. It must close
+  // that row at content column 12 (content width - boxW clamp), inside the
+  // underline run, so the left sliver would end with SGR 4 open. It must close
   // underline + inverse before the box border, or the border renders
   // underlined.
   const lines = ["a".repeat(41), "x".repeat(60), "c3", "d4"];
   const h = makeCard({ lines });
   h.pending.push({ startLine: 1, startCol: 0, endLine: 1, endCol: 60 });
-  h.card.handleInput("$"); // cursor to end of line 0: selCol clamps the box left edge to 14
+  h.card.handleInput("$"); // cursor to end of line 0: selCol clamps the box left edge to 12
   h.card.handleInput("v");
   h.card.handleInput("c");
   const row = h.card.render(80)[2]; // box top border over content row 1
@@ -518,13 +520,14 @@ test("comment box flips above the selection near the viewport bottom", () => {
   // is last: content shows lines f..j, rel 0..4.
   assert.equal(bare.length, 9);
   // selBottom 4 + 1 + boxH 3 > 5 -> flip above: box occupies content rows 1-3.
-  // Fixed-width box (64) at width 80: left edge = gutter width (7), unclamped.
-  assert.equal(bare[2].indexOf("╭─ Comment"), 1 + 7);
-  assert.equal(bare[4].indexOf("╰"), 1 + 7);
+  // Fixed-width box (64) at width 80: left edge = gutter width (7), unclamped;
+  // stripped row column = border 1 + pad 1 + 7 = 9.
+  assert.equal(bare[2].indexOf("╭─ Comment"), 2 + 7);
+  assert.equal(bare[4].indexOf("╰"), 2 + 7);
   // The selected line below the box is intact; the statusline shows the
   // comment badge above the cmdline hints.
-  assert.ok(bare[5].startsWith("│10     j"));
-  assert.ok(bare[6].startsWith("│-- COMMENT --"));
+  assert.ok(bare[5].startsWith("│ 10     j"));
+  assert.ok(bare[6].startsWith("│ -- COMMENT --"));
 });
 
 test("comment box left edge clamps inside the right border", () => {
@@ -535,11 +538,11 @@ test("comment box left edge clamps inside the right border", () => {
   h.card.handleInput("c");
   const width = 80;
   const bare = h.card.render(width).map(strip);
-  const inner = width - 2; // 78; boxW fixed at 64
-  const left = inner - 64; // selCol (gutter 4 + 60) clamps to inner - boxW = 14
-  assert.equal(bare[2].indexOf("╭─ Comment"), 1 + left);
-  // The box ends exactly at the inner width, inside the right border.
-  assert.ok(bare[2].endsWith("╮│"));
+  const contentW = width - 4; // borders + padding each side; boxW fixed at 64
+  const left = contentW - 64; // selCol clamps to contentW - boxW = 12
+  assert.equal(bare[2].indexOf("╭─ Comment"), 2 + left);
+  // The box ends at the last content column, inside the right padding.
+  assert.ok(bare[2].endsWith("╮ │"));
 });
 
 // Pending styling -------------------------------------------------------------
@@ -569,17 +572,17 @@ test("pending underline spans multi-line ranges line by line", () => {
 // vertical continuation bar; uncovered lines render a blank field of the same
 // display width, so line numbers never shift when markers appear/disappear.
 
-// The 3-cell pending-marker field of a stripped content row: "│" + line
-// number (digits wide) + " " + field.
+// The 3-cell pending-marker field of a stripped content row: "│" + padding
+// column + line number (digits wide) + " " + field.
 function fieldOf(bare: string, digits: number): string {
-  return bare.slice(1 + digits + 1, 1 + digits + 1 + FIELD);
+  return bare.slice(2 + digits + 1, 2 + digits + 1 + FIELD);
 }
 
 test("a pending line shows the icon plus the draft count in the gutter", () => {
   const h = makeCard({ lines: ["alpha", "beta", "gamma"] });
   h.pending.push({ startLine: 0, startCol: 0, endLine: 0, endCol: 5 });
   const bare = h.card.render(40).map(strip);
-  assert.ok(bare[1].startsWith("│1 " + PENDING_ICON + " " + "1"), `icon + count on the pending line, got: ${JSON.stringify(bare[1])}`);
+  assert.ok(bare[1].startsWith("│ 1 " + PENDING_ICON + " " + "1"), `icon + count on the pending line, got: ${JSON.stringify(bare[1])}`);
 });
 
 test("gutter count counts drafts STARTING on the line: two starts -> count 2", () => {
@@ -587,7 +590,7 @@ test("gutter count counts drafts STARTING on the line: two starts -> count 2", (
   h.pending.push({ startLine: 0, startCol: 0, endLine: 0, endCol: 2 });
   h.pending.push({ startLine: 0, startCol: 3, endLine: 0, endCol: 5 });
   const bare = h.card.render(40).map(strip);
-  assert.ok(bare[1].startsWith("│1 " + PENDING_ICON + " " + "2"), "two drafts starting on line 1 -> count 2");
+  assert.ok(bare[1].startsWith("│ 1 " + PENDING_ICON + " " + "2"), "two drafts starting on line 1 -> count 2");
   assert.ok(!bare[3].includes(PENDING_ICON), "unmarked line has no icon");
 });
 
@@ -646,7 +649,7 @@ test("more than 9 drafts starting on a line render as icon + +", () => {
     h.pending.push({ startLine: 0, startCol: i, endLine: 0, endCol: i + 1 });
   }
   const bare = h.card.render(40).map(strip);
-  assert.ok(bare[1].startsWith("│1 " + PENDING_ICON + " " + "+"), "count 10 renders as icon plus plus");
+  assert.ok(bare[1].startsWith("│ 1 " + PENDING_ICON + " " + "+"), "count 10 renders as icon plus plus");
 });
 
 test("the marker field keeps the gutter constant-width when markers appear", () => {
@@ -823,13 +826,13 @@ test("hover preview: cursor on a pending line shows a read-only Comment box belo
   h.pending.push(range);
   const width = 40;
   const bare = h.card.render(width).map(strip);
-  const tail = " ".repeat(width - 2 - 19); // gutter 6 + box 13
+  const tail = " ".repeat(width - 4 - 19); // gutter 6 + box 13
   // Box opens one row below the cursor row (row 0), left edge at the draft's
   // start display column (gutter 5 + col 0): same chrome and placement as
   // the comment-mode box.
-  assert.equal(bare[2], "│2     ╭─ Comment ─╮" + tail + "│");
-  assert.equal(bare[3], "│3     │note       │" + tail + "│");
-  assert.equal(bare[4], "│4     ╰───────────╯" + tail + "│");
+  assert.equal(bare[2], "│ 2     ╭─ Comment ─╮" + tail + " │");
+  assert.equal(bare[3], "│ 3     │ note      │" + tail + " │");
+  assert.equal(bare[4], "│ 4     ╰───────────╯" + tail + " │");
   // Occlusion, not push-down: 5 content rows + 4 chrome rows, unchanged.
   assert.equal(bare.length, 9);
 });
@@ -857,7 +860,7 @@ test("hover preview: cursor off pending lines shows nothing", () => {
   h.card.handleInput("j"); // cursor onto line 1, no draft covers it
   const bare = h.card.render(40).map(strip);
   for (const row of bare) assert.ok(!row.includes("Comment"), "no box off pending lines");
-  assert.ok(strip(bare[2]).startsWith("│2     beta")); // content row intact
+  assert.ok(strip(bare[2]).startsWith("│ 2     beta")); // content row intact
 });
 
 test("hover preview: cursor past the draft's end column shows nothing", () => {
@@ -883,7 +886,7 @@ test("hover preview renders no emulated cursor (read-only)", () => {
   h.drafts.push({ token: "[a.ts:1]", range, comment: "note" });
   h.pending.push(range);
   const rows = h.card.render(40);
-  const boxRow = rows.find((r) => strip(r).includes("│note")) as string;
+  const boxRow = rows.find((r) => strip(r).includes("│ note")) as string;
   assert.ok(boxRow, "preview box row present");
   assert.ok(!boxRow.includes("\x1b[7m"), "read-only preview box has no cursor cell");
 });
@@ -897,8 +900,8 @@ test("hover preview: comments longer than 6 box rows are capped", () => {
   const bare = h.card.render(40).map(strip);
   // 6 box rows total including borders: top + 4 comment lines + bottom.
   assert.ok(bare[2].includes("╭─ Comment"));
-  assert.ok(bare[3].includes("│c0"));
-  assert.ok(bare[6].includes("│c3"));
+  assert.ok(bare[3].includes("│ c0"));
+  assert.ok(bare[6].includes("│ c3"));
   assert.ok(bare[7].includes("╰"));
   for (const row of bare) assert.ok(!row.includes("c4"), "comment capped at 6 box rows");
 });
@@ -916,8 +919,8 @@ test("hover preview: multi-line draft anchors to the draft's start column, not t
   h.card.handleInput("l");
   h.card.handleInput("l"); // cursor to (0, 2), now inside the draft
   bare = h.card.render(40).map(strip);
-  // Left edge = border 1 + gutter 6 + draft startCol 2 (not the cursor col 2).
-  assert.equal(bare[2].indexOf("╭─ Comment"), 1 + 6 + 2);
+  // Left edge = border 1 + pad 1 + gutter 6 + draft startCol 2 (not the cursor col 2).
+  assert.equal(bare[2].indexOf("╭─ Comment"), 2 + 6 + 2);
 });
 
 test("hover preview: c on the pending line replaces it with the pre-filled editor", () => {
@@ -929,8 +932,8 @@ test("hover preview: c on the pending line replaces it with the pre-filled edito
   h.card.handleInput("c"); // edit flow: comment mode, exactly one box
   let bare = h.card.render(40).map(strip);
   assert.equal(bare.filter((r) => r.includes("╭─ Comment")).length, 1);
-  assert.ok(bare.some((r) => r.includes("│prefill")));
-  assert.ok(bare[bare.length - 3].startsWith("│-- COMMENT --"));
+  assert.ok(bare.some((r) => r.includes("│ prefill")));
+  assert.ok(bare[bare.length - 3].startsWith("│ -- COMMENT --"));
   // Esc back to normal: the read-only preview is shown again.
   h.card.handleInput("\x1b");
   bare = h.card.render(40).map(strip);
@@ -949,11 +952,11 @@ test("preview shows the cycle target's comment with a (i/n) title on stacked dra
   h.card.handleInput("l"); // cursor col 2: stack [newer, older]
   let bare = h.card.render(60).map(strip);
   assert.ok(bare[2].includes("╭─ Comment (1/2) ─╮"), `title carries 1/2, got: ${JSON.stringify(bare[2])}`);
-  assert.ok(bare[3].includes("│newer note"), "box shows the target's comment");
+  assert.ok(bare[3].includes("│ newer note"), "box shows the target's comment");
   h.card.handleInput("\t"); // cycle: the older draft becomes the target
   bare = h.card.render(60).map(strip);
   assert.ok(bare[2].includes("╭─ Comment (2/2) ─╮"), "title advances to 2/2");
-  assert.ok(bare[3].includes("│older note"), "box shows the newly targeted comment");
+  assert.ok(bare[3].includes("│ older note"), "box shows the newly targeted comment");
 });
 
 test("preview on a stack of 1 keeps the plain Comment title", () => {
@@ -1003,7 +1006,7 @@ test("handleInput normalizes kitty repeats so held arrow keys move and scroll", 
   for (let i = 0; i < 17; i++) h.card.handleInput("\x1b[1;1:2B"); // held down arrow
   // 17 downs with 15 content rows: scrollTop 3, first visible line is 4
   // (1-based, right-aligned in the 2-digit gutter).
-  assert.ok(h.card.render(40).map(strip)[1].startsWith("│ 4"), "held repeat-form arrow scrolled the viewport");
+  assert.ok(h.card.render(40).map(strip)[1].startsWith("│  4"), "held repeat-form arrow scrolled the viewport");
 });
 
 test("kitty CSI-u ctrl+j and shift+enter insert a newline in comment mode", () => {
@@ -1049,8 +1052,8 @@ test("comment box borders stay column-aligned when a cut straddles a wide char",
   const rows = raw.map(strip);
   // The box overlays rows 3-5 (CJK line, ASCII line, short line). Its left
   // border must sit in the same DISPLAY column on every row: panel border
-  // (1) + gutter (6) + anchor col 11 = 18. (String indices differ on the
-  // CJK row - measure display columns.)
+  // (1) + padding (1) + gutter (6) + anchor col 11 = 19. (String indices
+  // differ on the CJK row - measure display columns.)
   const colOf = (row: string, ch: string) => {
     const i = row.indexOf(ch, 1);
     return i < 0 ? i : visibleWidth(row.slice(0, i));
@@ -1058,8 +1061,8 @@ test("comment box borders stay column-aligned when a cut straddles a wide char",
   const top = colOf(rows[3], "╭");
   const mid = colOf(rows[4], "│");
   const bot = colOf(rows[5], "╰");
-  assert.equal(top, 18, `top border column, row: ${JSON.stringify(rows[3])}`);
-  assert.equal(mid, 18, `middle border column, row: ${JSON.stringify(rows[4])}`);
-  assert.equal(bot, 18, `bottom border column, row: ${JSON.stringify(rows[5])}`);
+  assert.equal(top, 19, `top border column, row: ${JSON.stringify(rows[3])}`);
+  assert.equal(mid, 19, `middle border column, row: ${JSON.stringify(rows[4])}`);
+  assert.equal(bot, 19, `bottom border column, row: ${JSON.stringify(rows[5])}`);
   for (const [i, r] of raw.entries()) assert.equal(visibleWidth(r), 120, `row ${i} width`);
 });
