@@ -200,6 +200,7 @@ Expected: FAIL (current implementation has no windowing / no left indicator)
 - [ ] **Step 3: Implement**
 
 - Render-time safety: `const sl = clampScrollLeft(this.state.scrollLeft ?? 0)` (upper bound `max(0, this.maxLineWidth - contentWidth + 1)`, lower bound 0).
+- The indicators mirror vim's `listchars` `extends`/`precedes` semantics with `wrap` off (dim like `NonText`); keep the indicator characters as specified.
 - Row rendering changes from `truncateToWidth(gutter + renderLine(...), inner, "...", true)` to: first window the full styled result of `renderLine(...)` via `sliceByColumn(styled, sl + leftPad, contentWidth - leftPad - rightPad, true)` (`strict=true` so no half wide char), where `leftPad` = `sl > 0 ? 1 : 0` and `rightPad` = `3` when content extends past the window's right edge, else `0`; then join `gutter + (sl > 0 ? colors.dim(<NF chevron>) : "") + windowed + (right overflow ? colors.dim("...") : "")` and space-pad to `inner`. `contentWidth` matches Task 3's `contentWidth()`. Right-overflow test: `rawColToDisplayCol(line, line.length) > sl + contentWidth`.
 - The inverse cursor cell is rendered inside `renderLine`, before slicing; the follow logic (Task 3) guarantees it sits inside the window - no extra handling.
 - `paintCommentBox`'s `selCol` becomes `gutterWidth(...) + rawColToDisplayCol(...) - sl` (if `overlayPreview` goes through the same function it is covered automatically; verify and fix its anchor path too).

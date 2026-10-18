@@ -91,7 +91,7 @@ Rendering (`src/viewer.ts`):
 - The gutter (line number + Nerd Font icon) stays fixed; only the content area scrolls.
 - Per content row: `renderLine` is unchanged (spans + inverse cursor cell computed on the full line in display-column coordinates); the styled result is then windowed: `sliceByColumn(styled, scrollLeft, contentWidth)` and padded to `contentWidth`.
 - Implementation checkpoint: verify that pi-tui's `sliceByColumn` is ANSI-aware (slices a styled string by visible column without breaking escape sequences). If it is not, fall back to offsetting span columns by `-scrollLeft`, slicing the raw text, and applying styles inside the window (spans already use display-column coordinates, so this is mechanical).
-- Overflow indicators: when the line extends past `scrollLeft + contentWidth`, the right edge keeps today's `...`; when `scrollLeft > 0`, the first content cell is replaced by a dim Nerd Font chevron (UI string, consistent with the gutter icon style).
+- Overflow indicators: when the line extends past `scrollLeft + contentWidth`, the right edge keeps today's `...`; when `scrollLeft > 0`, the first content cell is replaced by a dim Nerd Font chevron. This mirrors vim's `listchars` behavior with `wrap` off - `extends:c` in the last column when the line continues beyond the right edge, `precedes:c` in the first visible column when text precedes it, both rendered with the dim-like `NonText` highlight.
 - Because the cursor cell is styled before slicing and follow logic guarantees it is inside the window, the invisible-cursor defect is fixed by construction.
 
 ## Testing
