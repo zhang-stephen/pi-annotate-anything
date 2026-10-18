@@ -97,7 +97,7 @@ export function gutterWidth(lineCount: number): number {
 // so overlapping spans of different styles can nest safely. "target" and
 // "dimUnderline" are the stacked-draft emphases of spec section 2; "match"
 // is the hlsearch highlight of the active search pattern.
-type SpanStyle = "inverse" | "underline" | "target" | "dimUnderline" | "match";
+type SpanStyle = "inverse" | "underline" | "target" | "dimUnderline" | "match" | "matchCurrent";
 interface StyleSpan {
   start: number; // display column, inclusive
   end: number; // display column, exclusive
@@ -126,7 +126,7 @@ function applyStyleSpans(line: string, spans: StyleSpan[], styles: Record<SpanSt
     const b = bounds[k + 1];
     const active = [...new Set(clamped.filter((s) => s.start <= a && a < s.end).map((s) => s.style))];
     const strongest = active.includes("target") ? "target" : active.includes("dimUnderline") ? "dimUnderline" : active.includes("underline") ? "underline" : null;
-    const final = active.filter((s) => s === "inverse" || s === "match" || s === strongest);
+    const final = active.filter((s) => s === "inverse" || s === "match" || s === "matchCurrent" || s === strongest);
     const seg = sliceByColumn(line, a, b - a);
     out += final.reduce((text, s) => styles[s](text), seg);
   }
@@ -228,18 +228,23 @@ export class AnnotateCard implements Component, Focusable {
     // Inverse stays raw ANSI (theme-neutral): the cursor/selection highlight.
     // Pending ranges underline with raw SGR 4; the cycle target's range adds
     // SGR 1 bold + the theme warning fg, and non-target stack members dim
-    // their underline (SGR 2). Search matches (hlsearch) mirror pi's own
-    // transcript search: theme.bg("searchMatchBg") over
-    // theme.fg("searchMatchText"), a background highlight that stays
-    // distinct from the raw inverse of cursor/selection while composing
-    // with pending underlines. The pending
-    // gutter marker keeps the theme warning color.
+    // their underline (SGR 2). Search matches (hlsearch) mirror pi's
+    // two-level theme convention: plain matches paint searchMatchBg over
+    // searchMatchText, and the match under the cursor ("current") wraps
+    // that in bold + inverse (pi's searchCurrentMatchStyle) - theme-
+    // adaptive, distinct from the raw inverse of cursor/selection,
+    // composing with pending underlines.
+    // The pending gutter marker keeps the theme warning color.
     this.spanStyles = {
       inverse: (s) => INVERSE_ON + s + INVERSE_OFF,
       underline: (s) => UNDERLINE_ON + s + UNDERLINE_OFF,
       target: (s) => this.colors.warning(BOLD_ON + UNDERLINE_ON + s + INTENSITY_OFF + UNDERLINE_OFF),
       dimUnderline: (s) => DIM_ON + UNDERLINE_ON + s + INTENSITY_OFF + UNDERLINE_OFF,
       match: (s) => theme.bg("searchMatchBg", theme.fg("searchMatchText", s)),
+      // pi's own searchCurrentMatchStyle: bold + inverse over the plain
+      // pair (the runtime partitions fg/bg tokens, so swapping them throws;
+      // SGR inverse is the only theme-safe inversion).
+      matchCurrent: (s) => theme.bold(theme.inverse(theme.bg("searchMatchBg", theme.fg("searchMatchText", s)))),
     };
     // Tabs are expanded PER LINE before highlighting so display columns agree
     // between the highlighted content and the raw/selection rendering below
@@ -304,13 +309,22 @@ export class AnnotateCard implements Component, Focusable {
       const compiled = compilePattern(query);
       if (compiled.ok) {
         const matches = findMatches(lines, compiled.re);
-        for (const m of matches) {
+        // The match containing the cursor is the "current" one (pi's
+        // two-level searchMatch convention): it swaps the token pair and
+        // bolds, so the cursor's match pops over the plain hlsearch marks.
+        // Zero-width matches never contain the cursor.
+        const currentIdx = matches.findIndex((m) =>
+          m.line === this.state.cursor.line && m.startCol <= this.state.cursor.col
+            && this.state.cursor.col < m.endCol
+        );
+        for (let i = 0; i < matches.length; i++) {
+          const m = matches[i];
           const raw = lines[m.line] ?? "";
           const spans = matchSpans.get(m.line);
           const span: StyleSpan = {
             start: rawColToDisplayCol(raw, m.startCol),
             end: rawColToDisplayCol(raw, m.endCol),
-            style: "match",
+            style: i === currentIdx ? "matchCurrent" : "match",
           };
           if (spans === undefined) matchSpans.set(m.line, [span]);
           else spans.push(span);
@@ -318,13 +332,11 @@ export class AnnotateCard implements Component, Focusable {
         // Segment input (normal with a lastSearch, and search modes only):
         // rank is the 1-based index of the match containing the cursor;
         // zero-width matches never contain it, and 0 means the cursor sits
-        // on no match.
-        if (this.state.mode === "normal" || this.state.mode === "search") {
-          const rank = matches.findIndex((m) =>
-            m.line === this.state.cursor.line && m.startCol <= this.state.cursor.col
-              && this.state.cursor.col < m.endCol
-          ) + 1;
-          searchStatus = { pattern: query, rank, total: matches.length };
+        // on no match. Zero matches hide the segment entirely - the
+        // "Pattern not found" transient message carries that state instead
+        // of a meaningless [0/0].
+        if ((this.state.mode === "normal" || this.state.mode === "search") && matches.length > 0) {
+          searchStatus = { pattern: query, rank: currentIdx + 1, total: matches.length };
         }
       }
     }

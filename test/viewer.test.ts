@@ -164,6 +164,9 @@ function makeCard(opts: { lines: string[]; path?: string; cwd?: string; rows?: n
       bgCalls.push({ token, text });
       return BG_ON + text + BG_OFF;
     },
+    bold: (text: string) => BOLD_ON + text + INTENSITY_OFF,
+    underline: (text: string) => UNDERLINE_ON + text + UNDERLINE_OFF,
+    inverse: (text: string) => "\x1b[7m" + text + "\x1b[27m",
   } as unknown as Theme;
   const calls = {
     annotate: [] as { range: Range; mode: VisualMode; comment: string }[],
@@ -1078,11 +1081,14 @@ test("comment box borders stay column-aligned when a cut straddles a wide char",
 // in search mode, shows the [rank/total] segment, and renders transient
 // reducer messages right-aligned for exactly one keypress.
 
-// The match composite over "foo": theme searchMatchBg over searchMatchText,
-// mirroring pi's own transcript search. BG_ON+FG_ON adjacency is unique to
-// match spans in a rendered row (cursor/selection is raw inverse, pending is
-// raw SGR 4/2), so it also serves as a position anchor for column assertions.
+// The match composites over "foo": plain matches paint searchMatchBg over
+// searchMatchText; the cursor's own match ("current") wraps that in bold +
+// inverse, pi's searchCurrentMatchStyle. BG_ON+FG_ON adjacency is unique to
+// match spans in a rendered row (cursor/selection is raw inverse, pending
+// is raw SGR 4/2), so it also serves as a position anchor for column
+// assertions.
 const MATCH_FOO = BG_ON + FG_ON + "foo" + FG_OFF + BG_OFF;
+const MATCHCURRENT_FOO = BOLD_ON + "\x1b[7m" + BG_ON + FG_ON + "foo" + FG_OFF + BG_OFF + "\x1b[27m" + INTENSITY_OFF;
 
 // Runs "foo" through the real search flow (/foo<Enter>): lastSearch stored,
 // the incremental jump parks the cursor on the first match's first cell.
@@ -1155,6 +1161,21 @@ test("wiring: search mode renders the cmdline input and the [rank/total] segment
   assert.ok(rows[4].includes("\x1b[7m \x1b[27m"), "inverse cmdline cursor cell");
 });
 
+test("highlight: the cursor's match renders as the current match, others stay plain", () => {
+  const h = searchFoo(makeCard({ lines: ["foo", "bar foo"] })); // cursor on match 1
+  // The inverse cursor cell splits the current match's first cell off, so
+  // the bolded remainder is "oo" (same compose behavior as plain matches).
+  const CURRENT_SPLIT = BOLD_ON + "\x1b[7m" + BG_ON + FG_ON + "oo" + FG_OFF + BG_OFF + "\x1b[27m" + INTENSITY_OFF;
+  const rows = h.card.render(80);
+  assert.ok(rows[1].includes(CURRENT_SPLIT), `current match swaps the pair + bold, got: ${rows[1]}`);
+  assert.ok(rows[2].includes(MATCH_FOO), `other match stays plain, got: ${rows[2]}`);
+  assert.ok(!rows[2].includes(MATCHCURRENT_FOO), `other match not bolded, got: ${rows[2]}`);
+  h.card.handleInput("n"); // jump to match 2: the current mark moves with it
+  const jumped = h.card.render(80);
+  assert.ok(jumped[2].includes(CURRENT_SPLIT), `current match follows the jump, got: ${jumped[2]}`);
+  assert.ok(jumped[1].includes(MATCH_FOO) && !jumped[1].includes(BOLD_ON), `previous match back to plain, got: ${jumped[1]}`);
+});
+
 test("wiring: a transient message renders right-aligned and clears on the next key", () => {
   const h = searchFoo(makeCard({ lines: ["foo", "x foo"] })); // cursor on match 1
   h.card.handleInput("n"); // match 2, no wrap
@@ -1176,4 +1197,18 @@ test("wiring: an invalid pattern shows the compile error right-aligned on the cm
   assert.ok(bare[4].startsWith("│ /("), `cmdline input stays editable, got: ${bare[4]}`);
   assert.ok(bare[4].includes("Unterminated group"), `engine error shown, got: ${bare[4]}`);
   assert.ok(bare[4].endsWith("Unterminated group │"), `error right-aligned, got: ${bare[4]}`);
+});
+
+test("wiring: zero matches hide the segment and surface the not-found message", () => {
+  const h = makeCard({ lines: ["foo", "bar"] });
+  h.card.handleInput("/");
+  h.card.handleInput("z");
+  h.card.handleInput("\r"); // submit a zero-match pattern
+  const bare = h.card.render(80).map(strip);
+  assert.ok(!bare[3].includes("/z"), `segment hidden at total 0, got: ${bare[3]}`);
+  assert.ok(bare[4].includes("Pattern not found: z"), `message shown, got: ${bare[4]}`);
+  const cleared = h.card.render(80).map(strip); // next keypress clears it
+  h.card.handleInput("j");
+  const after = h.card.render(80).map(strip);
+  assert.ok(!after[4].includes("Pattern not found"), `message cleared by keypress, got: ${after[4]}`);
 });
