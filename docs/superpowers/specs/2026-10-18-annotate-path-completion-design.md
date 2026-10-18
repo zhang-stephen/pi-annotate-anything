@@ -1,6 +1,6 @@
 ---
 title: /annotate Path Completion - Design
-status: approved
+status: done
 plan: ../plans/2026-10-18-annotate-path-completion.md
 ---
 

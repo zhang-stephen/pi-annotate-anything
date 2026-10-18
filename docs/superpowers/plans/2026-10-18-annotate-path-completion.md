@@ -1,7 +1,7 @@
 ---
 title: /annotate Path Completion - Implementation Plan
-status: in-progress
-progress: 0/2
+status: done
+progress: 2/2
 spec: ../specs/2026-10-18-annotate-path-completion-design.md
 ---
 
@@ -24,7 +24,7 @@ spec: ../specs/2026-10-18-annotate-path-completion-design.md
 - Test commands: single file `node --test test/<file>.test.ts`, full suite `npm test`; typecheck `npx tsc --noEmit`.
 - Never touch `package.json` `"version"` or `CHANGELOG.md` (managed by release-please).
 - Completion semantics verbatim from the spec: directories first with a trailing `/` and `description: "dir"`; files carry no description; dotfiles only when the base part starts with `.`; cap at 100 entries; unreadable directory returns `null`.
-- The `getArgumentCompletions` callback receives only `argumentPrefix` (no `ctx`), so the cwd comes from `process.cwd()`.
+- ~~The `getArgumentCompletions` callback receives only `argumentPrefix` (no `ctx`), so the cwd comes from `process.cwd()`.~~ Amended during final review (2026-10-19): a resumed session keeps the cwd stored in the session file while `process.cwd()` stays the launch directory, so the callback tracks `ctx.cwd` via `session_start` instead (fix commit `e0e0067`).
 
 ## Review Focus
 
@@ -42,7 +42,7 @@ spec: ../specs/2026-10-18-annotate-path-completion-design.md
 - Create: `src/path-completion.ts`
 - Test: `test/path-completion.test.ts`
 
-- [ ] **Step 1: Write the failing tests**
+- [x] **Step 1: Write the failing tests**
 
 `test/path-completion.test.ts`, using `node:test`, `fs.mkdtempSync(path.join(os.tmpdir(), "pi-annotate-pc-"))` per test file setup, and these fixtures in the tmp root: files `alpha.ts`, `alpine.ts`, `beta.ts`, `.hidden`; directory `sub/` containing `inner.ts`; directory `zeta/` (empty); symlink `linkdir` -> `sub` (skip the symlink test on platforms where symlink creation fails).
 
@@ -100,12 +100,12 @@ test("caps results at 100 entries", () => {
 });
 ```
 
-- [ ] **Step 2: Run the tests, verify failure**
+- [x] **Step 2: Run the tests, verify failure**
 
 Run: `node --test test/path-completion.test.ts`
 Expected: FAIL, "Cannot find module .../src/path-completion.ts"
 
-- [ ] **Step 3: Implement `completePath` in `src/path-completion.ts`**
+- [x] **Step 3: Implement `completePath` in `src/path-completion.ts`**
 
 Signature (import the type from pi-tui, reuse `resolvePath` from `./file-range.ts`):
 
@@ -117,17 +117,17 @@ export function completePath(argumentPrefix: string, cwd: string): AutocompleteI
 
 Algorithm: split at the last `/` into `dirPart` (kept verbatim for `value` construction, `""` when absent) and `base`; resolve the directory as `dirPart === "" ? cwd : resolvePath(dirPart, cwd)`; `readdirSync(dir, { withFileTypes: true })` inside try/catch returning `null` on throw; keep entries whose name starts with `base`, dropping dotfiles unless `base` starts with `.`; sort directories first then case-insensitive by name; cap at 100; map to `{ value: dirPart + name + (isDir ? "/" : ""), label: name + (isDir ? "/" : ""), description: isDir ? "dir" : undefined }`.
 
-- [ ] **Step 4: Run the tests, verify pass**
+- [x] **Step 4: Run the tests, verify pass**
 
 Run: `node --test test/path-completion.test.ts`
 Expected: PASS (10 tests)
 
-- [ ] **Step 5: Typecheck and full suite**
+- [x] **Step 5: Typecheck and full suite**
 
 Run: `npx tsc --noEmit && npm test`
 Expected: clean, all tests pass
 
-- [ ] **Step 6: Commit**
+- [x] **Step 6: Commit**
 
 ```bash
 git add src/path-completion.ts test/path-completion.test.ts
@@ -141,7 +141,7 @@ git commit -m "feat(annotate): add filesystem path completion helper"
 **Files:**
 - Modify: `index.ts` (the `pi.registerCommand("annotate", { ... })` options object)
 
-- [ ] **Step 1: Add the callback**
+- [x] **Step 1: Add the callback**
 
 In `index.ts`, import `completePath` from `./src/path-completion.ts` and add to the `registerCommand` options:
 
@@ -149,17 +149,17 @@ In `index.ts`, import `completePath` from `./src/path-completion.ts` and add to 
 getArgumentCompletions: (argumentPrefix) => completePath(argumentPrefix, process.cwd()),
 ```
 
-- [ ] **Step 2: Typecheck and full suite**
+- [x] **Step 2: Typecheck and full suite**
 
 Run: `npx tsc --noEmit && npm test`
 Expected: clean, all tests pass
 
-- [ ] **Step 3: Manual E2E (human confirms)**
+- [ ] **Step 3: Manual E2E (human confirms)** (pending - merge proceeded on review evidence per user direction; run on master)
 
 Run: `PI_CODING_AGENT_DIR=/tmp/pi-sandbox-home pi -e ./index.ts`, type `/annotate sr<Tab>` (or the completion trigger), drill into a directory with another `<Tab>`, and submit the command on a real file.
 Expected: path suggestions appear and complete; the card opens on the completed path.
 
-- [ ] **Step 4: Commit**
+- [x] **Step 4: Commit**
 
 ```bash
 git add index.ts
