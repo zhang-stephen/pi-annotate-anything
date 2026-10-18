@@ -1,4 +1,5 @@
 ---
+title: CI TUI E2E - Design
 status: draft
 ---
 
@@ -24,8 +25,10 @@ The annotate extension's input-transform fires before the provider call, so the 
 
 ## Harness layout
 
-- `test/e2e/run.mjs` - scenario runner with helpers: `launchPi({ extensions, cwd })`, `sendKeys(...)`, `waitFor(pattern, { timeout })` (polls capture-pane), `screen()` (raw), `screenText()` (ANSI stripped), `sessionPayload()` (newest session JSONL parsed for the last user message text). Each scenario is an async function; failures print a screen dump.
-- `test/e2e/mock-provider.ts` - registers provider `mock` with one model `test` that echoes a fixed string. Loaded only in e2e launches.
+- `test/e2e/run.mjs` - scenario runner with helpers: `launchPi({ extensions, cwd })`, `sendKeys(...)`, `waitFor(pattern, { timeout })` (polls capture-pane), `screen()` (raw), `screenText()` (ANSI stripped), `sessionPayload()` (newest session JSONL parsed for the last user message text).
+  Each scenario is an async function; failures print a screen dump.
+- `test/e2e/mock-provider.ts` - registers provider `mock` with one model `test` that echoes a fixed string.
+  Loaded only in e2e launches.
 - Fixtures: reuse the existing e2e fixtures (ascii.ts, wide.go with tabs and wide chars, crlf.txt, oversized and binary files).
 
 ## Scenario coverage

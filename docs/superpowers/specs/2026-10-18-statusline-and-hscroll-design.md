@@ -1,5 +1,7 @@
 ---
+title: Status Line and Horizontal Scroll - Design
 status: done
+plan: ../plans/2026-10-18-statusline-and-hscroll.md
 ---
 
 # Status Line and Horizontal Scroll - Design
@@ -10,11 +12,15 @@ Prepares for: upcoming `/` search spec (separate document)
 
 ## Problem
 
-The card footer is a static per-mode table (`FOOTER_HINTS` in `src/card-chrome.ts`) assembled inline in `AnnotateCard.render()` (`src/viewer.ts`): badge plus hints, nothing dynamic. Three problems:
+The card footer is a static per-mode table (`FOOTER_HINTS` in `src/card-chrome.ts`) assembled inline in `AnnotateCard.render()` (`src/viewer.ts`): badge plus hints, nothing dynamic.
+Three problems:
 
 1. There is no home for live information such as the cursor position, which becomes essential once lines can extend beyond the visible width.
 2. Long lines are hard-truncated with `...` (`truncateToWidth` in `render()`), with no horizontal scrolling: the state machine only tracks `scrollTop`, so `h`/`l`/`$` can push `cursor.col` past the right edge and the inverse cursor cell gets clipped away - the cursor vanishes.
-3. Holding an arrow key registers a single move; holding `h`/`j`/`k`/`l` repeats correctly. Root cause is confirmed: pi-tui enables kitty keyboard flags 7 (disambiguate + report event types + alternate keys), so functional keys emit distinct event sequences - arrow press arrives as the plain legacy `\x1b[A`, but the repeat arrives as `\x1b[1;1:2A` (event type 2). The TUI filters only release events (`tui.js`: `isKeyRelease && !wantsKeyRelease`) and passes repeats through to `handleInput`, where `reduceViewer` matches raw strings (`case "\x1b[A"`) and silently drops the repeat form. Text keys are unaffected because their repeats arrive as plain text bytes.
+3. Holding an arrow key registers a single move; holding `h`/`j`/`k`/`l` repeats correctly.
+   Root cause is confirmed: pi-tui enables kitty keyboard flags 7 (disambiguate + report event types + alternate keys), so functional keys emit distinct event sequences - arrow press arrives as the plain legacy `\x1b[A`, but the repeat arrives as `\x1b[1;1:2A` (event type 2).
+   The TUI filters only release events (`tui.js`: `isKeyRelease && !wantsKeyRelease`) and passes repeats through to `handleInput`, where `reduceViewer` matches raw strings (`case "\x1b[A"`) and silently drops the repeat form.
+   Text keys are unaffected because their repeats arrive as plain text bytes.
 
 ## Approach
 
@@ -30,7 +36,8 @@ Three coordinated changes in one spec, because displaying a meaningful cursor co
   - `renderStatusLine(input: StatusLineInput, innerWidth: number, colors: ChromeColors): string`
   - `renderCommandLine(input: CommandLineInput, innerWidth: number, colors: ChromeColors): string`
 - `FOOTER_HINTS` and `cardModeOf` move from `src/card-chrome.ts` into `src/status-line.ts`; `card-chrome.ts` keeps only generic framing (`framePanel`, `frameCommentBox`, placement).
-- `framePanel(rows, width, opts)`: `opts.footer?: string` becomes `opts.footers?: string[]`, rendered in order directly below the content rows (statusline first, cmdline second). Everything else about the frame is unchanged.
+- `framePanel(rows, width, opts)`: `opts.footer?: string` becomes `opts.footers?: string[]`, rendered in order directly below the content rows (statusline first, cmdline second).
+  Everything else about the frame is unchanged.
 - `CHROME_ROWS` in `src/viewer.ts` goes from 3 to 4 (viewport shrinks by one row; `MIN_VIEWPORT_ROWS` clamp unchanged).
 - `AnnotateCard.render()` stops concatenating footer strings itself and delegates both rows to the two renderers.
 
@@ -44,7 +51,8 @@ Layout inside the panel's inner width:
 ```
 
 - Left: mode badge (accent color), same four texts as today (`-- NORMAL --`, `-- VISUAL --`, `-- VISUAL LINE --`, `-- COMMENT --`).
-- Right: cursor position `L:C`, 1-based; `C` is the display column after tab expansion (`rawColToDisplayCol(cursor.col) + 1`), matching the column semantics of `h`/`l`/`0`/`$`. Never truncated.
+- Right: cursor position `L:C`, 1-based; `C` is the display column after tab expansion (`rawColToDisplayCol(cursor.col) + 1`), matching the column semantics of `h`/`l`/`0`/`$`.
+  Never truncated.
 - Visual modes only: the selection range between badge and right margin, normalized so the smaller position comes first - `L:C-L:C` for visual-char (e.g. `8:1-12:4`, same-line `8:1-8:4`), `L-L` for visual-line (columns are always full width there).
 - Truncation order under narrow widths: selection range first, then... nothing else; badge and position are always preserved (worst case the row degenerates to badge + position with no gap).
 
@@ -72,7 +80,8 @@ A small pure function `normalizeKeyRepeat(data: string): string` in `src/viewer.
 - Sequences with a real modifier (modifier field > 1) keep the modifier, only the event field is stripped.
 - Anything that is not a kitty repeat sequence passes through unchanged (press, release already filtered upstream, plain text).
 
-This deliberately keeps the reducer's raw-string matching untouched. Migrating the reducer to logical-key matching via pi-tui's `matchesKey` (which already parses event types) is a possible later refactor, not this spec.
+This deliberately keeps the reducer's raw-string matching untouched.
+Migrating the reducer to logical-key matching via pi-tui's `matchesKey` (which already parses event types) is a possible later refactor, not this spec.
 
 ## Horizontal scrolling
 
@@ -83,17 +92,24 @@ State machine (`src/viewer-state.ts`):
 - Cursor follow, applied after every cursor move and mode switch (vim `sidescrolloff=0` semantics):
   - `cursorDisplayCol < scrollLeft` -> `scrollLeft = cursorDisplayCol`
   - `cursorDisplayCol >= scrollLeft + contentWidth` -> `scrollLeft = cursorDisplayCol - contentWidth + 1`
-- Clamp: `0 <= scrollLeft <= max(0, maxLineDisplayWidth - contentWidth)`, where `maxLineDisplayWidth` is the maximum display width across all loaded lines (computed once at file load). Re-clamped on every reduce (covers width changes) and again defensively at render time (covers terminal resizes with no keypress).
-- No new keybindings: existing `h`/`l`/`0`/`$` and all line motions drive the follow logic. `zh`/`zl`/`zs`/`ze` are explicitly out (YAGNI).
+- Clamp: `0 <= scrollLeft <= max(0, maxLineDisplayWidth - contentWidth)`, where `maxLineDisplayWidth` is the maximum display width across all loaded lines (computed once at file load).
+  Re-clamped on every reduce (covers width changes) and again defensively at render time (covers terminal resizes with no keypress).
+- No new keybindings: existing `h`/`l`/`0`/`$` and all line motions drive the follow logic.
+  `zh`/`zl`/`zs`/`ze` are explicitly out (YAGNI).
 
 Rendering (`src/viewer.ts`):
 
 - The gutter (line number + Nerd Font icon) stays fixed; only the content area scrolls.
 - Per content row: `renderLine` is unchanged (spans + inverse cursor cell computed on the full line in display-column coordinates); the styled result is then windowed: `sliceByColumn(styled, scrollLeft, contentWidth)` and padded to `contentWidth`.
-- Implementation checkpoint: verify that pi-tui's `sliceByColumn` is ANSI-aware (slices a styled string by visible column without breaking escape sequences). If it is not, fall back to offsetting span columns by `-scrollLeft`, slicing the raw text, and applying styles inside the window (spans already use display-column coordinates, so this is mechanical).
-- ~~Overflow indicators: when the line extends past `scrollLeft + contentWidth`, the right edge keeps today's `...`; when `scrollLeft > 0`, the first content cell is replaced by a dim Nerd Font chevron. This mirrors vim's `listchars` behavior with `wrap` off - `extends:c` in the last column when the line continues beyond the right edge, `precedes:c` in the first visible column when text precedes it, both rendered with the dim-like `NonText` highlight.~~ **Deprecated (post-merge sandbox E2E, user decision):** vim's *default* `listchars` enables neither `extends` nor `precedes`, so this overshot vim parity; in practice the indicator cells were noisy (the chevron shows on every short row once scrolled) and collided with the cursor at the follow edge. The window is a plain cut; the statusline's `L:C` column readout is the orientation aid. Because a span ending exactly at the window's right edge loses its closing SGR to the slice, a row whose sliced content contains any SGR gets an explicit `\x1b[0m` before the padding so inverse/underline cannot bleed into it.
+- Implementation checkpoint: verify that pi-tui's `sliceByColumn` is ANSI-aware (slices a styled string by visible column without breaking escape sequences).
+  If it is not, fall back to offsetting span columns by `-scrollLeft`, slicing the raw text, and applying styles inside the window (spans already use display-column coordinates, so this is mechanical).
+- ~~Overflow indicators: when the line extends past `scrollLeft + contentWidth`, the right edge keeps today's `...`; when `scrollLeft > 0`, the first content cell is replaced by a dim Nerd Font chevron.
+  This mirrors vim's `listchars` behavior with `wrap` off - `extends:c` in the last column when the line continues beyond the right edge, `precedes:c` in the first visible column when text precedes it, both rendered with the dim-like `NonText` highlight.~~ **Deprecated (post-merge sandbox E2E, user decision):** vim's *default* `listchars` enables neither `extends` nor `precedes`, so this overshot vim parity; in practice the indicator cells were noisy (the chevron shows on every short row once scrolled) and collided with the cursor at the follow edge.
+  The window is a plain cut; the statusline's `L:C` column readout is the orientation aid.
+  Because a span ending exactly at the window's right edge loses its closing SGR to the slice, a row whose sliced content contains any SGR gets an explicit `\x1b[0m` before the padding so inverse/underline cannot bleed into it.
 - Because the cursor cell is styled before slicing and follow logic guarantees it is inside the window, the invisible-cursor defect is fixed by construction.
-- A wide char straddling a cut - the window's left edge or either edge of the overlay box splice - is replaced by a one-cell space placeholder (terminal convention, same as vim) instead of being dropped or half-rendered, so text, cursor, and overlay borders keep their display-column alignment (`sliceWindow` in `src/display.ts`, `spliceRow` in `src/card-chrome.ts`). Dropping the straddler shrinks that row by one cell, which is what misaligned the comment box borders on CJK lines.
+- A wide char straddling a cut - the window's left edge or either edge of the overlay box splice - is replaced by a one-cell space placeholder (terminal convention, same as vim) instead of being dropped or half-rendered, so text, cursor, and overlay borders keep their display-column alignment (`sliceWindow` in `src/display.ts`, `spliceRow` in `src/card-chrome.ts`).
+  Dropping the straddler shrinks that row by one cell, which is what misaligned the comment box borders on CJK lines.
 
 ## Testing
 

@@ -1,6 +1,8 @@
 ---
+title: Statusline + Horizontal Scroll - Implementation Plan
 status: done
 progress: 6/6
+spec: ../specs/2026-10-18-statusline-and-hscroll-design.md
 ---
 
 # Statusline + Horizontal Scroll - Implementation Plan
@@ -37,7 +39,8 @@ progress: 6/6
 
 ### Task 1: Extract the display-column helper module
 
-`reduceViewer` (a pure function) needs tab-expanded display-column math for horizontal follow, but that helper currently lives in `src/viewer.ts` and viewer-state must not depend back on viewer. Extract it into a leaf module both sides import.
+`reduceViewer` (a pure function) needs tab-expanded display-column math for horizontal follow, but that helper currently lives in `src/viewer.ts` and viewer-state must not depend back on viewer.
+Extract it into a leaf module both sides import.
 
 **Files:**
 - Create: `src/display.ts`
@@ -46,7 +49,8 @@ progress: 6/6
 
 - [x] **Step 1: Create `src/display.ts`**
 
-Move `DEFAULT_TAB_SIZE = 4`, `tabExpanded(s, tabSize?)`, `rawColToDisplayCol(line, col, tabSize?)` - including their doc comments - verbatim into `src/display.ts` and export them; `src/viewer.ts` switches to `import { ... } from "./display.ts"` (no re-export; update all import sites). Zero behavior change, pure move.
+Move `DEFAULT_TAB_SIZE = 4`, `tabExpanded(s, tabSize?)`, `rawColToDisplayCol(line, col, tabSize?)` - including their doc comments - verbatim into `src/display.ts` and export them; `src/viewer.ts` switches to `import { ... } from "./display.ts"` (no re-export; update all import sites).
+Zero behavior change, pure move.
 
 - [x] **Step 2: Run the full suite to verify no regression**
 
@@ -99,7 +103,8 @@ Expected: FAIL with `normalizeKeyRepeat is not a function` (or a missing-export 
 
 - [x] **Step 3: Implement `export function normalizeKeyRepeat(data: string): string` in `src/viewer.ts`**
 
-Rule: rewrite only when the entire input is exactly one kitty sequence carrying event type 2 (letter-final `\x1b[<n>;<mod>:2X`, tilde form `\x1b[<n>;<mod>:2~`, CSI-u form `\x1b[<cp>;<mod>:2u`; single anchored match, not a global replace) - drop `:2`; when the modifier field is 1, drop `;1` as well (for the letter form, if the remaining parameter is just `1`, drop the whole parameter section, yielding `\x1b[A` rather than `\x1b[1A`). Everything else returns unchanged.
+Rule: rewrite only when the entire input is exactly one kitty sequence carrying event type 2 (letter-final `\x1b[<n>;<mod>:2X`, tilde form `\x1b[<n>;<mod>:2~`, CSI-u form `\x1b[<cp>;<mod>:2u`; single anchored match, not a global replace) - drop `:2`; when the modifier field is 1, drop `;1` as well (for the letter form, if the remaining parameter is just `1`, drop the whole parameter section, yielding `\x1b[A` rather than `\x1b[1A`).
+Everything else returns unchanged.
 
 - [x] **Step 4: Run the test to verify it passes**
 
@@ -201,7 +206,9 @@ Expected: FAIL (current implementation has no windowing / no left indicator)
 
 - Render-time safety: `const sl = clampScrollLeft(this.state.scrollLeft ?? 0)` (upper bound `max(0, this.maxLineWidth - contentWidth + 1)`, lower bound 0).
 - ~~The indicators mirror vim's `listchars` `extends`/`precedes` semantics with `wrap` off (dim like `NonText`); keep the indicator characters as specified.~~ **Deprecated:** vim's default `listchars` enables neither; removed post-merge (see Amendment below).
-- Row rendering changes from `truncateToWidth(gutter + renderLine(...), inner, "...", true)` to: first window the full styled result of `renderLine(...)` via `sliceByColumn(styled, sl + leftPad, contentWidth - leftPad - rightPad, true)` (`strict=true` so no half wide char), where `leftPad` = `sl > 0 ? 1 : 0` and `rightPad` = `3` when content extends past the window's right edge, else `0`; then join `gutter + (sl > 0 ? colors.dim(<NF chevron>) : "") + windowed + (right overflow ? colors.dim("...") : "")` and space-pad to `inner`. `contentWidth` matches Task 3's `contentWidth()`. Right-overflow test: `rawColToDisplayCol(line, line.length) > sl + contentWidth`.
+- Row rendering changes from `truncateToWidth(gutter + renderLine(...), inner, "...", true)` to: first window the full styled result of `renderLine(...)` via `sliceByColumn(styled, sl + leftPad, contentWidth - leftPad - rightPad, true)` (`strict=true` so no half wide char), where `leftPad` = `sl > 0 ? 1 : 0` and `rightPad` = `3` when content extends past the window's right edge, else `0`; then join `gutter + (sl > 0 ? colors.dim(<NF chevron>) : "") + windowed + (right overflow ? colors.dim("...") : "")` and space-pad to `inner`.
+  `contentWidth` matches Task 3's `contentWidth()`.
+  Right-overflow test: `rawColToDisplayCol(line, line.length) > sl + contentWidth`.
 - The inverse cursor cell is rendered inside `renderLine`, before slicing; the follow logic (Task 3) guarantees it sits inside the window - no extra handling.
 - `paintCommentBox`'s `selCol` becomes `gutterWidth(...) + rawColToDisplayCol(...) - sl` (if `overlayPreview` goes through the same function it is covered automatically; verify and fix its anchor path too).
 
@@ -267,7 +274,8 @@ export function renderStatusLine(input: StatusLineInput, innerWidth: number, col
 export function renderCommandLine(input: CommandLineInput, innerWidth: number, colors: ChromeColors): string;
 ```
 
-The `input` variant only renders `prompt + value` (truncated) for now; the inverse cursor cell lands with the search spec. Note this in a comment.
+The `input` variant only renders `prompt + value` (truncated) for now; the inverse cursor cell lands with the search spec.
+Note this in a comment.
 
 - [x] **Step 4: Slim card-chrome + framePanel interface**
 
@@ -331,7 +339,10 @@ git commit -m "feat(viewer): wire statusline/cmdline rows into annotate card"
 
 ## Amendment (post-merge, user decision after sandbox E2E)
 
-The overflow indicators (left NF chevron / right `...`, Task 4) were removed: vim's default `listchars` enables neither `extends` nor `precedes`, and the indicator cells proved noisy in practice (visible on every short row once scrolled; cursor/indicator collisions at the follow edge). The cursor-wins-over-indicator splice went with them. What remains of Task 4: the display-column windowing itself, the render-time clamp, the wide-char strict slicing, the scroll-corrected comment-box anchor, plus an SGR reset appended when a span's closing code falls outside the sliced window. Orientation now relies on the statusline `L:C` readout.
+The overflow indicators (left NF chevron / right `...`, Task 4) were removed: vim's default `listchars` enables neither `extends` nor `precedes`, and the indicator cells proved noisy in practice (visible on every short row once scrolled; cursor/indicator collisions at the follow edge).
+The cursor-wins-over-indicator splice went with them.
+What remains of Task 4: the display-column windowing itself, the render-time clamp, the wide-char strict slicing, the scroll-corrected comment-box anchor, plus an SGR reset appended when a span's closing code falls outside the sliced window.
+Orientation now relies on the statusline `L:C` readout.
 
 ## Self-check record
 

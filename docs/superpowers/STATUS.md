@@ -1,6 +1,7 @@
 # Project Status
 
-Read this file first at the start of a session. It is only an index: the
+Read this file first at the start of a session.
+It is only an index: the
 authoritative status of each spec/plan lives in its own YAML front-matter
 (`status: draft|approved|in-progress|done`, plans also carry `progress: n/m`).
 Do not open docs marked `done` unless the current work touches that area.

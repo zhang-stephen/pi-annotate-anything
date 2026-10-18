@@ -1,6 +1,8 @@
 ---
+title: Annotate Card Chrome Implementation Plan
 status: done
 progress: 5/5
+spec: ../specs/2026-10-17-annotate-card-chrome-design.md
 ---
 
 # Annotate Card Chrome Implementation Plan
@@ -8,7 +10,8 @@ progress: 5/5
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers-zh's subagent-driven-development or executing-plans to implement this plan task by task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 Spec: docs/superpowers/specs/2026-10-17-annotate-card-chrome-design.md (approved)
-Branch: feat/card-chrome off master. TDD: failing test first, then implementation, then refactor.
+Branch: feat/card-chrome off master.
+TDD: failing test first, then implementation, then refactor.
 
 ## Task 1: src/card-chrome.ts - pure rendering helpers
 
@@ -17,7 +20,8 @@ Branch: feat/card-chrome off master. TDD: failing test first, then implementatio
 - [x] **Step 3: failing tests** for `commentBoxPlacement(selTop, selBottom, selCol, boxH, boxW, innerW, viewH)`: below-selection default, flip above when boxH does not fit above the footer, left edge aligned to selCol clamped to [0, innerW - boxW], never overlaps border columns.
 - [x] **Step 4: failing tests** for `draftAtCursor(cursorLine, pending)`: returns the last (most recent) draft whose range covers cursorLine, undefined otherwise; char-wise and line-wise ranges both covered.
 - [x] **Step 5: failing tests** for FOOTER_HINTS: normal has no mode badge; visualChar -> `-- VISUAL --`; visualLine -> `-- VISUAL LINE --`; comment -> `-- COMMENT --`; normal hints mention c/x/p/q; keys match the spec tables exactly.
-- [x] **Step 6: implement** src/card-chrome.ts to green. Colors injected as a { bg, border, dim, accent, warning } record of (text) => string functions; helpers never import theme modules.
+- [x] **Step 6: implement** src/card-chrome.ts to green.
+  Colors injected as a { bg, border, dim, accent, warning } record of (text) => string functions; helpers never import theme modules.
 - [x] **Step 7: verify** `node --test test/` green, `npx tsc --noEmit` clean.
 
 ## Task 2: viewer.ts chrome integration

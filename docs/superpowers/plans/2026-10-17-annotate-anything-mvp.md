@@ -1,6 +1,8 @@
 ---
+title: pi-annotate-anything MVP Implementation Plan
 status: done
 progress: 12/12
+spec: ../specs/2026-10-17-annotate-anything-mvp-design.md
 ---
 
 # pi-annotate-anything MVP Implementation Plan
@@ -19,7 +21,8 @@ progress: 12/12
 
 **Global constraints (apply to every task):**
 
-- English for all code, comments, tests, docs. Chinese only where AGENTS.md allows.
+- English for all code, comments, tests, docs.
+  Chinese only where AGENTS.md allows.
 - ASCII only in all files, except UI-facing strings which may use Nerd Font icons.
 - Semantic commits, e.g. `feat(viewer): ...`.
 - No third-party libraries beyond `@earendil-works/*`.
@@ -32,7 +35,9 @@ progress: 12/12
 2. Pill recolor must not change line width: replacement is color-only, the token text itself is the pill label (cursor geometry risk if violated).
 3. Wide chars/tabs: selection math on raw columns, display math via `visibleWidth()`; tab expansion mapping helper must be tested.
 4. CRLF and binary/size guards in file loading.
-5. Draft lifecycle: the composer text is the source of truth for draft survival. `pruneFromText(editorText)` runs at every trigger point: editor text change, card open, before transform on `input`, and on `message_start` (no blind `clear()` -- a message_start from an RPC/extension-sent message must not kill drafts whose pills are still in the composer). Store is dropped at session shutdown.
+5. Draft lifecycle: the composer text is the source of truth for draft survival.
+   `pruneFromText(editorText)` runs at every trigger point: editor text change, card open, before transform on `input`, and on `message_start` (no blind `clear()` -- a message_start from an RPC/extension-sent message must not kill drafts whose pills are still in the composer).
+   Store is dropped at session shutdown.
 
 ---
 
@@ -100,7 +105,8 @@ test("runner works", () => {
 });
 ```
 
-Run: `node --test test/` -- expected: 1 passing test. Run: `npx tsc --noEmit` -- expected: clean.
+Run: `node --test test/` -- expected: 1 passing test.
+Run: `npx tsc --noEmit` -- expected: clean.
 
 - [x] **Step 5: Commit**
 
@@ -112,7 +118,8 @@ git add -A && git commit -m "chore: scaffold test runner and typescript config"
 
 ### Task 2: Selection model (`src/selection.ts`)
 
-Pure selection math. No I/O, no pi imports.
+Pure selection math.
+No I/O, no pi imports.
 
 **Files:**
 
@@ -180,7 +187,8 @@ export function loadFile(path: string, maxBytes?: number): LoadResult;
 export function extractRange(lines: string[], range: Range): string;
 ```
 
-`extractRange` slices raw columns: single-line range slices `line.slice(startCol, endCol)`; multi-line keeps middle lines whole. Newlines between selected lines are included in the snapshot.
+`extractRange` slices raw columns: single-line range slices `line.slice(startCol, endCol)`; multi-line keeps middle lines whole.
+Newlines between selected lines are included in the snapshot.
 
 - [x] **Step 2: Run tests, expect failure.**
 
@@ -332,7 +340,8 @@ export function recolorTokens(
 ): string;
 ```
 
-Cases: token recolored; unknown text untouched; multiple tokens; ANSI width unchanged (`visibleWidth` of output equals input); token not found returns input unchanged. Test with a trivial style wrapper `(s) => \`<${s}>\``.
+Cases: token recolored; unknown text untouched; multiple tokens; ANSI width unchanged (`visibleWidth` of output equals input); token not found returns input unchanged.
+Test with a trivial style wrapper `(s) => \`<${s}>\``.
 
 - [x] **Step 2: Run tests, expect failure.**
 
@@ -363,15 +372,18 @@ export class AnnotateEditor extends CustomEditor {
 }
 ```
 
-Color-only replacement (inverse video). Known limitation, accepted: a token split across wrapped lines is not recolored (stays plain text).
+Color-only replacement (inverse video).
+Known limitation, accepted: a token split across wrapped lines is not recolored (stays plain text).
 
-- [x] **Step 5: Run tests + typecheck. Commit** -- `feat(editor): add pill recoloring composer editor`
+- [x] **Step 5: Run tests + typecheck.
+  Commit** -- `feat(editor): add pill recoloring composer editor`
 
 ---
 
 ### Task 8: Comment input (`src/comment-input.ts`)
 
-Embedded in the card. A small state machine, not pi-tui's full Editor.
+Embedded in the card.
+A small state machine, not pi-tui's full Editor.
 
 **Files:**
 
@@ -446,11 +458,13 @@ export function reduceViewer(
 ): { state: ViewerState; effect?: ViewerEffect };
 ```
 
-Key table (raw input strings): `h j k l`, arrows (`\x1b[A` etc.), `0`, `$`, `gg` (two-stroke), `G`, `ctrl+d` (`\x04`) / `ctrl+u` (`\x15`) half-page, PgUp/PgDn, `v`, `V`, `o`, `c`, `q`, Esc (`\x1b`). In comment mode, keys route to `reduceComment` (Enter = `\r`, ctrl+j = `\n`, shift+enter = `\x1b\r`).
+Key table (raw input strings): `h j k l`, arrows (`\x1b[A` etc.), `0`, `$`, `gg` (two-stroke), `G`, `ctrl+d` (`\x04`) / `ctrl+u` (`\x15`) half-page, PgUp/PgDn, `v`, `V`, `o`, `c`, `q`, Esc (`\x1b`).
+In comment mode, keys route to `reduceComment` (Enter = `\r`, ctrl+j = `\n`, shift+enter = `\x1b\r`).
 
 - [x] **Step 2: Run tests, expect failure.**
 
-- [x] **Step 3: Implement.** Two-stroke keys (`gg`) tracked with a pending-key field. Selection during visual modes derives from `anchor` + `cursor` via `normalize()`.
+- [x] **Step 3: Implement.** Two-stroke keys (`gg`) tracked with a pending-key field.
+  Selection during visual modes derives from `anchor` + `cursor` via `normalize()`.
 
 - [x] **Step 4: Commit** -- `feat(viewer): add vim-style viewer state machine`
 
@@ -477,9 +491,11 @@ export function rawColToDisplayCol(
 export function gutterWidth(lineCount: number): number;
 ```
 
-Tab mapping: tab advances to the next multiple of `tabSize` (default 4); `rawColToDisplayCol` maps a raw column to its display column after expansion. Test tabs at various positions and wide chars via `visibleWidth`.
+Tab mapping: tab advances to the next multiple of `tabSize` (default 4); `rawColToDisplayCol` maps a raw column to its display column after expansion.
+Test tabs at various positions and wide chars via `visibleWidth`.
 
-- [x] **Step 2: Run tests, expect failure. Implement helpers.**
+- [x] **Step 2: Run tests, expect failure.
+  Implement helpers.**
 
 - [x] **Step 3: Implement `AnnotateCard`** (`implements Component`):
 
@@ -511,14 +527,16 @@ Render pipeline per visible line:
 
 1. Gutter: right-aligned line number; `*` marker column for lines with a pending annotation.
 2. Content: `highlightCode(lines.join("\n"), getLanguageFromPath(path))` computed once in the constructor; per frame, slice the viewport.
-3. Active selection: for lines intersecting the selection, render the raw (tab-expanded, unhighlighted) text with the selected display-column span wrapped in inverse video (`\x1b[7m...\x1b[27m`). Selection display wins over syntax highlight on those lines.
+3. Active selection: for lines intersecting the selection, render the raw (tab-expanded, unhighlighted) text with the selected display-column span wrapped in inverse video (`\x1b[7m...\x1b[27m`).
+   Selection display wins over syntax highlight on those lines.
 4. Pending annotations: underline the covered display span (`\x1b[4m...\x1b[24m`) so syntax colors stay visible; underline applies AFTER highlighting (wrapping whole-line or spliced span).
 5. Cursor cell in normal/visual mode: inverse video on the cursor column.
 6. Comment mode: append `renderCommentBox` output below the file area.
 
 All width clipping via `truncateToWidth` / `sliceByColumn` from pi-tui.
 
-- [x] **Step 4: Typecheck + run all tests. Commit** -- `feat(viewer): add annotate card component`
+- [x] **Step 4: Typecheck + run all tests.
+  Commit** -- `feat(viewer): add annotate card component`
 
 ---
 
@@ -613,8 +631,10 @@ Notes for the implementer:
 - Check the real `CustomEditor` constructor signature and `ctx.ui.theme`/`ctx.ui.tui` availability in `types.d.ts`; adjust the wiring (not the tested modules) as needed.
 - `prune` runs BEFORE expansion is irrelevant; it must run on every input event using the pre-expansion text (tokens still visible there).
 - Reconcile on card open: the command handler calls `store.prune(...)` against `ctx.ui.getEditorText()` BEFORE constructing AnnotateCard, so markers never outlive their pills.
-- AnnotateEditor prunes on text change: override the text-mutation path (setText/clear or a handleInput post-check) so deleting a pill prunes its draft immediately. Clearing the whole composer therefore clears all drafts, which matches the user's mental model.
-- `message_start` must NOT blindly `clear()`: run `store.pruneFromText(ctx.ui.getEditorText())` instead. After the user's own send the editor is empty, so this clears everything; an unrelated RPC/extension message_start keeps drafts whose pills are still present.
+- AnnotateEditor prunes on text change: override the text-mutation path (setText/clear or a handleInput post-check) so deleting a pill prunes its draft immediately.
+  Clearing the whole composer therefore clears all drafts, which matches the user's mental model.
+- `message_start` must NOT blindly `clear()`: run `store.pruneFromText(ctx.ui.getEditorText())` instead.
+  After the user's own send the editor is empty, so this clears everything; an unrelated RPC/extension message_start keeps drafts whose pills are still present.
 
 - [x] **Step 2: Typecheck** -- `npx tsc --noEmit` clean.
 
@@ -647,4 +667,7 @@ Notes for the implementer:
 
 ## Self-review
 
-Coverage: every spec module maps to a task (status.ts removed per spec). TDD: every logic module has failing tests before implementation; TUI wiring is covered by pure-helper tests + manual e2e. Placeholder scan: the only intentional gap is the CustomEditor constructor details in Task 11, flagged in-line. Type consistency: `Range`, `VisualMode`, `Draft` are defined once in `selection.ts`/`store.ts` and reused.
+Coverage: every spec module maps to a task (status.ts removed per spec).
+TDD: every logic module has failing tests before implementation; TUI wiring is covered by pure-helper tests + manual e2e.
+Placeholder scan: the only intentional gap is the CustomEditor constructor details in Task 11, flagged in-line.
+Type consistency: `Range`, `VisualMode`, `Draft` are defined once in `selection.ts`/`store.ts` and reused.
