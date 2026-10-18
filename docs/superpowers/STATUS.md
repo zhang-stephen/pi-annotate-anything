@@ -19,6 +19,10 @@ Do not open docs marked `done` unless the current work touches that area.
   Fix direction: grab the `OverlayHandle` via `ctx.ui.custom`'s `onHandle` and re-assert `handle.focus()` on agent lifecycle events while the card is open; optionally file an upstream pi issue.
   Deferred: the scenario (agent active + card open) is rare in practice.
 
+- 2026-10-19: annotate path-completion manual E2E still owed on master (plan `2026-10-18-annotate-path-completion.md` Task 2 Step 3, merge proceeded on review evidence per user direction).
+  Cover: Tab completion, directory drill-down, empty-result fallback, and the resume-cwd case (launch pi in directory B, resume a session stored with cwd A, verify relative-path completion and the handler agree - the scenario fix `e0e0067` targets).
+  The resume-cwd case is rare and not reproducible in the current environment, so it stays a deferred manual check.
+
 ## Done
 
 - plan: `docs/superpowers/plans/2026-10-18-annotate-path-completion.md`
