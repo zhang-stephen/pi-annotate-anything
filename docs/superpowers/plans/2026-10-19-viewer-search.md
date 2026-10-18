@@ -1,7 +1,7 @@
 ---
 title: Viewer Search - Implementation Plan
 status: in-progress
-progress: 0/5
+progress: 1/5
 spec: ../specs/2026-10-18-viewer-search-design.md
 ---
 
@@ -53,7 +53,7 @@ spec: ../specs/2026-10-18-viewer-search-design.md
 - Modify: `src/viewer.ts` (`render`, `overlayCommentBox`, `overlayPreview`, `paintCommentBox`, the method deriving the reducer's `contentWidth` from `renderedInner`)
 - Test: `test/card-chrome.test.ts`, `test/viewer.test.ts`
 
-- [ ] **Step 1: Write the failing tests**
+- [x] **Step 1: Write the failing tests**
 
 Add to `test/card-chrome.test.ts` (verbatim):
 
@@ -89,12 +89,12 @@ Update `frameCommentBox` expectations to the new rule: inner lines are truncated
 
 Update the exact-row assertions in `test/viewer.test.ts` under the uniform rewrite rule: every framed row gains one blank column inside each border, and every content budget (row content, statusline, cmdline, comment box) shrinks by 2 display columns. Layout invariants (row widths, gutter, alignment) are unchanged.
 
-- [ ] **Step 2: Run the tests, verify failure**
+- [x] **Step 2: Run the tests, verify failure**
 
 Run: `node --test test/card-chrome.test.ts`
 Expected: FAIL (new invariant test: `inner[1]` is not `" "`).
 
-- [ ] **Step 3: Implement `PAD_X`**
+- [x] **Step 3: Implement `PAD_X`**
 
 In `src/card-chrome.ts`:
 
@@ -114,22 +114,22 @@ In `src/viewer.ts` (import `PAD_X` from `./card-chrome.ts`):
 - `paintCommentBox`: pass `contentW` as `commentBoxPlacement`'s `innerW`; `selCol` and the `spliceRow` offset are unchanged (content coordinates).
 - Both overlay methods receive `contentW` from `render` (adjust their signatures or compute inside; one consistent choice).
 
-- [ ] **Step 4: Run the tests, verify pass**
+- [x] **Step 4: Run the tests, verify pass**
 
 Run: `node --test test/card-chrome.test.ts test/viewer.test.ts`
 Expected: PASS (all updated assertions green).
 
-- [ ] **Step 5: Typecheck and full suite**
+- [x] **Step 5: Typecheck and full suite**
 
 Run: `npx tsc --noEmit && npm test`
 Expected: tsc clean; all tests pass.
 
-- [ ] **Step 6: Manual E2E (human confirms)**
+- [x] **Step 6: Manual E2E (human confirms)** (confirmed 2026-10-19; narrow-terminal item untestable in the current environment, deferred)
 
 Sandbox: `PI_CODING_AGENT_DIR=/tmp/pi-sandbox-home pi -e ./index.ts`
 Check: gutter/text no longer touch the panel borders; the comment box and preview box show the same inner padding; nothing misaligns on hscroll, on a narrow terminal, and with CJK content.
 
-- [ ] **Step 7: Commit**
+- [x] **Step 7: Commit**
 
 ```bash
 git add src/card-chrome.ts src/viewer.ts test/card-chrome.test.ts test/viewer.test.ts
