@@ -1166,3 +1166,13 @@ test("wiring: a transient message renders right-aligned and clears on the next k
   assert.ok(!after[4].includes("search hit BOTTOM"), `message cleared, got: ${after[4]}`);
   assert.ok(after[4].includes("hjkl move"), "hints restored");
 });
+
+test("wiring: an invalid pattern shows the compile error right-aligned on the cmdline input", () => {
+  const h = makeCard({ lines: ["foo", "bar"] });
+  h.card.handleInput("/");
+  h.card.handleInput("("); // invalid: compile error becomes the transient message
+  const bare = h.card.render(80).map(strip);
+  assert.ok(bare[4].startsWith("│ /("), `cmdline input stays editable, got: ${bare[4]}`);
+  assert.ok(bare[4].includes("Unterminated group"), `engine error shown, got: ${bare[4]}`);
+  assert.ok(bare[4].endsWith("Unterminated group │"), `error right-aligned, got: ${bare[4]}`);
+});

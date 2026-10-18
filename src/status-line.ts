@@ -63,7 +63,7 @@ export interface StatusLineInput {
 // variants.
 export type CommandLineInput =
   | { kind: "hints"; mode: CardMode; message?: string | null }
-  | { kind: "input"; prompt: string; value: string; cursorCol: number };
+  | { kind: "input"; prompt: string; value: string; cursorCol: number; message?: string | null };
 
 // Raw SGR for the emulated cmdline cursor cell, mirroring viewer.ts's
 // INVERSE_ON/INVERSE_OFF (defined locally so status-line keeps its imports
@@ -159,6 +159,20 @@ export function renderStatusLine(input: StatusLineInput, innerWidth: number, col
 export function renderCommandLine(input: CommandLineInput, innerWidth: number, colors: ChromeColors): string {
   if (input.kind === "input") {
     const promptW = visibleWidth(input.prompt);
+    const message = input.message ? input.message : null;
+    if (message !== null) {
+      // Same right-aligned widget as the hints variant (invalid-pattern
+      // errors surface here while the input row stays editable): the value
+      // window shrinks first, the message is preserved whole unless it
+      // alone exceeds the width.
+      const msgW = visibleWidth(message);
+      if (msgW > innerWidth) return colors.accent(truncateToWidth(message, innerWidth, ""));
+      const valueBudget = Math.max(0, innerWidth - promptW - 1 - msgW - 1);
+      const value = tailByWidth(input.value, valueBudget);
+      const shownW = promptW + visibleWidth(value) + 1;
+      const gap = " ".repeat(Math.max(0, innerWidth - shownW - msgW));
+      return colors.accent(input.prompt) + value + INVERSE_ON + " " + INVERSE_OFF + gap + colors.accent(message);
+    }
     const value = tailByWidth(input.value, innerWidth - promptW - 1);
     const shownW = promptW + visibleWidth(value) + 1;
     return (

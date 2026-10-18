@@ -379,7 +379,7 @@ export class AnnotateCard implements Component, Focusable {
     const searchInput = this.state.mode === "search" ? this.state.search ?? null : null;
     const cmdline = searchInput !== null
       ? renderCommandLine(
-        { kind: "input", prompt: "/", value: searchInput.query, cursorCol: searchInput.query.length },
+        { kind: "input", prompt: "/", value: searchInput.query, cursorCol: searchInput.query.length, message: this.state.message ?? null },
         contentW,
         this.colors,
       )

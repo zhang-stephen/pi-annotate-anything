@@ -1,7 +1,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 
-import { visibleWidth } from "@earendil-works/pi-tui";
+import { stripTerminalSequences, visibleWidth } from "@earendil-works/pi-tui";
 
 import { cardModeOf, FOOTER_HINTS, renderCommandLine, renderStatusLine } from "../src/status-line.ts";
 import type { ChromeColors } from "../src/card-chrome.ts";
@@ -225,4 +225,17 @@ test("FOOTER_HINTS exposes badge and hints as separate fields per mode", () => {
     assert.equal(typeof entry.badge, "string");
     assert.ok(entry.badge.length > 0);
   }
+});
+
+test("cmdline input: message renders right-aligned, value window shrinks first", () => {
+  const row = renderCommandLine({ kind: "input", prompt: "/", value: "(", cursorCol: 1, message: "bad pattern" }, 40, plain);
+  assert.equal(row, "/(\x1b[7m \x1b[27m" + " ".repeat(26) + "bad pattern");
+  const tight = renderCommandLine({ kind: "input", prompt: "/", value: "abcdefghijklmn", cursorCol: 14, message: "bad pattern" }, 20, plain);
+  assert.equal(tight, "/ijklmn\x1b[7m \x1b[27m bad pattern");
+});
+
+test("cmdline input: an over-wide message falls back to truncation", () => {
+  const row = renderCommandLine({ kind: "input", prompt: "/", value: "x", cursorCol: 1, message: "m".repeat(25) }, 20, plain);
+  assert.equal(visibleWidth(row), 20);
+  assert.ok(stripTerminalSequences(row).startsWith("m".repeat(17)));
 });
