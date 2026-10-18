@@ -320,8 +320,9 @@ test("render windows the content at scrollLeft behind a fixed gutter with a dim 
   for (let i = 0; i < 30; i++) h.card.handleInput("l"); // cursor 30 -> scrollLeft 9
   const rows = h.card.render(30);
   // Window [10, 28) behind the fixed gutter, chevron in the first content
-  // cell (replacing display col 9), dots in the last three.
-  assert.equal(strip(rows[1]), "│1     " + LEFT_OVERFLOW_ICON + "012345678901234567" + "..." + "│");
+  // cell (replacing display col 9), dots in the last three - except the
+  // cursor (col 30, window col 21) wins the last dot cell: ".." + cursor.
+  assert.equal(strip(rows[1]), "│1     " + LEFT_OVERFLOW_ICON + "012345678901234567" + "..0" + "│");
   assert.equal(visibleWidth(rows[1]), 30);
   assert.ok(h.fgCalls.some((c) => c.token === "dim" && c.text === LEFT_OVERFLOW_ICON), "chevron is theme dim");
 });
@@ -1027,4 +1028,31 @@ test("kitty CSI-u ctrl+j and shift+enter insert a newline in comment mode", () =
   h2.card.handleInput("b");
   h2.card.handleInput("\r");
   assert.equal(h2.calls.annotate[0].comment, "a\nb");
+});
+
+test("the cursor cell wins over the right ... indicator at the follow edge", () => {
+  const h = makeCard({ lines: [digitLine(100)] });
+  h.card.render(30); // inner 28, gutter 6, contentWidth 22
+  for (let i = 0; i < 22; i++) h.card.handleInput("l"); // cursor 22 -> scrollLeft 1, window col 21
+  const row = h.card.render(30)[1];
+  // The cursor sits on the last window cell: the dots shrink to ".." and the
+  // inverse cursor cell takes the final cell instead of the third dot.
+  // Cursor at col 22 is pinned to the last window cell: the dots lose their
+  // third cell to the inverse cursor cell (the cursor wins over indicators).
+  assert.equal(strip(row), "│1     " + LEFT_OVERFLOW_ICON + "234567890123456789" + "..2│");
+  assert.ok(row.includes("\x1b[7m2\x1b[0m"), `cursor cell over the dots, got: ${JSON.stringify(strip(row))}`);
+  assert.equal(visibleWidth(row), 30);
+});
+
+test("the cursor cell wins over the left chevron at the follow edge", () => {
+  const h = makeCard({ lines: [digitLine(100)] });
+  h.card.render(30);
+  for (let i = 0; i < 22; i++) h.card.handleInput("l"); // cursor 22, scrollLeft 1
+  for (let i = 0; i < 21; i++) h.card.handleInput("h"); // cursor 1: displayCol 1, window col 0
+  const row = h.card.render(30)[1];
+  // The cursor replaces the chevron; the window text still starts at col 2.
+  assert.equal(strip(row), "│1     " + "1" + "234567890123456789" + "...│");
+  assert.ok(row.includes("\x1b[7m1\x1b[0m"), `cursor cell over the chevron, got: ${JSON.stringify(strip(row))}`);
+  assert.ok(!row.includes(LEFT_OVERFLOW_ICON), "chevron hidden behind the cursor");
+  assert.equal(visibleWidth(row), 30);
 });

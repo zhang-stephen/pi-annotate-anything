@@ -145,7 +145,7 @@ function applyStyleSpans(line: string, spans: StyleSpan[], styles: Record<SpanSt
 // are kept, only the event field is stripped. Everything else passes through
 // unchanged (presses, releases - filtered upstream anyway, plain text, and
 // the bracketed-paste brackets \x1b[200~ / \x1b[201~).
-const KITTY_REPEAT = /^\x1b\[(\d+);(\d+):2([A-Za-z~u])$/;
+const KITTY_REPEAT = /^\x1b\[(\d+);(\d+):2([A-Z~u])$/;
 
 export function normalizeKeyRepeat(data: string): string {
   const m = KITTY_REPEAT.exec(data);
@@ -258,7 +258,9 @@ export class AnnotateCard implements Component, Focusable {
       editingDraftId: null,
       previewOn: true,
     };
-    this.maxLineWidth = Math.max(0, ...file.lines.map((l) => rawColToDisplayCol(l, l.length)));
+    // A reduce loop, not Math.max(...lines.map(...)): the spread form throws
+    // RangeError past V8's argument-count limit on very large files.
+    this.maxLineWidth = file.lines.reduce((max, l) => Math.max(max, rawColToDisplayCol(l, l.length)), 0);
   }
 
   render(width: number): string[] {
@@ -351,11 +353,33 @@ export class AnnotateCard implements Component, Focusable {
     // Guard the length: on very narrow panels leftPad + rightPad can reach
     // contentWidth, and sliceByColumn rejects negative lengths.
     const windowed = sliceByColumn(styled, sl + leftPad, Math.max(0, cw - leftPad - rightPad), true);
-    const row =
+    let row =
       this.gutter(line)
       + (sl > 0 ? this.colors.dim(LEFT_OVERFLOW_ICON) : "")
       + windowed
       + (rightPad > 0 ? this.colors.dim("...") : "");
+    // Follow can pin the cursor exactly onto an indicator cell (the chevron
+    // at the left edge, one of the "..." cells at the right edge). The
+    // cursor wins: splice its already-inverse cell from the styled full line
+    // over the indicator cell, so held h/l never loses the cursor.
+    if (cursorOn && this.state.cursor.line === line && cw > 0) {
+      const cursorWinCol = rawColToDisplayCol(raw, this.state.cursor.col) - sl;
+      const onChevron = sl > 0 && cursorWinCol === 0;
+      const onDots = rightPad > 0 && cursorWinCol >= cw - rightPad;
+      if ((onChevron || onDots) && cursorWinCol < cw) {
+        const cellIdx = inner - cw + cursorWinCol; // gutter width = inner - cw
+        let cell = sliceByColumn(styled, sl + cursorWinCol, 1, true);
+        if (visibleWidth(cell) === 0) {
+          cell = INVERSE_ON + " " + INVERSE_OFF; // wide-char edge / virtual EOL cell
+        } else if (cell.includes("\x1b[")) {
+          // The 1-column slice keeps the span's opening SGR but drops its
+          // closing code; reset explicitly so inverse/underline cannot bleed
+          // into the rest of the row.
+          cell += "\x1b[0m";
+        }
+        row = sliceByColumn(row, 0, cellIdx) + cell + sliceByColumn(row, cellIdx + 1, Math.max(0, inner - cellIdx - 1));
+      }
+    }
     return row + " ".repeat(Math.max(0, inner - visibleWidth(row)));
   }
 
