@@ -1,16 +1,16 @@
 // Pure rendering of the card's two-row bottom area: the statusline row (mode
-// badge, visual selection range, cursor position) above the cmdline row
-// (per-mode key hints now; the / search input and future : commands render
-// here via the "input" variant). Like card-chrome.ts, all colors are
-// injected as (text) => string functions so these helpers are unit-testable
-// without a live theme and never import pi theme modules.
+// badge, search segment, visual selection range, cursor position) above the
+// cmdline row (per-mode key hints with an optional transient message, or the
+// / search input with its emulated cursor cell). Like card-chrome.ts, all
+// colors are injected as (text) => string functions so these helpers are
+// unit-testable without a live theme and never import pi theme modules.
 
 import { truncateToWidth, visibleWidth } from "@earendil-works/pi-tui";
 
 import type { ChromeColors } from "./card-chrome.ts";
 import type { ViewerMode } from "./viewer-state.ts";
 
-export type CardMode = "normal" | "visualChar" | "visualLine" | "comment";
+export type CardMode = "normal" | "visualChar" | "visualLine" | "comment" | "search";
 
 export interface FooterHints {
   // Mode badge shown before the hints in the accent color. Every mode has
@@ -24,8 +24,11 @@ export interface FooterHints {
 export const FOOTER_HINTS: Record<CardMode, FooterHints> = {
   normal: {
     badge: "-- NORMAL --",
-    hints: "hjkl move  v/V select  c/x comment/delete  p preview  q/Esc close",
+    hints: "hjkl move  v/V select  / search  n/N next/prev  c/x comment/delete  p preview  q/Esc close",
   },
+  // While the / input is open the cmdline row shows the input itself, so the
+  // hints text is empty; the badge keeps the mode line complete.
+  search: { badge: "-- SEARCH --", hints: "" },
   visualChar: { badge: "-- VISUAL --", hints: "hjkl extend  o swap  c comment  Esc cancel" },
   visualLine: { badge: "-- VISUAL LINE --", hints: "hjkl extend  o swap  c comment  Esc cancel" },
   comment: { badge: "-- COMMENT --", hints: "Enter submit  ctrl+j newline  Esc cancel" },
@@ -35,9 +38,6 @@ export const FOOTER_HINTS: Record<CardMode, FooterHints> = {
 export function cardModeOf(mode: ViewerMode): CardMode {
   if (mode === "visual-char") return "visualChar";
   if (mode === "visual-line") return "visualLine";
-  // Bridge until Task 4: search mode renders with the normal badge because
-  // CardMode has no "search" yet; Task 4 adds the real mapping and badge.
-  if (mode === "search") return "normal";
   return mode;
 }
 
@@ -51,23 +51,67 @@ export interface StatusLineInput {
   selection?:
     | { start: { line: number; col: number }; end: { line: number; col: number }; kind: "char" | "line" }
     | null;
+  // Active incremental search, only in normal/search modes. renderStatusLine
+  // shows "/pattern [rank/total]" in normal mode and just "[rank/total]" in
+  // search mode; visual and comment modes never show it.
+  search?: { pattern: string; rank: number; total: number } | null;
 }
 
 // Discriminated union so future input modes plug in without touching the
-// chrome: v1 renders only "hints"; "input" is provisioned for the / search
-// spec and future : commands.
+// chrome: "hints" shows the per-mode hint line (plus an optional transient
+// message); "input" is the / search line, ready for future : command
+// variants.
 export type CommandLineInput =
-  | { kind: "hints"; mode: CardMode }
+  | { kind: "hints"; mode: CardMode; message?: string | null }
   | { kind: "input"; prompt: string; value: string; cursorCol: number };
 
+// Raw SGR for the emulated cmdline cursor cell, mirroring viewer.ts's
+// INVERSE_ON/INVERSE_OFF (defined locally so status-line keeps its imports
+// to types and pi-tui only).
+const INVERSE_ON = "\x1b[7m";
+const INVERSE_OFF = "\x1b[27m";
+
+// First n display columns of s, dropping whole characters at the cut edge
+// (no ellipsis, no ANSI reset; the caller wraps and pads the result).
+function headByWidth(s: string, n: number): string {
+  if (n <= 0) return "";
+  const chars = [...s];
+  let width = 0;
+  let end = 0;
+  for (let i = 0; i < chars.length; i++) {
+    const cw = visibleWidth(chars[i]);
+    if (width + cw > n) break;
+    width += cw;
+    end = i + 1;
+  }
+  return chars.slice(0, end).join("");
+}
+
+// Last n display columns of s, dropping whole characters at the cut edge.
+function tailByWidth(s: string, n: number): string {
+  if (n <= 0) return "";
+  const chars = [...s];
+  let width = 0;
+  let start = chars.length;
+  for (let i = chars.length - 1; i >= 0; i--) {
+    const cw = visibleWidth(chars[i]);
+    if (width + cw > n) break;
+    width += cw;
+    start = i;
+  }
+  return chars.slice(start).join("");
+}
+
 // The statusline row: mode badge (accent) on the left, the 1-based cursor
-// position "L:C" (dim) on the right, never truncated. Visual modes also show
-// the selection range between badge and right margin - "L:C-L:C" char-wise,
-// "L-L" line-wise (columns are always full width there) - normalized so the
-// smaller position comes first. Truncation order under narrow widths: the
-// selection segment is dropped first, then nothing else; badge and position
-// are always preserved; when the width cannot fit even a one-space gap the
-// gap drops to zero rather than overflowing the panel.
+// position "L:C" (dim) on the right, never truncated. Between them sits at
+// most one middle segment (dim): visual modes show the selection range -
+// "L:C-L:C" char-wise, "L-L" line-wise (columns are always full width
+// there), normalized so the smaller position comes first - while normal mode
+// shows the search query "/pattern [rank/total]" and search mode just
+// "[rank/total]". Truncation order under narrow widths: the search segment
+// drops first, then the selection range, each as a whole (never truncated);
+// badge and position are always preserved; when the width cannot fit even a
+// one-space gap the gap drops to zero rather than overflowing the panel.
 export function renderStatusLine(input: StatusLineInput, innerWidth: number, colors: ChromeColors): string {
   const badge = FOOTER_HINTS[input.mode].badge;
   const badgeW = visibleWidth(badge);
@@ -78,10 +122,23 @@ export function renderStatusLine(input: StatusLineInput, innerWidth: number, col
     const [a, b] = [input.selection.start, input.selection.end].sort((p, q) => p.line - q.line || p.col - q.col);
     range = input.selection.kind === "line" ? `${a.line}-${b.line}` : `${a.line}:${a.col}-${b.line}:${b.col}`;
   }
-  const rangeW = range !== null ? visibleWidth(range) : 0;
-  if (range !== null && badgeW + 2 + rangeW + 1 + posW <= innerWidth) {
-    const pad = " ".repeat(innerWidth - badgeW - 2 - rangeW - posW);
-    return colors.accent(badge) + "  " + colors.dim(range) + pad + colors.dim(pos);
+  let searchSeg: string | null = null;
+  if (input.search && (input.mode === "normal" || input.mode === "search")) {
+    const { pattern, rank, total } = input.search;
+    searchSeg = input.mode === "normal" ? `/${pattern} [${rank}/${total}]` : `[${rank}/${total}]`;
+  }
+  // Middle segments in drop-priority order: the search segment drops before
+  // the selection range. The first that fits between badge and position is
+  // rendered; the caller never supplies both at once.
+  const segments: string[] = [];
+  if (searchSeg !== null) segments.push(searchSeg);
+  if (range !== null) segments.push(range);
+  for (const seg of segments) {
+    const segW = visibleWidth(seg);
+    if (badgeW + 2 + segW + 1 + posW <= innerWidth) {
+      const pad = " ".repeat(innerWidth - badgeW - 2 - segW - posW);
+      return colors.accent(badge) + "  " + colors.dim(seg) + pad + colors.dim(pos);
+    }
   }
   // Narrow (or non-visual): badge and position only. The gap shrinks to zero
   // when the row cannot fit one (spec: worst case is badge + position with no
@@ -90,15 +147,36 @@ export function renderStatusLine(input: StatusLineInput, innerWidth: number, col
   return colors.accent(badge) + gap + colors.dim(pos);
 }
 
-// The cmdline row. "hints": the per-mode hint text in dim, truncated from
-// the right when narrow. "input": interim rendering of prompt + value only,
-// truncated from the right - the inverse cursor cell and its styling land
-// with the / search spec. Both variants pad to the full inner width.
+// The cmdline row, padded to the full inner width. "hints": the per-mode
+// hint text in dim, cut from the right when narrow; an optional message
+// (e.g. "Pattern not found: foo") renders right-aligned in accent, with the
+// hints cut first to make room, and the message preserved whole unless it
+// alone exceeds the width (then truncateToWidth). "input": the prompt in
+// accent, the value in default text, and one inverse cursor cell; on
+// overflow the value windows tail-biased so the prompt never scrolls and the
+// cursor cell stays the last column. cursorCol stays in the type reserved
+// for future mid-line editing; rendering is append-only.
 export function renderCommandLine(input: CommandLineInput, innerWidth: number, colors: ChromeColors): string {
   if (input.kind === "input") {
-    const shown = truncateToWidth(input.prompt + input.value, innerWidth, "");
-    return shown + " ".repeat(Math.max(0, innerWidth - visibleWidth(shown)));
+    const promptW = visibleWidth(input.prompt);
+    const value = tailByWidth(input.value, innerWidth - promptW - 1);
+    const shownW = promptW + visibleWidth(value) + 1;
+    return (
+      colors.accent(input.prompt)
+      + value
+      + INVERSE_ON + " " + INVERSE_OFF
+      + " ".repeat(Math.max(0, innerWidth - shownW))
+    );
   }
-  const shown = truncateToWidth(FOOTER_HINTS[input.mode].hints, innerWidth, "");
-  return colors.dim(shown) + " ".repeat(Math.max(0, innerWidth - visibleWidth(shown)));
+  const message = input.message ? input.message : null;
+  if (message === null) {
+    const shown = headByWidth(FOOTER_HINTS[input.mode].hints, innerWidth);
+    return colors.dim(shown) + " ".repeat(Math.max(0, innerWidth - visibleWidth(shown)));
+  }
+  const msgW = visibleWidth(message);
+  if (msgW > innerWidth) return colors.accent(truncateToWidth(message, innerWidth, ""));
+  const hintBudget = innerWidth - msgW - 1;
+  const shownHints = hintBudget > 0 ? headByWidth(FOOTER_HINTS[input.mode].hints, hintBudget) : "";
+  const gap = " ".repeat(Math.max(0, innerWidth - msgW - visibleWidth(shownHints)));
+  return colors.dim(shownHints) + gap + colors.accent(message);
 }

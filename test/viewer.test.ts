@@ -237,12 +237,14 @@ test("chrome colors come from the theme: fg tokens; background transparent by de
 
 test("statusline and cmdline follow the mode: badge in accent, hints in dim", () => {
   const normal = makeCard({ lines: ["alpha", "beta"] });
-  let bare = normal.card.render(84).map(strip);
+  // Width 100 so the 90-column normal hints fit whole and reach the dim
+  // token untruncated.
+  let bare = normal.card.render(100).map(strip);
   assert.ok(bare[bare.length - 3].startsWith("│ -- NORMAL --"));
   assert.ok(bare[bare.length - 3].endsWith("1:1 │"));
   assert.ok(bare[bare.length - 2].startsWith("│ hjkl move  v/V select"));
   assert.ok(normal.fgCalls.some((c) => c.token === "accent" && c.text === "-- NORMAL --"));
-  assert.ok(normal.fgCalls.some((c) => c.token === "dim" && c.text === "hjkl move  v/V select  c/x comment/delete  p preview  q/Esc close"));
+  assert.ok(normal.fgCalls.some((c) => c.token === "dim" && c.text === "hjkl move  v/V select  / search  n/N next/prev  c/x comment/delete  p preview  q/Esc close"));
 
   // Visual-char: the statusline carries the selection range as L:C-L:C.
   const visual = makeCard({ lines: ["alpha", "beta"] });

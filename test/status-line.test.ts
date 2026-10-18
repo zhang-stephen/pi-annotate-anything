@@ -85,6 +85,54 @@ test("renderStatusLine drops the selection first on narrow widths, badge and pos
   assert.equal(visibleWidth(renderStatusLine(input, 16, plain)), 16);
 });
 
+test("statusline: normal mode shows /pattern [rank/total] between badge and position", () => {
+  const row = renderStatusLine(
+    { mode: "normal", cursor: { line: 12, col: 5 }, search: { pattern: "foo", rank: 2, total: 7 } },
+    40,
+    plain,
+  );
+  assert.equal(row, "-- NORMAL --  /foo [2/7]            12:5");
+});
+
+test("statusline: search mode shows only [rank/total]", () => {
+  const row = renderStatusLine(
+    { mode: "search", cursor: { line: 12, col: 5 }, search: { pattern: "foo", rank: 2, total: 7 } },
+    40,
+    plain,
+  );
+  assert.equal(row, "-- SEARCH --  [2/7]                 12:5");
+});
+
+test("statusline: search segment drops as a whole under narrow widths", () => {
+  const row = renderStatusLine(
+    { mode: "normal", cursor: { line: 12, col: 5 }, search: { pattern: "foo", rank: 2, total: 7 } },
+    20,
+    plain,
+  );
+  assert.equal(row, "-- NORMAL --    12:5");
+  const longPattern = renderStatusLine(
+    { mode: "normal", cursor: { line: 12, col: 5 }, search: { pattern: "x".repeat(30), rank: 1, total: 1 } },
+    40,
+    plain,
+  );
+  assert.equal(longPattern, "-- NORMAL --                        12:5");
+});
+
+test("statusline: visual and comment modes hide the search segment", () => {
+  const row = renderStatusLine(
+    {
+      mode: "visualChar",
+      cursor: { line: 12, col: 5 },
+      selection: { start: { line: 3, col: 1 }, end: { line: 4, col: 2 }, kind: "char" },
+      search: { pattern: "foo", rank: 2, total: 7 },
+    },
+    60,
+    plain,
+  );
+  assert.ok(!row.includes("/foo"));
+  assert.ok(row.includes("3:1-4:2"));
+});
+
 // cardModeOf ---------------------------------------------------------------
 
 test("cardModeOf maps kebab ViewerMode keys to the camel FOOTER_HINTS keys", () => {
@@ -92,33 +140,52 @@ test("cardModeOf maps kebab ViewerMode keys to the camel FOOTER_HINTS keys", () 
   assert.equal(cardModeOf("visual-line"), "visualLine");
   assert.equal(cardModeOf("normal"), "normal");
   assert.equal(cardModeOf("comment"), "comment");
+  assert.equal(cardModeOf("search"), "search");
 });
 
 // renderCommandLine --------------------------------------------------------
 
 test("renderCommandLine renders the mode hints dim and pads to the inner width", () => {
-  const row = renderCommandLine({ kind: "hints", mode: "normal" }, 80, colors);
+  const row = renderCommandLine({ kind: "hints", mode: "normal" }, 100, colors);
   const hints = FOOTER_HINTS.normal.hints;
-  assert.equal(row, "d(" + hints + ")" + " ".repeat(80 - hints.length));
-  assert.equal(visibleWidth(renderCommandLine({ kind: "hints", mode: "normal" }, 80, plain)), 80);
+  assert.equal(row, "d(" + hints + ")" + " ".repeat(100 - hints.length));
+  assert.equal(visibleWidth(renderCommandLine({ kind: "hints", mode: "normal" }, 100, plain)), 100);
 });
 
 test("renderCommandLine truncates wide hints from the right", () => {
   const row = renderCommandLine({ kind: "hints", mode: "normal" }, 20, colors);
-  // pi-tui's truncateToWidth appends a zero-width ANSI reset when it cuts,
-  // so only the prefix is asserted; the display width stays exactly 20.
+  // Hints truncation is a clean width-aware cut: no ellipsis, no ANSI reset
+  // inside the dim wrapper; the display width stays exactly 20.
   assert.equal(row.startsWith("d(hjkl move  v/V selec"), true);
   assert.equal(!row.includes("c/x"), true, "nothing past the budget survives");
   assert.equal(visibleWidth(renderCommandLine({ kind: "hints", mode: "normal" }, 20, plain)), 20);
 });
 
-test("renderCommandLine input variant renders prompt plus value (interim, no cursor cell)", () => {
+test("renderCommandLine input variant colors the prompt accent and pads to the inner width", () => {
   const row = renderCommandLine({ kind: "input", prompt: "/", value: "abc", cursorCol: 4 }, 20, colors);
-  // Interim rendering: prompt + value only; the inverse cursor cell and
-  // styling land with the / search spec.
-  assert.equal(row, "/abc" + " ".repeat(16));
-  assert.equal(!row.includes("\x1b[7m"), true, "no emulated cursor cell yet");
-  assert.equal(visibleWidth(row), 20);
+  // Final rendering: accent prompt, default-text value, one inverse cursor
+  // cell, padded to the full inner width.
+  assert.equal(row, "a(/)abc\x1b[7m \x1b[27m" + " ".repeat(15));
+  assert.equal(visibleWidth(renderCommandLine({ kind: "input", prompt: "/", value: "abc", cursorCol: 4 }, 20, plain)), 20);
+});
+
+test("cmdline input: prompt, value, and inverse cursor cell; padded to width", () => {
+  const row = renderCommandLine({ kind: "input", prompt: "/", value: "foo", cursorCol: 3 }, 10, plain);
+  assert.equal(row, "/foo\x1b[7m \x1b[27m     ");
+});
+
+test("cmdline input: overflow windows tail-biased, prompt and cursor stay visible", () => {
+  const row = renderCommandLine({ kind: "input", prompt: "/", value: "abcdefghijklmn", cursorCol: 14 }, 10, plain);
+  assert.equal(row, "/ghijklmn\x1b[7m \x1b[27m");
+});
+
+test("cmdline hints: message right-aligned in accent, hints truncate first", () => {
+  const row = renderCommandLine(
+    { kind: "hints", mode: "normal", message: "Pattern not found: foo" },
+    40,
+    colors,
+  );
+  assert.equal(row, "d(hjkl move  v/V se) a(Pattern not found: foo)");
 });
 
 // FOOTER_HINTS ------------------------------------------------------------------
@@ -126,7 +193,9 @@ test("renderCommandLine input variant renders prompt plus value (interim, no cur
 test("FOOTER_HINTS normal mode carries the NORMAL badge and the full hint line", () => {
   const { badge, hints } = FOOTER_HINTS.normal;
   assert.equal(badge, "-- NORMAL --");
-  assert.equal(hints, "hjkl move  v/V select  c/x comment/delete  p preview  q/Esc close");
+  assert.equal(hints, "hjkl move  v/V select  / search  n/N next/prev  c/x comment/delete  p preview  q/Esc close");
+  assert.ok(hints.includes("/ search"), "normal hints mention / search");
+  assert.ok(hints.includes("n/N next/prev"), "normal hints mention n/N next/prev");
   assert.ok(hints.includes("c/x"), "normal hints mention c/x");
   assert.ok(hints.includes("p preview"), "normal hints mention p preview");
   assert.ok(hints.includes("q/Esc close"), "normal hints mention q/Esc close");
@@ -144,8 +213,13 @@ test("FOOTER_HINTS comment mode carries the COMMENT badge and submit hints", () 
   assert.equal(FOOTER_HINTS.comment.hints, "Enter submit  ctrl+j newline  Esc cancel");
 });
 
+test("FOOTER_HINTS search mode carries the SEARCH badge and empty hints", () => {
+  assert.equal(FOOTER_HINTS.search.badge, "-- SEARCH --");
+  assert.equal(FOOTER_HINTS.search.hints, "");
+});
+
 test("FOOTER_HINTS exposes badge and hints as separate fields per mode", () => {
-  for (const mode of ["normal", "visualChar", "visualLine", "comment"] as const) {
+  for (const mode of ["normal", "visualChar", "visualLine", "comment", "search"] as const) {
     const entry = FOOTER_HINTS[mode];
     assert.equal(typeof entry.hints, "string");
     assert.equal(typeof entry.badge, "string");
