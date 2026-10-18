@@ -33,7 +33,7 @@ spec: ../specs/2026-10-18-viewer-search-design.md
 2. Tabbed and CJK lines: matching is in raw code-unit columns, rendering in display columns; the mapping must go through `rawColToDisplayCol` only. Pinned by Task 2 (raw columns) and Task 5 (display spans) tests.
 3. A message must survive exactly one render and re-appear on repeated identical events (two wraps in a row both show the notice). Pinned by the Task 3 clear-then-dispatch rule and its message tests.
 4. Invalid pattern submitted with Enter: search mode stays open with the error visible; nothing throws. Pinned by Task 3 tests.
-5. Narrow terminals: the search segment drops before the selection range, badge/position never drop, the cmdline input keeps its cursor cell visible. Pinned by Task 4 tests and the Task 1 border invariant.
+5. Narrow terminals: the search segment drops before the selection range, badge/position never drop, the cmdline input keeps its cursor cell visible. Pinned by Task 4 tests and the Task 1 border invariant (probed at widths where the content fits the budget; framePanel keeps its no-rewrite contract for overlong rows).
 
 ## File structure
 
@@ -59,7 +59,10 @@ Add to `test/card-chrome.test.ts` (verbatim):
 
 ```ts
 test("inner rows keep one blank padding column inside each border at any width", () => {
-  for (const width of [6, 7, 10, 20, 40]) {
+  // Widths where the 8-column content fits the budget (width - 2 - 2 * PAD_X
+  // >= 8); framePanel never rewrites overlong content, so degenerate widths
+  // are out of scope for this invariant.
+  for (const width of [12, 13, 16, 20, 40]) {
     const rows = framePanel(["abcdefgh"], width, { colors: plain });
     const inner = rows[1];
     assert.equal(visibleWidth(inner), width);
