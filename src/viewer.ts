@@ -12,13 +12,14 @@ import type { Theme } from "@earendil-works/pi-coding-agent";
 import type { Component, Focusable, TUI } from "@earendil-works/pi-tui";
 import { matchesKey, sliceByColumn, truncateToWidth, visibleWidth } from "@earendil-works/pi-tui";
 
-import { FOOTER_HINTS, commentBoxPlacement, frameCommentBox, framePanel } from "./card-chrome.ts";
-import type { CardMode, ChromeColors } from "./card-chrome.ts";
+import { commentBoxPlacement, frameCommentBox, framePanel } from "./card-chrome.ts";
+import type { ChromeColors } from "./card-chrome.ts";
 import { INVERSE_OFF, INVERSE_ON, withCursorCell, wrapCommentLines } from "./comment-input.ts";
 import { rawColToDisplayCol, tabExpanded } from "./display.ts";
 import { displayPath } from "./message.ts";
 import { normalize } from "./selection.ts";
 import type { Range, VisualMode } from "./selection.ts";
+import { cardModeOf, FOOTER_HINTS } from "./status-line.ts";
 import { reduceViewer, stackAtCursor } from "./viewer-state.ts";
 import type { PendingDraft, ViewerMode, ViewerState } from "./viewer-state.ts";
 
@@ -128,12 +129,7 @@ function applyStyleSpans(line: string, spans: StyleSpan[], styles: Record<SpanSt
   return out;
 }
 
-// Maps ViewerMode (kebab) to the FOOTER_HINTS key (camel).
-function cardModeOf(mode: ViewerMode): CardMode {
-  if (mode === "visual-char") return "visualChar";
-  if (mode === "visual-line") return "visualLine";
-  return mode;
-}
+// (cardModeOf and the FOOTER_HINTS table it keys into live in status-line.ts.)
 
 // Kitty keyboard protocol event-type 2 (repeat) sequences rewritten to the
 // equivalent press form, so held functional keys repeat under pi-tui's kitty
@@ -299,7 +295,7 @@ export class AnnotateCard implements Component, Focusable {
     const footer = hints.badge
       ? this.colors.accent(hints.badge) + "  " + this.colors.dim(truncateToWidth(hints.hints, Math.max(0, inner - visibleWidth(hints.badge) - 2), ""))
       : this.colors.dim(truncateToWidth(hints.hints, inner, ""));
-    return framePanel(rows, width, { title, footer, colors: this.colors });
+    return framePanel(rows, width, { title, footers: [footer], colors: this.colors });
   }
 
   // One content row, windowed horizontally: the gutter stays fixed while the

@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 
 import { stripTerminalSequences, visibleWidth } from "@earendil-works/pi-tui";
 
-import { FOOTER_HINTS, commentBoxPlacement, draftAtCursor, frameCommentBox, framePanel } from "../src/card-chrome.ts";
+import { commentBoxPlacement, draftAtCursor, frameCommentBox, framePanel } from "../src/card-chrome.ts";
 import type { ChromeColors } from "../src/card-chrome.ts";
 import type { Draft } from "../src/store.ts";
 
@@ -38,8 +38,8 @@ function draft(over: Partial<Draft>): Draft {
 
 // framePanel ------------------------------------------------------------------
 
-test("framePanel draws rounded borders, embedded title, footer as last inner row", () => {
-  const rows = framePanel(["ab", "cd"], 10, { title: "T", footer: "F", colors });
+test("framePanel draws rounded borders, embedded title, footers as last inner rows", () => {
+  const rows = framePanel(["ab", "cd"], 10, { title: "T", footers: ["F"], colors });
   assert.deepEqual(rows, [
     "bg(b(╭─ T ────╮))",
     "bg(b(│)ab      b(│))",
@@ -50,7 +50,7 @@ test("framePanel draws rounded borders, embedded title, footer as last inner row
 });
 
 test("framePanel pads every row to the full display width (wide chars count 2)", () => {
-  const rows = framePanel(["ab", "中文"], 12, { title: "T", footer: "hj", colors: plain });
+  const rows = framePanel(["ab", "中文"], 12, { title: "T", footers: ["hj"], colors: plain });
   assert.equal(rows.length, 5);
   for (const row of rows) {
     assert.equal(visibleWidth(row), 12);
@@ -72,13 +72,26 @@ test("framePanel truncates wide-char titles by display width", () => {
   assert.equal(visibleWidth(rows[0]), 12);
 });
 
-test("framePanel omits the title and footer when not given", () => {
+test("framePanel omits the title and footers when not given", () => {
   const rows = framePanel(["x"], 8, { colors: plain });
   assert.deepEqual(rows, ["╭──────╮", "│x     │", "╰──────╯"]);
 });
 
+test("framePanel renders footers in order, one inner row each", () => {
+  // Two footers (statusline above cmdline) produce two inner rows below the
+  // content rows, in the given order.
+  const rows = framePanel(["ab"], 10, { title: "T", footers: ["S", "C"], colors });
+  assert.deepEqual(rows, [
+    "bg(b(╭─ T ────╮))",
+    "bg(b(│)ab      b(│))",
+    "bg(b(│)S       b(│))",
+    "bg(b(│)C       b(│))",
+    "bg(b(╰────────╯))",
+  ]);
+});
+
 test("framePanel keeps footer geometry on ANSI-styled content", () => {
-  const rows = framePanel(["a"], 12, { footer: "\x1b[2mESC Esc\x1b[22m", colors: plain });
+  const rows = framePanel(["a"], 12, { footers: ["\x1b[2mESC Esc\x1b[22m"], colors: plain });
   assert.equal(rows.length, 4);
   assert.equal(rows[2], "│\x1b[2mESC Esc\x1b[22m   │");
   assert.equal(visibleWidth(rows[2]), 12);
@@ -211,36 +224,4 @@ test("draftAtCursor returns undefined when nothing covers the cursor", () => {
   const d = draft({ range: { startLine: 10, startCol: 0, endLine: 12, endCol: 3 } });
   assert.equal(draftAtCursor(11, 0, []), undefined);
   assert.equal(draftAtCursor(15, 0, [d]), undefined);
-});
-
-// FOOTER_HINTS ------------------------------------------------------------------
-
-test("FOOTER_HINTS normal mode carries the NORMAL badge and the full hint line", () => {
-  const { badge, hints } = FOOTER_HINTS.normal;
-  assert.equal(badge, "-- NORMAL --");
-  assert.equal(hints, "hjkl move  v/V select  c/x comment/delete  p preview  q/Esc close");
-  assert.ok(hints.includes("c/x"), "normal hints mention c/x");
-  assert.ok(hints.includes("p preview"), "normal hints mention p preview");
-  assert.ok(hints.includes("q/Esc close"), "normal hints mention q/Esc close");
-});
-
-test("FOOTER_HINTS visual modes carry VISUAL badges and extend hints", () => {
-  assert.equal(FOOTER_HINTS.visualChar.badge, "-- VISUAL --");
-  assert.equal(FOOTER_HINTS.visualLine.badge, "-- VISUAL LINE --");
-  assert.equal(FOOTER_HINTS.visualChar.hints, "hjkl extend  o swap  c comment  Esc cancel");
-  assert.equal(FOOTER_HINTS.visualLine.hints, FOOTER_HINTS.visualChar.hints);
-});
-
-test("FOOTER_HINTS comment mode carries the COMMENT badge and submit hints", () => {
-  assert.equal(FOOTER_HINTS.comment.badge, "-- COMMENT --");
-  assert.equal(FOOTER_HINTS.comment.hints, "Enter submit  ctrl+j newline  Esc cancel");
-});
-
-test("FOOTER_HINTS exposes badge and hints as separate fields per mode", () => {
-  for (const mode of ["normal", "visualChar", "visualLine", "comment"] as const) {
-    const entry = FOOTER_HINTS[mode];
-    assert.equal(typeof entry.hints, "string");
-    assert.equal(typeof entry.badge, "string");
-    assert.ok(entry.badge.length > 0);
-  }
 });

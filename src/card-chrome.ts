@@ -1,6 +1,7 @@
 // Pure rendering helpers for the annotate card chrome: framed panel and
-// floating comment box, box placement geometry, cursor-draft lookup, and
-// mode-keyed footer hints. All colors are injected as (text) => string
+// floating comment box, box placement geometry, and cursor-draft lookup.
+// (The mode badges, footer hints, and the statusline/cmdline renderers live
+// in status-line.ts.) All colors are injected as (text) => string
 // functions so these helpers are unit-testable without a live theme and
 // never import pi theme modules; AnnotateCard maps the active pi Theme to
 // the ChromeColors record.
@@ -22,7 +23,9 @@ export interface ChromeColors {
 
 export interface PanelOptions {
   title?: string;
-  footer?: string;
+  // Footer rows rendered in order directly below the content rows (e.g. the
+  // statusline first, the cmdline second).
+  footers?: string[];
   colors: ChromeColors;
 }
 
@@ -55,13 +58,13 @@ function bottomBorder(width: number): string {
 
 // Frames the panel rows: rounded border with an optional embedded title in
 // the top border, each row padded to the full display width and passed
-// through colors.bg, and the footer (when given) as the last inner row.
-// Rows are expected to fit the inner width; overlong rows get zero padding
-// rather than being silently rewritten.
+// through colors.bg, and the footer rows (when given) as the last inner
+// rows in order. Rows are expected to fit the inner width; overlong rows
+// get zero padding rather than being silently rewritten.
 export function framePanel(rows: string[], width: number, opts: PanelOptions): string[] {
   const out: string[] = [opts.colors.bg(opts.colors.border(topBorder(width, opts.title)))];
   for (const row of rows) out.push(innerRow(row, width, opts.colors));
-  if (opts.footer) out.push(innerRow(opts.footer, width, opts.colors));
+  for (const footer of opts.footers ?? []) out.push(innerRow(footer, width, opts.colors));
   out.push(opts.colors.bg(opts.colors.border(bottomBorder(width))));
   return out;
 }
@@ -133,24 +136,3 @@ export function draftAtCursor<T extends { range: { startLine: number; startCol: 
   }
   return hit;
 }
-
-export type CardMode = "normal" | "visualChar" | "visualLine" | "comment";
-
-export interface FooterHints {
-  // Mode badge shown before the hints in the accent color. Every mode has
-  // one now, including normal (-- NORMAL --).
-  badge: string;
-  hints: string;
-}
-
-// Footer content by mode. Badge and hints are separate fields so callers
-// can color them differently (badge in accent, hints in dim).
-export const FOOTER_HINTS: Record<CardMode, FooterHints> = {
-  normal: {
-    badge: "-- NORMAL --",
-    hints: "hjkl move  v/V select  c/x comment/delete  p preview  q/Esc close",
-  },
-  visualChar: { badge: "-- VISUAL --", hints: "hjkl extend  o swap  c comment  Esc cancel" },
-  visualLine: { badge: "-- VISUAL LINE --", hints: "hjkl extend  o swap  c comment  Esc cancel" },
-  comment: { badge: "-- COMMENT --", hints: "Enter submit  ctrl+j newline  Esc cancel" },
-};
