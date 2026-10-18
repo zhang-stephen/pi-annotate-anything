@@ -8,7 +8,7 @@ import type { TUI } from "@earendil-works/pi-tui";
 import { rawColToDisplayCol, tabExpanded } from "../src/display.ts";
 import type { Range, VisualMode } from "../src/selection.ts";
 import type { PendingDraft } from "../src/viewer-state.ts";
-import { AnnotateCard, CONTINUATION_MARK, gutterWidth, normalizeKeyRepeat, PENDING_ICON } from "../src/viewer.ts";
+import { AnnotateCard, CONTINUATION_MARK, gutterWidth, LEFT_OVERFLOW_ICON, normalizeKeyRepeat, PENDING_ICON } from "../src/viewer.ts";
 
 // Pending-marker field width: a fixed 2 cells (icon renders 1 cell in NF
 // Mono + 1 count digit).
@@ -291,6 +291,89 @@ test("the floating comment box does not consume viewport budget", () => {
   h.card.handleInput("v");
   h.card.handleInput("c");
   assert.equal(h.card.render(30).length, before);
+});
+
+// Horizontal content window ---------------------------------------------------
+// scrollLeft windows the styled content rows by display column: the gutter
+// stays fixed, a dim NF chevron replaces the first content cell when text
+// precedes the window (vim listchars 'precedes'), dim "..." fills the last
+// three cells when content extends past the window's right edge ('extends'),
+// and sliceByColumn(strict) never half-renders a wide char at an edge.
+
+// Distinct single-digit chars so the visible window can be asserted exactly.
+const digitLine = (n: number) => Array.from({ length: n }, (_, i) => String(i % 10)).join("");
+
+test("render windows the content at scrollLeft behind a fixed gutter with a dim chevron", () => {
+  const h = makeCard({ lines: [digitLine(100)] });
+  h.card.render(30); // inner 28, gutter 6, contentWidth 22
+  for (let i = 0; i < 30; i++) h.card.handleInput("l"); // cursor 30 -> scrollLeft 9
+  const rows = h.card.render(30);
+  // Window [10, 28) behind the fixed gutter, chevron in the first content
+  // cell (replacing display col 9), dots in the last three.
+  assert.equal(strip(rows[1]), "│1     " + LEFT_OVERFLOW_ICON + "012345678901234567" + "..." + "│");
+  assert.equal(visibleWidth(rows[1]), 30);
+  assert.ok(h.fgCalls.some((c) => c.token === "dim" && c.text === LEFT_OVERFLOW_ICON), "chevron is theme dim");
+});
+
+test("rows still end with ... when content extends past the window's right edge", () => {
+  const h = makeCard({ lines: [digitLine(100)] });
+  const rows = h.card.render(30).map(strip);
+  // No scroll: window [0, 19) (three cells reserved for the dots).
+  assert.equal(rows[1], "│1     " + digitLine(19) + "..." + "│");
+});
+
+test("the inverse cursor cell stays visible inside the window", () => {
+  const h = makeCard({ lines: [digitLine(100)] });
+  h.card.render(30);
+  for (let i = 0; i < 30; i++) h.card.handleInput("l"); // cursor 30, scrollLeft 9
+  for (let i = 0; i < 4; i++) h.card.handleInput("h"); // cursor 26: inside [10, 28)
+  const row = h.card.render(30)[1];
+  assert.ok(row.includes("\x1b[7m6\x1b[27m"), `cursor cell windowed in, got: ${JSON.stringify(strip(row))}`);
+});
+
+test("wide chars straddling the window edge are dropped whole, rows keep exact width", () => {
+  const wide = "a" + "中".repeat(20) + "b"; // display width 42
+  const h = makeCard({ lines: [wide] });
+  // scrollLeft 0: the 中 straddling the right edge (cols 19-21 vs window
+  // [0, 19)) is dropped whole, and the row still fills exactly 30 columns.
+  let rows = h.card.render(30);
+  assert.equal(strip(rows[1]), "│1     " + "a" + "中".repeat(9) + "..." + "│");
+  assert.equal(visibleWidth(rows[1]), 30);
+  // scrollLeft 21: the 中 straddling the LEFT edge is dropped whole too. The
+  // row ends with the virtual cursor cell (end-exclusive cursor) plus pad,
+  // both plain spaces once stripped.
+  h.card.render(30);
+  for (let i = 0; i < 22; i++) h.card.handleInput("l"); // cursor clamps at 22 (end-exclusive), scrollLeft 21
+  rows = h.card.render(30);
+  assert.equal(strip(rows[1]), "│1     " + LEFT_OVERFLOW_ICON + "中".repeat(9) + "b" + "  │");
+  assert.equal(visibleWidth(rows[1]), 30);
+});
+
+test("render-time clamp: stale scrollLeft beyond the bound renders without overflow", () => {
+  const h = makeCard({ lines: ["x".repeat(100)] });
+  h.card.render(30); // contentWidth 22
+  h.card.handleInput("$"); // cursor 100 -> scrollLeft 79 (the clamp bound)
+  // Re-render wider: contentWidth 112 shrinks the bound to 0, so the window
+  // must re-clamp at render time (no keypress in between) instead of
+  // slicing past the end of the line.
+  const rows = h.card.render(120);
+  assert.equal(strip(rows[1]), "│1     " + "x".repeat(100) + " ".repeat(12) + "│");
+  assert.equal(visibleWidth(rows[1]), 120);
+  assert.ok(!rows[1].includes(LEFT_OVERFLOW_ICON), "no chevron after the clamp");
+});
+
+test("comment box anchors to the scroll-corrected display column", () => {
+  const h = makeCard({ lines: ["x".repeat(120)] });
+  h.card.render(100); // inner 98, gutter 6, contentWidth 92
+  for (let i = 0; i < 20; i++) h.card.handleInput("l"); // cursor 20, scrollLeft 0
+  h.card.handleInput("v"); // anchor at col 20
+  for (let i = 0; i < 81; i++) h.card.handleInput("l"); // cursor 101 -> scrollLeft 10
+  h.card.handleInput("c"); // comment box anchored at the selection start
+  const row = h.card.render(100)[1];
+  // selCol = gutter 6 + display col 20 - scrollLeft 10 = 16. Without the
+  // scrollLeft correction the box would anchor at 26 (raw file coordinates).
+  assert.equal(strip(row).indexOf("╭─ Comment"), 1 + 16);
+  assert.equal(visibleWidth(row), 100);
 });
 
 // Floating comment box --------------------------------------------------------
