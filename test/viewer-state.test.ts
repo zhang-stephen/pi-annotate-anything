@@ -7,6 +7,10 @@ import type { PendingDraft, ViewerState } from "../src/viewer-state.ts";
 // 30-line fixture: "line 0" .. "line 29" (col max 6 for single-digit lines).
 const LINES = Array.from({ length: 30 }, (_, i) => `line ${i}`);
 const VH = 10; // viewport height used across tests
+// Default viewport opts: contentWidth far above the fixture's longest line
+// (7 display columns) and its exact maxLineWidth, so no horizontal follow
+// runs unless a test asks for it.
+const VP = { height: VH, contentWidth: 20, maxLineWidth: 7 };
 
 function viewer(overrides: Partial<ViewerState> = {}): ViewerState {
   return {
@@ -24,7 +28,7 @@ function viewer(overrides: Partial<ViewerState> = {}): ViewerState {
 }
 
 function view(state: ViewerState, key: string, pending: PendingDraft[] = []) {
-  return reduceViewer(state, key, LINES, { height: VH }, pending);
+  return reduceViewer(state, key, LINES, VP, pending);
 }
 
 // Movement: h j k l --------------------------------------------------------
@@ -38,19 +42,19 @@ test("reduceViewer: h moves left, l moves right", () => {
 
 test("reduceViewer: h/l clamp at column bounds without wrapping lines", () => {
   const lines = ["alpha", "hi", "omega"];
-  const atEnd = reduceViewer(viewer({ cursor: { line: 0, col: 5 } }), "l", lines, { height: VH });
+  const atEnd = reduceViewer(viewer({ cursor: { line: 0, col: 5 } }), "l", lines, VP);
   assert.deepEqual(atEnd.state.cursor, { line: 0, col: 5 });
-  const atStart = reduceViewer(viewer({ cursor: { line: 0, col: 0 } }), "h", lines, { height: VH });
+  const atStart = reduceViewer(viewer({ cursor: { line: 0, col: 0 } }), "h", lines, VP);
   assert.deepEqual(atStart.state.cursor, { line: 0, col: 0 });
 });
 
 test("reduceViewer: j/k move lines and clamp the column to the landed line", () => {
   const lines = ["alpha", "hi", "omega"];
-  const down = reduceViewer(viewer({ cursor: { line: 0, col: 5 } }), "j", lines, { height: VH });
+  const down = reduceViewer(viewer({ cursor: { line: 0, col: 5 } }), "j", lines, VP);
   assert.deepEqual(down.state.cursor, { line: 1, col: 2 });
-  const down2 = reduceViewer(down.state, "j", lines, { height: VH });
+  const down2 = reduceViewer(down.state, "j", lines, VP);
   assert.deepEqual(down2.state.cursor, { line: 2, col: 2 });
-  const up = reduceViewer(down2.state, "k", lines, { height: VH });
+  const up = reduceViewer(down2.state, "k", lines, VP);
   assert.deepEqual(up.state.cursor, { line: 1, col: 2 });
 });
 
@@ -133,7 +137,7 @@ test("reduceViewer: ctrl+d half-page down, ctrl+u half-page up", () => {
   const down = view(viewer({ cursor: { line: 0, col: 0 } }), "\x04");
   assert.deepEqual(down.state.cursor, { line: 5, col: 0 });
   assert.equal(down.state.scrollTop, 0);
-  const up = reduceViewer(down.state, "\x15", LINES, { height: VH });
+  const up = reduceViewer(down.state, "\x15", LINES, VP);
   assert.deepEqual(up.state.cursor, { line: 0, col: 0 });
 });
 
@@ -153,7 +157,7 @@ test("reduceViewer: PgDn/PgUp scroll a full page", () => {
   const down = view(viewer({ cursor: { line: 0, col: 0 } }), "\x1b[6~");
   assert.deepEqual(down.state.cursor, { line: 10, col: 0 });
   assert.equal(down.state.scrollTop, 1);
-  const up = reduceViewer(down.state, "\x1b[5~", LINES, { height: VH });
+  const up = reduceViewer(down.state, "\x1b[5~", LINES, VP);
   assert.deepEqual(up.state.cursor, { line: 0, col: 0 });
   assert.equal(up.state.scrollTop, 0);
 });
@@ -760,4 +764,69 @@ test("reduceViewer: does not mutate the input state", () => {
   assert.deepEqual(res.state.cursor, { line: 6, col: 1 });
   assert.deepEqual(start.cursor, { line: 5, col: 1 });
   assert.notEqual(res.state, start);
+});
+
+// Horizontal follow (scrollLeft) -------------------------------------------
+// The viewport opts carry contentWidth and maxLineWidth alongside height; the
+// reducer keeps the cursor's DISPLAY column (tab-expanded) inside
+// [scrollLeft, scrollLeft + contentWidth) with vim sidescrolloff=0 semantics
+// and clamps scrollLeft into [0, max(0, maxLineWidth - contentWidth + 1)]
+// (the +1 covers the virtual cursor cell of an end-exclusive cursor).
+
+function vpv(contentWidth: number, maxLineWidth: number, height = 5) {
+  return { height, contentWidth, maxLineWidth };
+}
+
+const LONG_LINE = "x".repeat(100);
+
+test("reduceViewer: l past the window's right edge scrolls horizontally", () => {
+  let state = viewer();
+  for (let i = 0; i < 10; i++) state = reduceViewer(state, "l", [LONG_LINE], vpv(10, 100)).state;
+  assert.deepEqual(state.cursor, { line: 0, col: 10 });
+  assert.equal(state.scrollLeft, 1); // follow: 10 >= 0 + 10 -> 10 - 10 + 1
+});
+
+test("reduceViewer: h follows the cursor back to the left edge", () => {
+  let state = viewer({ cursor: { line: 0, col: 10 }, scrollLeft: 1 });
+  for (let i = 0; i < 10; i++) state = reduceViewer(state, "h", [LONG_LINE], vpv(10, 100)).state;
+  assert.deepEqual(state.cursor, { line: 0, col: 0 });
+  assert.equal(state.scrollLeft, 0);
+});
+
+test("reduceViewer: $ on a long line pins scrollLeft at the clamp bound", () => {
+  const res = reduceViewer(viewer(), "$", [LONG_LINE], vpv(10, 100));
+  assert.deepEqual(res.state.cursor, { line: 0, col: 100 }); // end-exclusive
+  // follow target 100 -> 100 - 10 + 1 = 91; clamp max(0, 100 - 10 + 1) = 91.
+  assert.equal(res.state.scrollLeft, 91);
+});
+
+test("reduceViewer: stale scrollLeft re-clamps on the next reduce", () => {
+  // A width change between reduces can leave scrollLeft beyond the bound;
+  // any cursor-moving key pulls it back to max(0, 100 - 10 + 1) = 91.
+  const dollar = reduceViewer(viewer({ scrollLeft: 500 }), "$", [LONG_LINE], vpv(10, 100));
+  assert.equal(dollar.state.scrollLeft, 91);
+  const deep = reduceViewer(viewer({ cursor: { line: 0, col: 95 }, scrollLeft: 500 }), "j", [LONG_LINE], vpv(10, 100));
+  assert.equal(deep.state.scrollLeft, 91);
+});
+
+test("reduceViewer: short lines never scroll", () => {
+  let state = viewer();
+  for (const key of ["l", "l", "$", "j"]) state = reduceViewer(state, key, ["ab"], vpv(10, 2)).state;
+  assert.equal(state.scrollLeft, 0);
+});
+
+test("reduceViewer: follow runs in tab-expanded display columns", () => {
+  const tabbed = ["\t" + "x".repeat(50)]; // display width 4 + 50 = 54
+  const res = reduceViewer(viewer(), "l", tabbed, vpv(4, 54));
+  assert.deepEqual(res.state.cursor, { line: 0, col: 1 });
+  // display col 4 >= scrollLeft 0 + cw 4 -> scrollLeft 1.
+  assert.equal(res.state.scrollLeft, 1);
+});
+
+test("reduceViewer: scrollLeft defaults to 0 for states without the field", () => {
+  // viewer() constructs no scrollLeft field: the first motion still works
+  // and produces a defined, clamped value.
+  const res = view(viewer({ cursor: { line: 0, col: 5 } }), "l");
+  assert.deepEqual(res.state.cursor, { line: 0, col: 6 });
+  assert.equal(res.state.scrollLeft ?? 0, 0);
 });

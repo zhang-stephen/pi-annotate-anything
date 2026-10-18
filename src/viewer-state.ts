@@ -2,6 +2,7 @@
 // viewer state plus an optional effect (annotate/close). No I/O and no pi
 // imports, so the TUI component stays a thin shell over this reducer.
 
+import { rawColToDisplayCol } from "./display.ts";
 import { clampPosition, normalize } from "./selection.ts";
 import type { Position, Range, Selection, VisualMode } from "./selection.ts";
 import { reduceComment } from "./comment-input.ts";
@@ -15,6 +16,12 @@ export interface ViewerState {
   cursor: Position;
   anchor: Position | null;
   scrollTop: number;
+  // Horizontal scroll position in display columns (tab-expanded); 0 when
+  // absent. Followed and clamped by keepVisible against the viewport's
+  // contentWidth/maxLineWidth. Optional so callers that construct this state
+  // without the field (pre-scroll callers) stay valid; the reducer treats
+  // undefined like 0.
+  scrollLeft?: number;
   comment: CommentState | null;
   // First key of a pending two-stroke sequence ("g" of "gg"), else null.
   // A second non-"g" key falls through to normal handling (pending cleared).
@@ -61,6 +68,18 @@ export type ViewerEffect =
 export interface ViewerResult {
   state: ViewerState;
   effect?: ViewerEffect;
+}
+
+// Viewport options for one reduce: the content row count, the content width
+// in display columns (inner width minus the gutter), and the maximum display
+// width across all loaded lines (computed once at file load). The horizontal
+// follow and clamp run against these; a wrong contentWidth estimate (e.g.
+// before the first render) only mis-aims one follow step - the next
+// cursor-moving key re-clamps.
+export interface ViewerViewport {
+  height: number;
+  contentWidth: number;
+  maxLineWidth: number;
 }
 
 const HALF_PAGE = (vh: number) => Math.floor(vh / 2);
@@ -123,20 +142,39 @@ function resetCycleOnMove(res: ViewerResult, prev: ViewerState): ViewerResult {
 
 
 // Clamps scrollTop into [0, lines.length - vh], then nudges it so the cursor
-// line stays inside the visible window. Applied to every cursor-moving key.
-function keepVisible(state: ViewerState, lines: string[], vh: number): ViewerState {
+// line stays inside the visible window. Then the horizontal counterparts:
+// scrollLeft is clamped into [0, max(0, maxLineWidth - contentWidth + 1)]
+// (the +1 covers the virtual cursor cell when the end-exclusive cursor sits
+// at end of line), and the cursor's DISPLAY column (tab-expanded via
+// rawColToDisplayCol) is followed with vim sidescrolloff=0 semantics:
+// left of the window -> pin to the window's left edge; at or past its right
+// edge -> pin to the window's right edge. Applied to every cursor-moving key.
+function keepVisible(state: ViewerState, lines: string[], viewport: ViewerViewport): ViewerState {
+  const vh = Math.max(1, viewport.height);
   const maxScroll = Math.max(0, lines.length - vh);
   let scrollTop = Math.min(Math.max(state.scrollTop, 0), maxScroll);
   if (state.cursor.line < scrollTop) scrollTop = state.cursor.line;
   if (state.cursor.line > scrollTop + vh - 1) scrollTop = state.cursor.line - vh + 1;
-  return { ...state, scrollTop: Math.min(Math.max(scrollTop, 0), maxScroll) };
+
+  const cw = Math.max(1, viewport.contentWidth);
+  const bound = Math.max(0, viewport.maxLineWidth - cw + 1);
+  const clampedLeft = Math.min(Math.max(state.scrollLeft ?? 0, 0), bound);
+  const displayCol = rawColToDisplayCol(lines[state.cursor.line] ?? "", state.cursor.col);
+  let scrollLeft = clampedLeft;
+  if (displayCol < scrollLeft) scrollLeft = displayCol;
+  if (displayCol >= scrollLeft + cw) scrollLeft = displayCol - cw + 1;
+  return {
+    ...state,
+    scrollTop: Math.min(Math.max(scrollTop, 0), maxScroll),
+    scrollLeft: Math.min(Math.max(scrollLeft, 0), bound),
+  };
 }
 
-function moved(state: ViewerState, to: Position, lines: string[], vh: number): ViewerResult {
+function moved(state: ViewerState, to: Position, lines: string[], viewport: ViewerViewport): ViewerResult {
   // MVP simplification: no goal-column (curswant) memory - j/k onto a short
   // line loses the original column permanently. Deliberate; revisit if users
   // report it as un-vim-like.
-  return { state: keepVisible({ ...state, cursor: clampPosition(to, lines) }, lines, vh) };
+  return { state: keepVisible({ ...state, cursor: clampPosition(to, lines) }, lines, viewport) };
 }
 
 // Comment mode routes every key through reduceComment's key set:
@@ -159,13 +197,13 @@ function toCommentKey(key: string): CommentKey | null {
   return { kind: "char", ch: key };
 }
 
-function commentStep(state: ViewerState, key: string, lines: string[], vh: number): ViewerResult {
+function commentStep(state: ViewerState, key: string, lines: string[], viewport: ViewerViewport): ViewerResult {
   const mapped = toCommentKey(key);
   if (mapped === null) return { state };
   const box = state.comment ?? { text: "" }; // invariant: non-null in comment mode
   const res = reduceComment(box, mapped);
   if (res.effect === undefined) {
-    return { state: keepVisible({ ...state, comment: res.state }, lines, vh) };
+    return { state: keepVisible({ ...state, comment: res.state }, lines, viewport) };
   }
   if (res.effect.type === "cancel") {
     if (state.editingDraftId) {
@@ -192,37 +230,38 @@ function commentStep(state: ViewerState, key: string, lines: string[], vh: numbe
   };
 }
 
-function handleMode(state: ViewerState, key: string, lines: string[], vh: number, pending: PendingDraft[]): ViewerResult {
+function handleMode(state: ViewerState, key: string, lines: string[], viewport: ViewerViewport, pending: PendingDraft[]): ViewerResult {
+  const vh = Math.max(1, viewport.height);
   const visual = state.mode === "visual-char" || state.mode === "visual-line";
   switch (key) {
     case "h":
     case "\x1b[D":
-      return moved(state, { ...state.cursor, col: state.cursor.col - 1 }, lines, vh);
+      return moved(state, { ...state.cursor, col: state.cursor.col - 1 }, lines, viewport);
     case "l":
     case "\x1b[C":
-      return moved(state, { ...state.cursor, col: state.cursor.col + 1 }, lines, vh);
+      return moved(state, { ...state.cursor, col: state.cursor.col + 1 }, lines, viewport);
     case "j":
     case "\x1b[B":
-      return moved(state, { line: state.cursor.line + 1, col: state.cursor.col }, lines, vh);
+      return moved(state, { line: state.cursor.line + 1, col: state.cursor.col }, lines, viewport);
     case "k":
     case "\x1b[A":
-      return moved(state, { line: state.cursor.line - 1, col: state.cursor.col }, lines, vh);
+      return moved(state, { line: state.cursor.line - 1, col: state.cursor.col }, lines, viewport);
     case "0":
-      return moved(state, { line: state.cursor.line, col: 0 }, lines, vh);
+      return moved(state, { line: state.cursor.line, col: 0 }, lines, viewport);
     case "$": // end-exclusive convention: max clampable col equals line length
-      return moved(state, { line: state.cursor.line, col: Number.MAX_SAFE_INTEGER }, lines, vh);
+      return moved(state, { line: state.cursor.line, col: Number.MAX_SAFE_INTEGER }, lines, viewport);
     case "G":
-      return moved(state, { line: lines.length - 1, col: state.cursor.col }, lines, vh);
+      return moved(state, { line: lines.length - 1, col: state.cursor.col }, lines, viewport);
     case "g":
       return { state: { ...state, pending: "g" } };
     case "\x04": // ctrl+d: half page down
-      return moved(state, { line: state.cursor.line + HALF_PAGE(vh), col: state.cursor.col }, lines, vh);
+      return moved(state, { line: state.cursor.line + HALF_PAGE(vh), col: state.cursor.col }, lines, viewport);
     case "\x15": // ctrl+u: half page up
-      return moved(state, { line: state.cursor.line - HALF_PAGE(vh), col: state.cursor.col }, lines, vh);
+      return moved(state, { line: state.cursor.line - HALF_PAGE(vh), col: state.cursor.col }, lines, viewport);
     case "\x1b[6~": // PgDn
-      return moved(state, { line: state.cursor.line + vh, col: state.cursor.col }, lines, vh);
+      return moved(state, { line: state.cursor.line + vh, col: state.cursor.col }, lines, viewport);
     case "\x1b[5~": // PgUp
-      return moved(state, { line: state.cursor.line - vh, col: state.cursor.col }, lines, vh);
+      return moved(state, { line: state.cursor.line - vh, col: state.cursor.col }, lines, viewport);
     case "v":
       if (state.mode === "normal") return { state: { ...state, mode: "visual-char", anchor: state.cursor, visualMode: "char" } };
       if (state.mode === "visual-char") return { state: { ...state, mode: "normal", anchor: null } };
@@ -290,15 +329,13 @@ export function reduceViewer(
   state: ViewerState,
   key: string,
   lines: string[],
-  viewport: { height: number },
+  viewport: ViewerViewport,
   // Pending annotation drafts (token/range/comment), oldest first, used to
   // target normal-mode edit (c) and delete (x); callers without pending
   // drafts may omit it.
   pending: PendingDraft[] = [],
 ): ViewerResult {
-  const vh = Math.max(1, viewport.height);
-
-  if (state.mode === "comment") return resetCycleOnMove(commentStep(state, key, lines, vh), state);
+  if (state.mode === "comment") return resetCycleOnMove(commentStep(state, key, lines, viewport), state);
 
   // Two-stroke sequences: "g" arms "gg". A second "g" completes the jump to
   // line 0; any other key clears the pending and falls through to regular
@@ -307,12 +344,12 @@ export function reduceViewer(
   if (current.pending !== null) {
     if (key === current.pending) {
       return resetCycleOnMove(
-        moved({ ...current, pending: null }, { line: 0, col: current.cursor.col }, lines, vh),
+        moved({ ...current, pending: null }, { line: 0, col: current.cursor.col }, lines, viewport),
         state,
       );
     }
     current = { ...current, pending: null };
   }
 
-  return resetCycleOnMove(handleMode(current, key, lines, vh, pending), state);
+  return resetCycleOnMove(handleMode(current, key, lines, viewport, pending), state);
 }

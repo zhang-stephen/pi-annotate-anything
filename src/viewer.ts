@@ -166,7 +166,14 @@ export class AnnotateCard implements Component, Focusable {
   private readonly colors: ChromeColors;
   private readonly spanStyles: Record<SpanStyle, (s: string) => string>;
   private readonly highlighted: string[];
+  // Maximum display width across all loaded lines (tabs expanded, wide chars
+  // counted double), computed once at construction: the file is fixed for the
+  // card's lifetime, and the reducer clamps scrollLeft against it.
+  private readonly maxLineWidth: number;
   private state: ViewerState;
+  // Inner width of the latest render(width) call (null before the first
+  // render); contentWidth() derives the reducer's horizontal budget from it.
+  private renderedInner: number | null = null;
 
   // Fields are declared explicitly (not as parameter properties): node runs
   // TypeScript in strip-only mode, which rejects parameter property syntax.
@@ -230,16 +237,19 @@ export class AnnotateCard implements Component, Focusable {
       cursor: { line: 0, col: 0 },
       anchor: null,
       scrollTop: 0,
+      scrollLeft: 0,
       comment: null,
       pending: null,
       visualMode: "char",
       editingDraftId: null,
       previewOn: true,
     };
+    this.maxLineWidth = Math.max(0, ...file.lines.map((l) => rawColToDisplayCol(l, l.length)));
   }
 
   render(width: number): string[] {
     const inner = width - 2; // one border column on each side
+    this.renderedInner = inner;
     const vh = this.viewportHeight();
     const lines = this.file.lines;
     const first = Math.min(Math.max(this.state.scrollTop, 0), Math.max(0, lines.length - 1));
@@ -284,7 +294,13 @@ export class AnnotateCard implements Component, Focusable {
           (matchesKey(data, "ctrl+j") || matchesKey(data, "shift+enter"))
         ? "\n"
         : data;
-    const result = reduceViewer(this.state, key, this.file.lines, { height: this.viewportHeight() }, this.pendingDrafts());
+    const result = reduceViewer(
+      this.state,
+      key,
+      this.file.lines,
+      { height: this.viewportHeight(), contentWidth: this.contentWidth(), maxLineWidth: this.maxLineWidth },
+      this.pendingDrafts(),
+    );
     this.state = result.state;
     if (!result.effect) return;
     if (result.effect.type === "annotate") {
@@ -312,6 +328,17 @@ export class AnnotateCard implements Component, Focusable {
     // sliced off on terminals under ~42 rows.
     const available = Math.floor(this.tui.terminal.rows * 0.8) - CHROME_ROWS;
     return Math.max(MIN_VIEWPORT_ROWS, Math.min(available, MAX_VIEWPORT_ROWS));
+  }
+
+  // Content width for the reducer's horizontal follow: the latest render's
+  // inner width minus the gutter. Before the first render() the inner width
+  // is estimated from the same terminal-size source viewportHeight() uses
+  // (the 80% overlay budget of the terminal width, minus the 2 border
+  // columns); a wrong estimate only mis-aims one follow step - the next
+  // cursor-moving key re-clamps against the freshly rendered width.
+  private contentWidth(): number {
+    const inner = this.renderedInner ?? Math.floor(this.tui.terminal.columns * 0.8) - 2;
+    return Math.max(1, inner - gutterWidth(this.file.lines.length));
   }
 
   // Renders the floating comment box over the content rows: occluded rows

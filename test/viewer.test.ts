@@ -150,7 +150,7 @@ interface CardHarness {
   };
 }
 
-function makeCard(opts: { lines: string[]; path?: string; cwd?: string; rows?: number }): CardHarness {
+function makeCard(opts: { lines: string[]; path?: string; cwd?: string; rows?: number; cols?: number }): CardHarness {
   const pending: Range[] = [];
   const drafts: PendingDraft[] = [];
   const fgCalls: { token: string; text: string }[] = [];
@@ -171,7 +171,7 @@ function makeCard(opts: { lines: string[]; path?: string; cwd?: string; rows?: n
     deleted: [] as string[],
     closed: 0,
   };
-  const tui = { terminal: { rows: opts.rows ?? 24 } } as unknown as TUI;
+  const tui = { terminal: { rows: opts.rows ?? 24, columns: opts.cols ?? 80 } } as unknown as TUI;
   const card = new AnnotateCard(
     tui,
     { path: opts.path ?? "/work/src/a.ts", lines: opts.lines },
