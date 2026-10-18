@@ -385,7 +385,8 @@ test("count: {count}j / {count}G consume the count, digits accumulate", () => {
   assert.deepEqual(view(view(viewer(), "2").state, "3").state.count, 23);
   assert.deepEqual(view(view(viewer(), "2").state, "j").state.cursor.line, 2);
   assert.deepEqual(view(view(viewer(), "3").state, "G").state.cursor.line, 2);
-  assert.deepEqual(view(view(viewer(), "9").state, "G").state.cursor.line, 29); // clamped
+  assert.deepEqual(view(view(viewer(), "9").state, "9").state.count, 99);
+  assert.deepEqual(view(view(view(viewer(), "9").state, "9").state, "G").state.cursor.line, 29); // clamped: 99G -> last line
 });
 
 test("count: bare 0 stays the column-0 motion; 0 extends a pending count", () => {
