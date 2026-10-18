@@ -22,6 +22,7 @@ import type { ExtensionAPI, ExtensionContext } from "@earendil-works/pi-coding-a
 import { AnnotateEditor, withTokenRecolor } from "./src/editor.ts";
 import { extractRange, loadFile, resolvePath } from "./src/file-range.ts";
 import { tokenLabel } from "./src/message.ts";
+import { completePath } from "./src/path-completion.ts";
 import { AnnotationStore } from "./src/store.ts";
 import { expandTokens } from "./src/transform.ts";
 import { AnnotateCard } from "./src/viewer.ts";
@@ -36,6 +37,11 @@ export default function (pi: ExtensionAPI) {
   // keeps working underneath the pill recoloring.
   let store: AnnotationStore;
   let composerInstalled = false;
+  // The completion callback receives no ctx, so it cannot read ctx.cwd
+  // directly; session_start keeps this in sync with the session cwd, which
+  // differs from the process cwd when a stored session is resumed from
+  // another directory (the handler resolves against ctx.cwd).
+  let sessionCwd = process.cwd();
   // EditorFactory is not re-exported from the package root; derive it.
   type EditorFactory = NonNullable<ReturnType<ExtensionContext["ui"]["getEditorComponent"]>>;
 
@@ -65,8 +71,9 @@ export default function (pi: ExtensionAPI) {
     composerInstalled = false;
   };
 
-  pi.on("session_start", () => {
+  pi.on("session_start", (_event, ctx) => {
     store = new AnnotationStore();
+    sessionCwd = ctx.cwd;
   });
 
   pi.on("session_shutdown", (_event, ctx) => {
@@ -75,6 +82,10 @@ export default function (pi: ExtensionAPI) {
 
   pi.registerCommand("annotate", {
     description: "Annotate a range of a file: /annotate <path>",
+    // Completion callbacks receive only the argument prefix (no ctx); the
+    // session cwd tracked above keeps relative paths consistent with the
+    // handler's resolvePath(arg, ctx.cwd).
+    getArgumentCompletions: (argumentPrefix) => completePath(argumentPrefix, sessionCwd),
     handler: async (args, ctx) => {
       const arg = args.trim();
       if (!arg) {
