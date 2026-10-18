@@ -15,13 +15,13 @@ import { matchesKey, sliceByColumn, truncateToWidth, visibleWidth } from "@earen
 import { FOOTER_HINTS, commentBoxPlacement, frameCommentBox, framePanel } from "./card-chrome.ts";
 import type { CardMode, ChromeColors } from "./card-chrome.ts";
 import { INVERSE_OFF, INVERSE_ON, withCursorCell, wrapCommentLines } from "./comment-input.ts";
+import { rawColToDisplayCol, tabExpanded } from "./display.ts";
 import { displayPath } from "./message.ts";
 import { normalize } from "./selection.ts";
 import type { Range, VisualMode } from "./selection.ts";
 import { reduceViewer, stackAtCursor } from "./viewer-state.ts";
 import type { PendingDraft, ViewerMode, ViewerState } from "./viewer-state.ts";
 
-const DEFAULT_TAB_SIZE = 4;
 const UNDERLINE_ON = "\x1b[4m";
 const UNDERLINE_OFF = "\x1b[24m";
 // Target emphasis (spec section 2): SGR 1 bold for the cycle target's range,
@@ -50,47 +50,6 @@ const PREVIEW_MAX_INNER_ROWS = 4;
 // scroll window that keeps the cursor's row visible.
 const EDITOR_BOX_MAX_WIDTH = 64;
 const EDITOR_MAX_INNER_ROWS = 6;
-
-// Smallest multiple of tabSize strictly greater than width (tab behavior).
-function nextTabStop(width: number, tabSize: number): number {
-  const size = Math.max(1, tabSize);
-  return width - (width % size) + size;
-}
-
-// Replaces every tab in s with spaces advancing to the next multiple of
-// tabSize (default 4). Widths after a tab account for wide chars, so the
-// result's visibleWidth matches rawColToDisplayCol(s, s.length).
-export function tabExpanded(s: string, tabSize: number = DEFAULT_TAB_SIZE): string {
-  if (!s.includes("\t")) return s;
-  let out = "";
-  let width = 0;
-  for (const ch of s) {
-    if (ch === "\t") {
-      const next = nextTabStop(width, tabSize);
-      out += " ".repeat(next - width);
-      width = next;
-    } else {
-      out += ch;
-      width += visibleWidth(ch);
-    }
-  }
-  return out;
-}
-
-// Maps a raw column (UTF-16 code-unit index, the Position.col convention of
-// selection.ts) to its display column after tab expansion; wide chars count
-// as 2 columns. Columns outside the line clamp to the line's display width.
-export function rawColToDisplayCol(line: string, col: number, tabSize: number = DEFAULT_TAB_SIZE): number {
-  const bounded = Math.min(Math.max(col, 0), line.length);
-  let width = 0;
-  let i = 0;
-  while (i < bounded) {
-    const ch = String.fromCodePoint(line.codePointAt(i) as number);
-    width = ch === "\t" ? nextTabStop(width, tabSize) : width + visibleWidth(ch);
-    i += ch.length;
-  }
-  return width;
-}
 
 // Pending gutter marker: the Nerd Font comment bubble followed by the number
 // of pending drafts STARTING on the line ("+" above 9), shown only on a
