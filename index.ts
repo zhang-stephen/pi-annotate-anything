@@ -22,6 +22,7 @@ import type { ExtensionAPI, ExtensionContext } from "@earendil-works/pi-coding-a
 import { AnnotateEditor, withTokenRecolor } from "./src/editor.ts";
 import { extractRange, loadFile, resolvePath } from "./src/file-range.ts";
 import { tokenLabel } from "./src/message.ts";
+import { completePath } from "./src/path-completion.ts";
 import { AnnotationStore } from "./src/store.ts";
 import { expandTokens } from "./src/transform.ts";
 import { AnnotateCard } from "./src/viewer.ts";
@@ -75,6 +76,9 @@ export default function (pi: ExtensionAPI) {
 
   pi.registerCommand("annotate", {
     description: "Annotate a range of a file: /annotate <path>",
+    // Completion callbacks receive only the argument prefix (no ctx), so the
+    // cwd for relative paths comes from the extension host process.
+    getArgumentCompletions: (argumentPrefix) => completePath(argumentPrefix, process.cwd()),
     handler: async (args, ctx) => {
       const arg = args.trim();
       if (!arg) {
