@@ -10,6 +10,7 @@ Do not open docs marked `done` unless the current work touches that area.
 
 - spec: `docs/superpowers/specs/2026-10-18-viewer-search-design.md`
 - spec: `docs/superpowers/specs/2026-10-18-annotate-path-completion-design.md`
+- plan: `docs/superpowers/plans/2026-10-18-annotate-path-completion.md`
 - spec: `docs/superpowers/specs/2026-10-17-ci-tui-e2e-design.md`
 
 ## Done
