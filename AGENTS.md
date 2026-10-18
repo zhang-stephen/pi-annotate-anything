@@ -55,6 +55,7 @@ The workflow is spec -> plan -> code, and every step is gated:
 
 - Versions and changelogs are managed by **release-please**; never bump `package.json` `"version"` or edit `CHANGELOG.md` by hand.
 - Merging a release PR tags the release and publishes to npm via **trusted publishing (OIDC)**; there is no npm token in the repo.
+- After a release PR merges upstream: run `git pull -r` on master to fetch the release commit locally, then delete the stale release-please branch on the remote (`git push origin --delete release-please--branches--master--components--pi-annotate-anything`).
 
 ## Specs and plans
 
