@@ -5,7 +5,7 @@ import type { Theme } from "@earendil-works/pi-coding-agent";
 import { stripTerminalSequences, visibleWidth } from "@earendil-works/pi-tui";
 import type { TUI } from "@earendil-works/pi-tui";
 
-import { rawColToDisplayCol, sliceWindow, tabExpanded } from "../src/display.ts";
+import { rawColToDisplayCol, rawColsToDisplayCols, sliceWindow, tabExpanded } from "../src/display.ts";
 import type { Range, VisualMode } from "../src/selection.ts";
 import type { PendingDraft } from "../src/viewer-state.ts";
 import { AnnotateCard, CONTINUATION_MARK, gutterWidth, normalizeKeyRepeat, PENDING_ICON } from "../src/viewer.ts";
@@ -51,6 +51,29 @@ test("tabExpanded accounts for wide chars before the tab", () => {
 test("tabExpanded output has the visible width rawColToDisplayCol predicts", () => {
   const line = "ab\t\u4e00\tcd";
   assert.equal(visibleWidth(tabExpanded(line)), rawColToDisplayCol(line, line.length));
+});
+
+test("rawColsToDisplayCols matches rawColToDisplayCol per column (tabs, CJK, astral)", () => {
+  const line = "a\t\u4e00b\ud83d\ude00c\td";
+  // sorted ascending (the documented contract); -3 clamps to 0, len+10 to len
+  const cols = [-3, 0, 1, 2, 2, 3, 5, 7, 9, 11, line.length, line.length + 10];
+  assert.deepEqual(
+    rawColsToDisplayCols(line, cols),
+    cols.map((c) => rawColToDisplayCol(line, c)),
+  );
+});
+
+test("rawColsToDisplayCols maps a long line's many matches in one walk", () => {
+  // The search-rendering path maps every viewport match's start and end;
+  // this asserts sorted batches stay correct at scale (and stay cheap by
+  // construction: a single left-to-right walk, see display.ts).
+  const line = "x".repeat(10000);
+  const cols = [] as number[];
+  for (let i = 0; i < 1000; i++) cols.push(i * 10, i * 10 + 3);
+  const mapped = rawColsToDisplayCols(line, cols);
+  assert.equal(mapped.length, 2000);
+  assert.equal(mapped[1998], 9990);
+  assert.equal(mapped[1999], 9993);
 });
 
 // Highlight cache invariant ---------------------------------------------------
@@ -128,8 +151,8 @@ test("gutterWidth digits track the line count magnitude", () => {
 // real component with a stubbed TUI and a recording theme: fg/bg wrap text in
 // real ANSI codes (so visibleWidth/stripTerminalSequences still work on the
 // rendered rows) and log every token lookup, which lets tests pin the theme
-// tokens the chrome must use (border, dim, accent, warning). The background
-// is transparent by design, so bg lookups never happen.
+// tokens the chrome must use (border, dim, accent, warning, searchMatch*).
+// Search matches are the one background consumer.
 
 const FG_ON = "\x1b[38;5;111m";
 const FG_OFF = "\x1b[39m";
@@ -164,6 +187,9 @@ function makeCard(opts: { lines: string[]; path?: string; cwd?: string; rows?: n
       bgCalls.push({ token, text });
       return BG_ON + text + BG_OFF;
     },
+    bold: (text: string) => BOLD_ON + text + INTENSITY_OFF,
+    underline: (text: string) => UNDERLINE_ON + text + UNDERLINE_OFF,
+    inverse: (text: string) => "\x1b[7m" + text + "\x1b[27m",
   } as unknown as Theme;
   const calls = {
     annotate: [] as { range: Range; mode: VisualMode; comment: string }[],
@@ -237,12 +263,14 @@ test("chrome colors come from the theme: fg tokens; background transparent by de
 
 test("statusline and cmdline follow the mode: badge in accent, hints in dim", () => {
   const normal = makeCard({ lines: ["alpha", "beta"] });
-  let bare = normal.card.render(84).map(strip);
+  // Width 100 so the 90-column normal hints fit whole and reach the dim
+  // token untruncated.
+  let bare = normal.card.render(100).map(strip);
   assert.ok(bare[bare.length - 3].startsWith("│ -- NORMAL --"));
   assert.ok(bare[bare.length - 3].endsWith("1:1 │"));
   assert.ok(bare[bare.length - 2].startsWith("│ hjkl move  v/V select"));
   assert.ok(normal.fgCalls.some((c) => c.token === "accent" && c.text === "-- NORMAL --"));
-  assert.ok(normal.fgCalls.some((c) => c.token === "dim" && c.text === "hjkl move  v/V select  c/x comment/delete  p preview  q/Esc close"));
+  assert.ok(normal.fgCalls.some((c) => c.token === "dim" && c.text === "hjkl move  v/V select  / search  n/N next/prev  c/x comment/delete  p preview  q/Esc close"));
 
   // Visual-char: the statusline carries the selection range as L:C-L:C.
   const visual = makeCard({ lines: ["alpha", "beta"] });
@@ -1065,4 +1093,145 @@ test("comment box borders stay column-aligned when a cut straddles a wide char",
   assert.equal(mid, 19, `middle border column, row: ${JSON.stringify(rows[4])}`);
   assert.equal(bot, 19, `bottom border column, row: ${JSON.stringify(rows[5])}`);
   for (const [i, r] of raw.entries()) assert.equal(visibleWidth(r), 120, `row ${i} width`);
+});
+
+// Search highlight and wiring -------------------------------------------------
+//
+// Task 5: matches of the live query (search mode) or lastSearch style as
+// theme searchMatchBg over searchMatchText ("match", mirroring pi's
+// transcript search), composing with pending underlines
+// and losing to inverse selections; the bottom area switches to the / input
+// in search mode, shows the [rank/total] segment, and renders transient
+// reducer messages right-aligned for exactly one keypress.
+
+// The match composites over "foo": plain matches paint searchMatchBg over
+// searchMatchText; the cursor's own match ("current") wraps that in bold +
+// inverse, pi's searchCurrentMatchStyle. BG_ON+FG_ON adjacency is unique to
+// match spans in a rendered row (cursor/selection is raw inverse, pending
+// is raw SGR 4/2), so it also serves as a position anchor for column
+// assertions.
+const MATCH_FOO = BG_ON + FG_ON + "foo" + FG_OFF + BG_OFF;
+const MATCHCURRENT_FOO = BOLD_ON + "\x1b[7m" + BG_ON + FG_ON + "foo" + FG_OFF + BG_OFF + "\x1b[27m" + INTENSITY_OFF;
+
+// Runs "foo" through the real search flow (/foo<Enter>): lastSearch stored,
+// the incremental jump parks the cursor on the first match's first cell.
+function searchFoo(h: CardHarness): CardHarness {
+  for (const key of ["/", "f", "o", "o", "\r"]) h.card.handleInput(key);
+  return h;
+}
+
+test("highlight: matches of lastSearch are styled on tabbed and CJK lines", () => {
+  const h = searchFoo(makeCard({ lines: ["\tfoo bar", "\u4e2dfoo"] }));
+  h.card.handleInput("h"); // park the cursor on the tab cell, off the match
+  const rows = h.card.render(80);
+  assert.ok(rows[1].includes(MATCH_FOO), `line 0 match styled, got: ${JSON.stringify(strip(rows[1]))}`);
+  assert.ok(rows[2].includes(MATCH_FOO), `line 1 match styled, got: ${JSON.stringify(strip(rows[2]))}`);
+  // Column proof: the styled wrap starts at the match's DISPLAY column -
+  // col 4 on the tabbed line (tab -> stop 4) and col 2 on the CJK line (the
+  // wide char counts 2) - behind the frame prefix (2) and the 6-wide gutter.
+  const startCol = (row: string) => visibleWidth(row.slice(0, row.indexOf(BG_ON + FG_ON))) - 2 - gutterWidth(2);
+  assert.equal(startCol(rows[1]), 4, `match at display col 4 on the tabbed line, got: ${JSON.stringify(strip(rows[1]))}`);
+  assert.equal(startCol(rows[2]), 2, `match at display col 2 on the CJK line, got: ${JSON.stringify(strip(rows[2]))}`);
+});
+
+test("highlight: match composes with pending underline, loses to inverse selection", () => {
+  const h = searchFoo(makeCard({ lines: ["\tfoo bar", "beta"] }));
+  const r = { startLine: 0, startCol: 1, endLine: 0, endCol: 4 }; // exactly the match
+  h.pending.push(r);
+  h.drafts.push({ token: "[a.ts:2-5]", range: r, comment: "note" });
+  h.card.handleInput("j"); // cursor line 1, off the draft: plain underline
+  const row = h.card.render(80)[1];
+  assert.ok(
+    row.includes(UNDERLINE_ON + MATCH_FOO + UNDERLINE_OFF),
+    `pending underline and match style wrap the same segment, got: ${JSON.stringify(strip(row))}`,
+  );
+  // Selection over the match: the segment renders inverse (selection wins).
+  h.pending.pop();
+  h.drafts.pop();
+  h.card.handleInput("k"); // cursor back to line 0 col 1, the match start
+  h.card.handleInput("v"); // anchor there
+  h.card.handleInput("l");
+  h.card.handleInput("l");
+  h.card.handleInput("l"); // selection [1,5) covers the match; the cursor cell
+  // parks past its end so the match renders as ONE segment (no cell split).
+  const selRow = h.card.render(80)[1];
+  assert.ok(
+    selRow.includes("\x1b[7m" + MATCH_FOO + "\x1b[27m"),
+    `the selected match renders inverse over the match style, got: ${JSON.stringify(strip(selRow))}`,
+  );
+});
+
+test("highlight: persists in comment mode (hlsearch)", () => {
+  const h = searchFoo(makeCard({ lines: ["foo", "a", "b", "c", "d", "foo"] }));
+  h.card.handleInput("v");
+  h.card.handleInput("c"); // comment mode over the line-0 selection
+  const rows = h.card.render(80);
+  // The box floats below the selection start (line 0); the second match on
+  // line 5 stays visible and keeps the match style.
+  assert.ok(rows[6].includes(MATCH_FOO), `match style survives into comment mode, got: ${JSON.stringify(strip(rows[6]))}`);
+});
+
+test("wiring: search mode renders the cmdline input and the [rank/total] segment", () => {
+  const h = makeCard({ lines: ["foo", "bar foo"] });
+  for (const key of ["/", "f", "o", "o"]) h.card.handleInput(key); // typing, not submitted
+  const rows = h.card.render(80);
+  const bare = rows.map(strip);
+  // Statusline: search badge with the rank segment (cursor on match 1 of 2).
+  assert.ok(bare[3].includes("-- SEARCH --"), `search badge, got: ${bare[3]}`);
+  assert.ok(bare[3].includes("[1/2]"), `rank segment, got: ${bare[3]}`);
+  // Cmdline: the / input with the query and the emulated inverse cursor.
+  assert.ok(bare[4].startsWith("│ /foo"), `cmdline input, got: ${bare[4]}`);
+  assert.ok(rows[4].includes("\x1b[7m \x1b[27m"), "inverse cmdline cursor cell");
+});
+
+test("highlight: the cursor's match renders as the current match, others stay plain", () => {
+  const h = searchFoo(makeCard({ lines: ["foo", "bar foo"] })); // cursor on match 1
+  // The inverse cursor cell splits the current match's first cell off, so
+  // the bolded remainder is "oo" (same compose behavior as plain matches).
+  const CURRENT_SPLIT = BOLD_ON + "\x1b[7m" + BG_ON + FG_ON + "oo" + FG_OFF + BG_OFF + "\x1b[27m" + INTENSITY_OFF;
+  const rows = h.card.render(80);
+  assert.ok(rows[1].includes(CURRENT_SPLIT), `current match swaps the pair + bold, got: ${rows[1]}`);
+  assert.ok(rows[2].includes(MATCH_FOO), `other match stays plain, got: ${rows[2]}`);
+  assert.ok(!rows[2].includes(MATCHCURRENT_FOO), `other match not bolded, got: ${rows[2]}`);
+  h.card.handleInput("n"); // jump to match 2: the current mark moves with it
+  const jumped = h.card.render(80);
+  assert.ok(jumped[2].includes(CURRENT_SPLIT), `current match follows the jump, got: ${jumped[2]}`);
+  assert.ok(jumped[1].includes(MATCH_FOO) && !jumped[1].includes(BOLD_ON), `previous match back to plain, got: ${jumped[1]}`);
+});
+
+test("wiring: a transient message renders right-aligned and clears on the next key", () => {
+  const h = searchFoo(makeCard({ lines: ["foo", "x foo"] })); // cursor on match 1
+  h.card.handleInput("n"); // match 2, no wrap
+  h.card.handleInput("n"); // wraps to match 1: the reducer sets the wrap message
+  const bare = h.card.render(80).map(strip);
+  assert.ok(bare[4].includes("search hit BOTTOM, continuing at TOP"), `wrap message shown, got: ${bare[4]}`);
+  assert.ok(bare[4].endsWith("search hit BOTTOM, continuing at TOP │"), `message right-aligned, got: ${bare[4]}`);
+  h.card.handleInput("l"); // any next key drops the message
+  const after = h.card.render(80).map(strip);
+  assert.ok(!after[4].includes("search hit BOTTOM"), `message cleared, got: ${after[4]}`);
+  assert.ok(after[4].includes("hjkl move"), "hints restored");
+});
+
+test("wiring: an invalid pattern shows the compile error right-aligned on the cmdline input", () => {
+  const h = makeCard({ lines: ["foo", "bar"] });
+  h.card.handleInput("/");
+  h.card.handleInput("("); // invalid: compile error becomes the transient message
+  const bare = h.card.render(80).map(strip);
+  assert.ok(bare[4].startsWith("│ /("), `cmdline input stays editable, got: ${bare[4]}`);
+  assert.ok(bare[4].includes("Unterminated group"), `engine error shown, got: ${bare[4]}`);
+  assert.ok(bare[4].endsWith("Unterminated group │"), `error right-aligned, got: ${bare[4]}`);
+});
+
+test("wiring: zero matches hide the segment and surface the not-found message", () => {
+  const h = makeCard({ lines: ["foo", "bar"] });
+  h.card.handleInput("/");
+  h.card.handleInput("z");
+  h.card.handleInput("\r"); // submit a zero-match pattern
+  const bare = h.card.render(80).map(strip);
+  assert.ok(!bare[3].includes("/z"), `segment hidden at total 0, got: ${bare[3]}`);
+  assert.ok(bare[4].includes("Pattern not found: z"), `message shown, got: ${bare[4]}`);
+  const cleared = h.card.render(80).map(strip); // next keypress clears it
+  h.card.handleInput("j");
+  const after = h.card.render(80).map(strip);
+  assert.ok(!after[4].includes("Pattern not found"), `message cleared by keypress, got: ${after[4]}`);
 });

@@ -1,7 +1,7 @@
 ---
 title: Viewer Search - Implementation Plan
-status: in-progress
-progress: 1/5
+status: done
+progress: 5/5
 spec: ../specs/2026-10-18-viewer-search-design.md
 ---
 
@@ -144,7 +144,7 @@ git commit -m "feat(viewer): pad framed rows inside the vertical borders"
 - Create: `src/search.ts`
 - Test: `test/search.test.ts` (new)
 
-- [ ] **Step 1: Write the failing tests**
+- [x] **Step 1: Write the failing tests**
 
 Create `test/search.test.ts` (verbatim core cases; node:test style like the other suites):
 
@@ -228,12 +228,12 @@ test("jumpTarget: empty matches return null; zero-width matches are jumpable", (
 });
 ```
 
-- [ ] **Step 2: Run the tests, verify failure**
+- [x] **Step 2: Run the tests, verify failure**
 
 Run: `node --test test/search.test.ts`
 Expected: FAIL, module not found (`../src/search.ts`).
 
-- [ ] **Step 3: Implement `src/search.ts`**
+- [x] **Step 3: Implement `src/search.ts`**
 
 Pure module, no pi imports beyond the `Position` type from `./selection.ts`:
 
@@ -255,12 +255,12 @@ export function jumpTarget(
 - `findMatches`: scans each line independently; resets `re.lastIndex = 0` per line; after a zero-width match advances `lastIndex` by one code unit so the scan terminates.
 - `jumpTarget`: a match is after `from` when `line > from.line || (line === from.line && startCol > from.col)` (before mirrors); takes the `count`-th match in `dir` order, wrapping around the file and reporting `wrapped`; `null` when `matches` is empty. The returned `pos` is `{ line: match.line, col: match.startCol }`.
 
-- [ ] **Step 4: Run the tests, verify pass**
+- [x] **Step 4: Run the tests, verify pass**
 
 Run: `node --test test/search.test.ts`
 Expected: PASS, all 10 tests.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add src/search.ts test/search.test.ts
@@ -277,7 +277,7 @@ git commit -m "feat(viewer): add pure search primitives module"
 
 Uses Task 2's `compilePattern`/`findMatches`/`jumpTarget` (import from `./search.ts`).
 
-- [ ] **Step 1: Write the failing tests**
+- [x] **Step 1: Write the failing tests**
 
 Extend `test/viewer-state.test.ts` using its existing `LINES` (30 lines `"line 0"`..`"line 29"`), `VP`, `viewer()`, `view()` fixtures. Matches of `"2"`: `line 2` col 5, `line 12` col 6, `line 20`..`line 29` col 5. Verbatim core cases:
 
@@ -385,7 +385,8 @@ test("count: {count}j / {count}G consume the count, digits accumulate", () => {
   assert.deepEqual(view(view(viewer(), "2").state, "3").state.count, 23);
   assert.deepEqual(view(view(viewer(), "2").state, "j").state.cursor.line, 2);
   assert.deepEqual(view(view(viewer(), "3").state, "G").state.cursor.line, 2);
-  assert.deepEqual(view(view(viewer(), "9").state, "G").state.cursor.line, 29); // clamped
+  assert.deepEqual(view(view(viewer(), "9").state, "9").state.count, 99);
+  assert.deepEqual(view(view(view(viewer(), "9").state, "9").state, "G").state.cursor.line, 29); // clamped: 99G -> last line
 });
 
 test("count: bare 0 stays the column-0 motion; 0 extends a pending count", () => {
@@ -404,12 +405,12 @@ test("count: any other key clears it without effect; {count}n repeats the search
 });
 ```
 
-- [ ] **Step 2: Run the tests, verify failure**
+- [x] **Step 2: Run the tests, verify failure**
 
 Run: `node --test test/viewer-state.test.ts`
 Expected: FAIL (no `"search"` mode; `count`/`message`/`lastSearch` unknown).
 
-- [ ] **Step 3: Implement**
+- [x] **Step 3: Implement**
 
 In `src/viewer-state.ts`:
 
@@ -424,17 +425,17 @@ In `src/viewer-state.ts`:
 - Consumers read `count ?? 1` and clear it: `j`/`k` (lines), `h`/`l` (columns), `G` (`{count}G` goes to 1-based line `count`, clamped), `n`/`N`. Any other key clears `count` without effect: wrapper rule - after `handleMode`, if the key was not a digit and the branch returned `count` unchanged, set it to `null`.
 - `n`/`N` in `handleMode`, normal mode only: `lastSearch` null -> inert; compile (defensive: `!ok` -> `message` = error, cursor stays); `findMatches` empty -> `message: "Pattern not found: " + lastSearch`, cursor stays; else `jumpTarget(matches, cursor, dir, count ?? 1)` -> move via `moved`, `count: null`, and when `wrapped` set the vim message for the direction.
 
-- [ ] **Step 4: Run the tests, verify pass**
+- [x] **Step 4: Run the tests, verify pass**
 
 Run: `node --test test/viewer-state.test.ts`
 Expected: PASS (old + new).
 
-- [ ] **Step 5: Typecheck and full suite**
+- [x] **Step 5: Typecheck and full suite**
 
 Run: `npx tsc --noEmit && npm test`
 Expected: clean.
 
-- [ ] **Step 6: Commit**
+- [x] **Step 6: Commit**
 
 ```bash
 git add src/viewer-state.ts test/viewer-state.test.ts
@@ -449,7 +450,7 @@ git commit -m "feat(viewer): add search mode, count prefix, and transient messag
 - Modify: `src/status-line.ts`
 - Test: `test/status-line.test.ts`
 
-- [ ] **Step 1: Write the failing tests**
+- [x] **Step 1: Write the failing tests**
 
 Extend `test/status-line.test.ts` (verbatim core cases; `plain` marker colors per the file's convention):
 
@@ -524,12 +525,12 @@ test("cmdline hints: message right-aligned in accent, hints truncate first", () 
 
 (The last case assumes the new normal hints text below and the file's marker `colors`: hints truncated to `40 - 22 - 1 = 17` columns, a one-space gap, message intact.)
 
-- [ ] **Step 2: Run the tests, verify failure**
+- [x] **Step 2: Run the tests, verify failure**
 
 Run: `node --test test/status-line.test.ts`
 Expected: FAIL (no `search` mode, no segment, no message widget, interim input rendering).
 
-- [ ] **Step 3: Implement**
+- [x] **Step 3: Implement**
 
 In `src/status-line.ts`:
 
@@ -539,19 +540,19 @@ In `src/status-line.ts`:
 - `StatusLineInput` gains `search?: { pattern: string; rank: number; total: number } | null`.
 - `renderStatusLine`: segment = `/` + pattern + ` [rank/total]` in normal mode, `[rank/total]` in search mode, `null` in visual/comment modes. Layout mirrors the selection range: badge + two spaces + segment + pad + position when `badgeW + 2 + segW + 1 + posW <= innerWidth`; otherwise the segment drops as a whole (never truncated) before the selection range; badge and position are always preserved.
 - `CommandLineInput` hints variant gains `message?: string | null`: rendered right-aligned in `colors.accent`; the hints truncate first to `innerWidth - msgW - 1` with a one-space gap; the message is preserved whole unless it alone exceeds `innerWidth` (then `truncateToWidth`).
-- `input` variant final rendering: `colors.accent(prompt)` + value in default text + one inverse cursor cell. The inverse cell is raw SGR like `viewer.ts` (`\x1b[7m \x1b[27m`); add local constants mirroring viewer's. On overflow the value windows tail-biased: the prompt never scrolls, the cursor cell is always the last column (`prompt + last (innerWidth - promptW - 1) columns of value + cursor cell`). `cursorCol` stays in the type, reserved for future mid-line editing; rendering is append-only.
+- `input` variant final rendering: `colors.accent(prompt)` + value in default text + one inverse cursor cell. The inverse cell is raw SGR like `viewer.ts` (`\x1b[7m \x1b[27m`); add local constants mirroring viewer's. On overflow the value windows tail-biased: the prompt never scrolls, the cursor cell is always the last column (`prompt + last (innerWidth - promptW - 1) columns of value + cursor cell`). `cursorCol` stays in the type, reserved for future mid-line editing; rendering is append-only. Amended during Task 5 review (2026-10-19): the input variant also takes an optional `message` rendered as the same right-aligned widget as the hints variant - without it the invalid-pattern compile error was invisible in search mode (fix commit `e0ee5fe`).
 
-- [ ] **Step 4: Run the tests, verify pass**
+- [x] **Step 4: Run the tests, verify pass**
 
 Run: `node --test test/status-line.test.ts`
 Expected: PASS.
 
-- [ ] **Step 5: Typecheck and full suite**
+- [x] **Step 5: Typecheck and full suite**
 
 Run: `npx tsc --noEmit && npm test`
 Expected: clean.
 
-- [ ] **Step 6: Commit**
+- [x] **Step 6: Commit**
 
 ```bash
 git add src/status-line.ts test/status-line.test.ts
@@ -568,7 +569,7 @@ git commit -m "feat(viewer): render search segment, cmdline input, and messages"
 
 Uses Task 2's primitives, Task 3's state fields, Task 4's renderers.
 
-- [ ] **Step 1: Write the failing tests**
+- [x] **Step 1: Write the failing tests**
 
 Extend `test/viewer.test.ts` using its existing card harness (scenario + expected specifics; assertion style per the file's existing span tests):
 
@@ -602,40 +603,40 @@ test("wiring: a transient message renders right-aligned and clears on the next k
 });
 ```
 
-- [ ] **Step 2: Run the tests, verify failure**
+- [x] **Step 2: Run the tests, verify failure**
 
 Run: `node --test test/viewer.test.ts`
 Expected: FAIL (no match style, no search wiring).
 
-- [ ] **Step 3: Implement**
+- [x] **Step 3: Implement**
 
 In `src/viewer.ts`:
 
-- `SpanStyle` gains `"match"`; `spanStyles.match = (s) => this.colors.accent(BOLD_ON + s + INTENSITY_OFF)` (accent fg + bold: composes with the underline attributes; distinct from every existing style).
-- `applyStyleSpans`: `match` stays out of the strongest-emphasis race and composes like `inverse`: the final filter becomes `s === "inverse" || s === "match" || s === strongest`. Precedence unchanged otherwise: `inverse` still wins visually.
-- Per `render()`: the active pattern is `state.search.query` in search mode (skip when empty), else `state.lastSearch` (skip when null). `compilePattern` once per render; on `!ok` render no highlight (the error already shows as the cmdline message). `findMatches(this.file.lines, re)` once per render; per line map each match to a display-column `StyleSpan` via `rawColToDisplayCol(line, startCol)` / `rawColToDisplayCol(line, endCol)` (zero-width spans are dropped by `applyStyleSpans`'s `end > start` filter - intended). Pass the per-line spans into `renderLine`, which merges them with the existing selection/cursor/emphasis spans.
+- `SpanStyle` gains `"match"`; ~~`spanStyles.match = (s) => this.colors.accent(BOLD_ON + s + INTENSITY_OFF)` (accent fg + bold: composes with the underline attributes; distinct from every existing style).~~ Amended after user E2E (2026-10-19): too subtle in practice - pi's two-level searchMatch convention applies instead: `match` = `theme.bg("searchMatchBg", theme.fg("searchMatchText", s))`, and a new `"matchCurrent"` style for the cursor's own match ~~swaps the pair plus bold~~ amended in code review (2026-10-19): `matchCurrent = theme.bold(theme.inverse(theme.bg("searchMatchBg", theme.fg("searchMatchText", s))))` - pi's Theme partitions fg/bg tokens at runtime, so literal swapping throws; this mirrors pi's `searchCurrentMatchStyle`; both compose with underlines and lose to inverse.
+- `applyStyleSpans`: `match`/`matchCurrent` stay out of the strongest-emphasis race and compose like `inverse`: the final filter becomes `s === "inverse" || s === "match" || s === "matchCurrent" || s === strongest`. Precedence unchanged otherwise: `inverse` still wins visually.
+- Per `render()`: the active pattern is `state.search.query` in search mode (skip when empty), else `state.lastSearch` (skip when null). `compilePattern` once per render; on `!ok` render no highlight (the error already shows as the cmdline message). `findMatches(this.file.lines, re)` once per render; ~~per line map each match to a display-column `StyleSpan` via `rawColToDisplayCol(line, startCol)` / `rawColToDisplayCol(line, endCol)`~~ amended in code review (2026-10-19): build spans only for viewport rows `[first, last)`, skip zero-width matches, and map each line's sorted columns in one walk via `rawColsToDisplayCols` (per-match `rawColToDisplayCol` was O(matches x line length) and froze on minified files); (zero-width spans are dropped by `applyStyleSpans`'s `end > start` filter - intended). Pass the per-line spans into `renderLine`, which merges them with the existing selection/cursor/emphasis spans.
 - Statusline input: normal mode with a `lastSearch`, and search mode, pass `search: { pattern, rank, total }`; visual/comment modes pass `null`. `rank` is the 1-based index of the match containing the cursor (`match.line === cursor.line && startCol <= col && col < endCol`; zero-width matches never count), `0` when the cursor is on no match; `total = matches.length`.
 - Cmdline input: search mode -> `{ kind: "input", prompt: "/", value: state.search.query, cursorCol: state.search.query.length }`; every other mode -> `{ kind: "hints", mode, message: state.message ?? null }`.
 - Constructor initial state gains `search: null, lastSearch: null, count: null, message: null`.
 
-- [ ] **Step 4: Run the tests, verify pass**
+- [x] **Step 4: Run the tests, verify pass**
 
 Run: `node --test test/viewer.test.ts`
 Expected: PASS.
 
-- [ ] **Step 5: Typecheck and full suite**
+- [x] **Step 5: Typecheck and full suite**
 
 Run: `npx tsc --noEmit && npm test`
 Expected: clean.
 
-- [ ] **Step 6: Commit**
+- [x] **Step 6: Commit**
 
 ```bash
 git add src/viewer.ts test/viewer.test.ts
 git commit -m "feat(viewer): highlight search matches and wire the search UI"
 ```
 
-- [ ] **Step 7: Manual E2E (human confirms)**
+- [x] **Step 7: Manual E2E (human confirms)** (confirmed 2026-10-19, three rounds: search flow, zero-match message, two-level match styling; narrow-terminal item deferred)
 
 Sandbox: `PI_CODING_AGENT_DIR=/tmp/pi-sandbox-home pi -e ./index.ts`
 Check: `/` + incremental jump per keystroke; invalid pattern shows the error and Enter stays in search; Esc restores the origin; `n`/`N` with wrap notices; `{count}n`, `{count}j`, `{count}G`, bare `0`; highlight in visual and comment modes; `[rank/total]` segment; narrow-terminal truncation; CJK/tabbed fixture file.

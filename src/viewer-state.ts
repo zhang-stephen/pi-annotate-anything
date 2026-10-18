@@ -8,8 +8,9 @@ import type { Position, Range, Selection, VisualMode } from "./selection.ts";
 import { reduceComment } from "./comment-input.ts";
 import type { CommentKey, CommentState } from "./comment-input.ts";
 import { draftAtCursor } from "./card-chrome.ts";
+import { compilePattern, findMatches, jumpTarget } from "./search.ts";
 
-export type ViewerMode = "normal" | "visual-char" | "visual-line" | "comment";
+export type ViewerMode = "normal" | "visual-char" | "visual-line" | "comment" | "search";
 
 export interface ViewerState {
   mode: ViewerMode;
@@ -47,6 +48,31 @@ export interface ViewerState {
   // this state without the field (pre-cycle callers) stay valid; the reducer
   // treats undefined like 0.
   cycleOrdinal?: number;
+  // Incremental search state (search mode): the query typed so far and the
+  // position the search started from (the cursor at "/"), which Esc restores
+  // and failed jumps park on. Optional so callers that construct this state
+  // without the field (pre-search callers) stay valid; the reducer treats
+  // undefined like null.
+  search?: { query: string; origin: Position } | null;
+  // Pattern of the most recent submitted search ("/q<Enter>" stores it; an
+  // empty-query Enter replays it), repeated by n/N. Session state like
+  // previewOn: never persisted. Optional so callers that construct this
+  // state without the field (pre-search callers) stay valid; the reducer
+  // treats undefined like null.
+  lastSearch?: string | null;
+  // Pending count prefix ({count}j / {count}G / {count}n), normal mode only:
+  // digits start/extend it in reduceViewer, exactly one motion consumes it
+  // (read as count ?? 1), and any other non-digit key clears it. Optional so
+  // callers that construct this state without the field (pre-count callers)
+  // stay valid; the reducer treats undefined like null.
+  count?: number | null;
+  // Transient statusline feedback ("search hit BOTTOM...", "Pattern not
+  // found", pattern compile errors): reduceViewer drops the incoming message
+  // before dispatch and branches that want one set it fresh, so a message
+  // survives exactly one render and a repeated identical event re-shows it.
+  // Optional so callers that construct this state without the field stay
+  // valid; the reducer treats undefined like null.
+  message?: string | null;
 }
 
 // Minimal view of a pending annotation the reducer needs for edit (c) and
@@ -140,6 +166,18 @@ function resetCycleOnMove(res: ViewerResult, prev: ViewerState): ViewerResult {
   return { ...res, state: { ...st, cycleOrdinal: 0 } };
 }
 
+// Count wrapper: a pending count applies to exactly one keypress. The count
+// consumers (j/k/h/l/G/n/N) clear it themselves; any other non-digit key
+// that returned the count unchanged still takes its normal effect but drops
+// the count, so a stale count never leaks into a later motion. Only a
+// non-null incoming count is cleared in place, so keys that are no-ops on
+// count-less states stay bit-for-bit no-ops (undefined stays absent).
+function clearUnusedCount(res: ViewerResult, key: string, prev: ViewerState): ViewerResult {
+  const isDigit = key.length === 1 && key >= "0" && key <= "9";
+  const prevCount = prev.count ?? null;
+  if (isDigit || prevCount === null || (res.state.count ?? null) !== prevCount) return res;
+  return { ...res, state: { ...res.state, count: null } };
+}
 
 // Clamps scrollTop into [0, lines.length - vh], then nudges it so the cursor
 // line stays inside the visible window. Then the horizontal counterparts:
@@ -175,6 +213,13 @@ function moved(state: ViewerState, to: Position, lines: string[], viewport: View
   // line loses the original column permanently. Deliberate; revisit if users
   // report it as un-vim-like.
   return { state: keepVisible({ ...state, cursor: clampPosition(to, lines) }, lines, viewport) };
+}
+
+// Marks a motion as having consumed the pending count: the state is left
+// with count null (never undefined), so the next keypress starts fresh.
+// The wrapped result's optional extras pass through untouched.
+function consumeCount(res: ViewerResult): ViewerResult {
+  return { ...res, state: { ...res.state, count: null } };
 }
 
 // Comment mode routes every key through reduceComment's key set:
@@ -230,28 +275,159 @@ function commentStep(state: ViewerState, key: string, lines: string[], viewport:
   };
 }
 
+// n semantics shared by normal-mode n/N and the empty-query Enter replay:
+// jump `count` matches of lastSearch from the cursor in `dir`. Inert without
+// lastSearch; a compile failure surfaces the engine's message; an empty
+// match set reports "Pattern not found"; otherwise move via moved() and set
+// the vim wrap message for the direction (the caller cleared any incoming
+// message, so an unwrapped jump leaves none).
+function repeatSearch(
+  state: ViewerState,
+  dir: 1 | -1,
+  count: number,
+  lines: string[],
+  viewport: ViewerViewport,
+): ViewerResult {
+  const last = state.lastSearch ?? null;
+  if (last === null) return { state };
+  const compiled = compilePattern(last);
+  if (!compiled.ok) return { state: { ...state, message: compiled.error } };
+  const matches = findMatches(lines, compiled.re);
+  if (matches.length === 0) return { state: { ...state, message: "Pattern not found: " + last } };
+  const target = jumpTarget(matches, state.cursor, dir, count);
+  if (target === null) return { state }; // unreachable: matches is non-empty
+  const wrappedMessage =
+    target.wrapped ? (dir === 1 ? "search hit BOTTOM, continuing at TOP" : "search hit TOP, continuing at BOTTOM") : null;
+  const res = consumeCount(moved(state, target.pos, lines, viewport));
+  return wrappedMessage === null ? res : { state: { ...res.state, message: wrappedMessage } };
+}
+
+// Incremental search jump after every query change: first match at or after
+// the search origin in forward reading order (same line at/after the origin
+// column, else any later line). Compile failures and empty match sets park
+// the cursor back on the origin - the only position the user committed to -
+// with the compile error surfaced as a message in the failure case.
+function incrementalJump(
+  state: ViewerState,
+  search: { query: string; origin: Position },
+  lines: string[],
+  viewport: ViewerViewport,
+): ViewerResult {
+  // An empty query matches everywhere (/ (?:) /g): skip the full-file scan
+  // and just sit on the origin until real input arrives.
+  if (search.query === "") {
+    return { state: keepVisible({ ...state, cursor: search.origin, message: null }, lines, viewport) };
+  }
+  const compiled = compilePattern(search.query);
+  if (!compiled.ok) {
+    return { state: keepVisible({ ...state, cursor: search.origin, message: compiled.error }, lines, viewport) };
+  }
+  const matches = findMatches(lines, compiled.re);
+  const atOrAfter = matches.find(
+    (m) => m.line > search.origin.line || (m.line === search.origin.line && m.startCol >= search.origin.col),
+  );
+  if (atOrAfter === undefined) {
+    return { state: keepVisible({ ...state, cursor: search.origin }, lines, viewport) };
+  }
+  return moved(state, { line: atOrAfter.line, col: atOrAfter.startCol }, lines, viewport);
+}
+
+// Enter in search mode: an invalid pattern keeps editing (the compile error
+// is re-set as the message - reduceViewer cleared the incoming one); an
+// empty query replays lastSearch forward like n from the cursor, or just
+// exits to the origin cursor without one; otherwise the query becomes
+// lastSearch, the incremental jump stands, and search mode closes.
+function submitSearch(
+  state: ViewerState,
+  search: { query: string; origin: Position },
+  lines: string[],
+  viewport: ViewerViewport,
+): ViewerResult {
+  if (search.query !== "") {
+    const compiled = compilePattern(search.query);
+    if (!compiled.ok) return { state: { ...state, message: compiled.error } };
+    // A valid pattern with zero matches stores lastSearch (n repeats it and
+    // fails again, like vim) but reports instead of jumping; the cursor
+    // stays where the incremental scan left it (the origin).
+    if (findMatches(lines, compiled.re).length === 0) {
+      return { state: { ...state, mode: "normal", search: null, lastSearch: search.query, message: "Pattern not found: " + search.query } };
+    }
+    return { state: { ...state, mode: "normal", search: null, lastSearch: search.query } };
+  }
+  if ((state.lastSearch ?? null) === null) {
+    return { state: keepVisible({ ...state, mode: "normal", search: null, cursor: search.origin }, lines, viewport) };
+  }
+  return repeatSearch({ ...state, mode: "normal", search: null }, 1, 1, lines, viewport);
+}
+
+// Search mode routes every key through toCommentKey's classification:
+// chunks append whole (pastes included), backspace pops one code unit,
+// Enter submits, Esc cancels, and newline-shaped keys are ignored (single-
+// line input). Chunks with control characters and unmapped sequences are
+// ignored, mirroring comment mode.
+function searchStep(state: ViewerState, key: string, lines: string[], viewport: ViewerViewport): ViewerResult {
+  const mapped = toCommentKey(key);
+  if (mapped === null) return { state };
+  const search = state.search ?? { query: "", origin: state.cursor }; // invariant: non-null in search mode
+  switch (mapped.kind) {
+    case "newline":
+      return { state };
+    case "backspace": {
+      const next = { ...search, query: search.query.slice(0, -1) };
+      return incrementalJump({ ...state, search: next }, next, lines, viewport);
+    }
+    case "char": {
+      const next = { ...search, query: search.query + mapped.ch };
+      return incrementalJump({ ...state, search: next }, next, lines, viewport);
+    }
+    case "cancel":
+      // Esc: back to normal on the origin cursor; lastSearch untouched.
+      return { state: keepVisible({ ...state, mode: "normal", search: null, cursor: search.origin }, lines, viewport) };
+    case "submit":
+      return submitSearch(state, search, lines, viewport);
+  }
+}
+
 function handleMode(state: ViewerState, key: string, lines: string[], viewport: ViewerViewport, pending: PendingDraft[]): ViewerResult {
   const vh = Math.max(1, viewport.height);
   const visual = state.mode === "visual-char" || state.mode === "visual-line";
   switch (key) {
     case "h":
+      return consumeCount(moved(state, { ...state.cursor, col: state.cursor.col - (state.count ?? 1) }, lines, viewport));
     case "\x1b[D":
       return moved(state, { ...state.cursor, col: state.cursor.col - 1 }, lines, viewport);
     case "l":
+      return consumeCount(moved(state, { ...state.cursor, col: state.cursor.col + (state.count ?? 1) }, lines, viewport));
     case "\x1b[C":
       return moved(state, { ...state.cursor, col: state.cursor.col + 1 }, lines, viewport);
     case "j":
+      return consumeCount(moved(state, { line: state.cursor.line + (state.count ?? 1), col: state.cursor.col }, lines, viewport));
     case "\x1b[B":
       return moved(state, { line: state.cursor.line + 1, col: state.cursor.col }, lines, viewport);
     case "k":
+      return consumeCount(moved(state, { line: state.cursor.line - (state.count ?? 1), col: state.cursor.col }, lines, viewport));
     case "\x1b[A":
       return moved(state, { line: state.cursor.line - 1, col: state.cursor.col }, lines, viewport);
     case "0":
       return moved(state, { line: state.cursor.line, col: 0 }, lines, viewport);
     case "$": // end-exclusive convention: max clampable col equals line length
       return moved(state, { line: state.cursor.line, col: Number.MAX_SAFE_INTEGER }, lines, viewport);
-    case "G":
-      return moved(state, { line: lines.length - 1, col: state.cursor.col }, lines, viewport);
+    case "G": {
+      // {count}G goes to the 1-based line `count`, clamped into the file;
+      // plain G keeps the last-line jump.
+      const cnt = state.count ?? null;
+      const line = cnt === null ? lines.length - 1 : Math.min(Math.max(cnt - 1, 0), lines.length - 1);
+      return consumeCount(moved(state, { line, col: state.cursor.col }, lines, viewport));
+    }
+    case "/":
+      // Search entry: the cursor becomes the origin that incremental jumps
+      // run from and Esc restores; any pending count is dropped.
+      if (state.mode !== "normal") return { state };
+      return { state: { ...state, mode: "search", search: { query: "", origin: state.cursor }, count: null } };
+    case "n":
+    case "N":
+      if (state.mode !== "normal") return { state };
+      return repeatSearch(state, key === "n" ? 1 : -1, state.count ?? 1, lines, viewport);
     case "g":
       return { state: { ...state, pending: "g" } };
     case "\x04": // ctrl+d: half page down
@@ -346,21 +522,43 @@ export function reduceViewer(
   const sl = Math.min(Math.max(state.scrollLeft ?? 0, 0), bound);
   if (sl !== (state.scrollLeft ?? 0)) state = { ...state, scrollLeft: sl };
 
+  // Message lifecycle: drop the incoming message before dispatch; branches
+  // that want one set it fresh. A message therefore survives exactly one
+  // render, and a repeated identical event re-shows it. Only a non-null
+  // incoming message is cleared in place, so message-less states stay
+  // bit-for-bit unchanged (undefined stays absent).
+  if ((state.message ?? null) !== null) state = { ...state, message: null };
+
   if (state.mode === "comment") return resetCycleOnMove(commentStep(state, key, lines, viewport), state);
+  if (state.mode === "search") return resetCycleOnMove(searchStep(state, key, lines, viewport), state);
+
+  // Count prefix, normal mode only, before two-stroke handling: 1-9 start a
+  // pending count, 0-9 extend it; a bare 0 (no pending count) falls through
+  // to the existing column-0 motion in handleMode. Digit keys do not move,
+  // so they return directly.
+  if (state.mode === "normal") {
+    if (key.length === 1 && key >= "1" && key <= "9") {
+      return resetCycleOnMove({ state: { ...state, count: (state.count ?? 0) * 10 + Number(key) } }, state);
+    }
+    if (key === "0" && (state.count ?? null) !== null) {
+      return resetCycleOnMove({ state: { ...state, count: (state.count ?? 0) * 10 } }, state);
+    }
+  }
 
   // Two-stroke sequences: "g" arms "gg". A second "g" completes the jump to
   // line 0; any other key clears the pending and falls through to regular
   // normal/visual handling.
   let current = state;
+  let res: ViewerResult;
   if (current.pending !== null) {
     if (key === current.pending) {
-      return resetCycleOnMove(
-        moved({ ...current, pending: null }, { line: 0, col: current.cursor.col }, lines, viewport),
-        state,
-      );
+      res = moved({ ...current, pending: null }, { line: 0, col: current.cursor.col }, lines, viewport);
+    } else {
+      current = { ...current, pending: null };
+      res = handleMode(current, key, lines, viewport, pending);
     }
-    current = { ...current, pending: null };
+  } else {
+    res = handleMode(current, key, lines, viewport, pending);
   }
-
-  return resetCycleOnMove(handleMode(current, key, lines, viewport, pending), state);
+  return resetCycleOnMove(clearUnusedCount(res, key, state), state);
 }

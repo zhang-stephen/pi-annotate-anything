@@ -61,3 +61,24 @@ export function rawColToDisplayCol(line: string, col: number, tabSize: number = 
   }
   return width;
 }
+
+// Maps a sorted list of raw columns to display columns in one left-to-right
+// walk, so K positions cost O(line + K) instead of K rawColToDisplayCol
+// calls at O(col) each (search-match rendering maps every match's start and
+// end). Callers must pass cols sorted ascending; each column clamps like
+// rawColToDisplayCol. Duplicate columns are fine.
+export function rawColsToDisplayCols(line: string, cols: number[], tabSize: number = DEFAULT_TAB_SIZE): number[] {
+  const out = new Array<number>(cols.length);
+  let width = 0;
+  let i = 0;
+  for (let k = 0; k < cols.length; k++) {
+    const target = Math.min(Math.max(cols[k], 0), line.length);
+    while (i < target) {
+      const ch = String.fromCodePoint(line.codePointAt(i) as number);
+      width = ch === "\t" ? nextTabStop(width, tabSize) : width + visibleWidth(ch);
+      i += ch.length;
+    }
+    out[k] = width;
+  }
+  return out;
+}
