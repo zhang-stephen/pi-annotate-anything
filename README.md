@@ -8,7 +8,11 @@ A [Pi](https://github.com/earendil-works/pi-coding-agent) coding agent extension
 
 ## Highlights
 
-- **Vim-like modal interaction.** The annotation card is a modal viewer with normal / visual / comment modes: `h j k l` movement, `v` / `V` char-wise and line-wise selection, `gg` / `G`, half-page jumps, `c` to comment, `x` to delete, `Esc` to back out. If your fingers know vim, they already know this card.
+- **Vim-like modal interaction.** The annotation card is a modal viewer; if your fingers know vim, they already know this card:
+  - normal / visual / comment modes, char-wise and line-wise selection with `o` to swap endpoints
+  - motions: `h j k l`, `0` `$`, `gg` `G`, half/full page jumps, `{count}` prefixes
+  - `/` search: regex + smartcase, incremental jump as you type, persistent highlight, `n`/`N` to hop between matches
+  - `Tab` cycling when annotations stack at the cursor
 - **Annotate anything.** Any local file, not just code: source, logs, configs, docs, data. Any range, down to character precision. Each annotation becomes a pill in the composer and ships to the agent as an exact annotate-time snapshot plus your comment.
 
 ## Demo
@@ -26,6 +30,8 @@ pi install npm:pi-annotate-anything
 ## Features
 
 - Overlay card with line numbers, syntax highlighting, a live pending-count title bar, and a vim-style mode badge footer.
+- Vim-style `/` search in the viewer: regex + smartcase (case-insensitive unless the pattern has an uppercase letter), jumps to the nearest match as you type, all matches stay highlighted after submit, `n`/`N` hop with wrap messages, `{count}` prefixes work on motions and hops.
+- Path Tab-completion in the `/annotate` argument: session-relative paths, `~` expansion, directories first.
 - Composer pills like `[src/a.ts:10-20]` that expand into full quote-block-plus-comment payloads when the message is sent.
 - Annotate-time snapshots: the payload carries the text you saw when annotating, never a silent re-read of the file.
 - Floating comment editor next to the selection with soft wrap and multiline support (`ctrl+j` / `shift+enter`).
@@ -40,36 +46,45 @@ pi install npm:pi-annotate-anything
 /annotate <path>
 ```
 
-`<path>` supports `~` expansion and is resolved relative to the session working directory. It must be an existing regular file. The viewer refuses directories, binary files (files containing NUL bytes), and files larger than 1 MB. CRLF line endings are normalized to LF.
+`<path>` supports `~` expansion, Tab-completion, and is resolved relative to the session working directory. It must be an existing regular file. The viewer refuses directories, binary files (files containing NUL bytes), and files larger than 1 MB. CRLF line endings are normalized to LF.
 
-### Keys: file viewer
+### Keys
 
-| Key                           | Action                                                                                               |
-| ----------------------------- | ---------------------------------------------------------------------------------------------------- |
-| `h` `j` `k` `l` or arrow keys | Move the cursor                                                                                      |
-| `0` / `$`                     | Start / end of the current line                                                                      |
-| `gg` / `G`                    | Top / bottom of the file                                                                             |
-| `ctrl+d` / `ctrl+u`           | Half page down / up                                                                                  |
-| `PgDn` / `PgUp`               | Page down / up                                                                                       |
-| `v`                           | Start char-wise selection; in visual mode, switch to char-wise or exit                               |
-| `V`                           | Start line-wise selection; in visual mode, switch to line-wise or exit                               |
-| `o`                           | Swap the anchor and cursor ends (visual mode only)                                                   |
-| `Tab`                         | Cycle the target among stacked pending annotations under the cursor (normal mode)                    |
-| `c`                           | Visual mode: comment the selection. Normal mode: edit the targeted annotation's comment (pre-filled) |
-| `x`                           | Delete the targeted pending annotation; also removes its pill from the composer                      |
-| `p`                           | Toggle the hover preview of pending comments (normal mode)                                           |
-| `Esc`                         | Cancel the selection or comment box; otherwise close the card                                        |
-| `q`                           | Close the card (normal mode only)                                                                    |
+Every key is listed per mode; `-` means the key does nothing in that mode. The search `/` column applies while the search prompt is open, the comment box column while the floating comment editor is open.
 
-### Keys: comment box
-
-| Key                       | Action                             |
-| ------------------------- | ---------------------------------- |
-| `Enter`                   | Submit the annotation              |
-| `ctrl+j` or `shift+enter` | Insert a newline                   |
-| `Esc`                     | Cancel and return to the selection |
+| Key | Normal | Visual | Search `/` | Comment box |
+| --- | --- | --- | --- | --- |
+| `h` `j` `k` `l` / arrows | move the cursor | expand / shrink the selection | - | - |
+| `0` / `$` | start / end of the line | same, keeping the anchor | - | - |
+| `gg` / `G` | first / last line; `{count}G` jumps to line N | same, keeping the anchor | - | - |
+| `ctrl+d` `ctrl+u` / `PgDn` `PgUp` | half / full page | same | - | - |
+| `1`-`9` (then digits) | count prefix for `j` `k` `h` `l` `G` `n` `N`; never displayed | - | - | - |
+| `/` | enter search mode | - | - | - |
+| `n` / `N` | next / previous match (wraps, with a message) | same | - | - |
+| printable text | - | - | append to the pattern; the match jumps as you type | insert |
+| `Backspace` | - | - | delete the last pattern char | delete char |
+| `Enter` | - | - | submit (empty pattern repeats the last search) | submit the annotation |
+| `ctrl+j` / `shift+enter` | - | - | - | insert a newline |
+| `v` / `V` | enter visual char / line mode | switch mode, or exit to normal | - | - |
+| `o` | - | swap the anchor and cursor ends | - | - |
+| `Tab` | cycle the target among stacked pending annotations | - | - | - |
+| `c` | edit the targeted annotation's comment (pre-filled) | comment the selection | - | - |
+| `x` | delete the targeted annotation (and its pill) | - | - | - |
+| `p` | toggle the hover preview of pending comments | - | - | - |
+| `Esc` | close the card | exit to normal mode | cancel; the cursor returns to where `/` started | cancel the edit |
+| `q` | close the card | - | - | - |
 
 The comment box is a floating panel that opens next to the selection (below it, or above when space runs out).
+
+### Differences from vim
+
+The viewer borrows vim's grammar, not its job: it annotates instead of editing. Where behavior diverges:
+
+- **Keys are repurposed for annotation, not editing**: `c` comments (not change), `x` deletes the annotation at the cursor (not a character), `p` previews the annotation (not paste), `o` swaps selection endpoints in visual mode (not open-line), `q` closes the card (not macro recording), `Tab` cycles stacked annotation targets (not a vim binding).
+- `Esc` backs out one level wherever you are: comment box -> cancel the edit, search -> cancel and restore the cursor, visual -> normal, normal -> close the card.
+- Selections start **empty** at the cursor and expand/shrink per keypress; vim grows the selection from the entry cell instead.
+- `{count}` is accepted only in normal mode, only before `j` `k` `h` `l` `G` `n` `N`, and is never displayed.
+- Search uses **JavaScript regex + smartcase** (case-insensitive unless the pattern contains an uppercase letter), not vim's regex dialect; no `\c` `\v` magic, no `*` `#` `f` `t` `%` motions, no operators, no `:noh`; the highlight clears on the next search (see Roadmap).
 
 ### Stacked annotations and the gutter
 
@@ -108,6 +123,12 @@ Label variants:
 - Sending the message expands every remaining pill into its payload and clears them.
 - Multiple annotations of the same range are allowed; each gets its own disambiguated token.
 - The custom composer editor is installed unconditionally and does not coexist with other extensions that install their own editor.
+
+## Roadmap
+
+- **Buffers**: annotate and navigate multiple sources in a single card session.
+- **More vim**: a limited, curated set of additional vim commands (motions and operators that fit the annotation workflow).
+- **Basic Markdown rendering**: render `.md` files with basic formatting (headings, emphasis, lists, code blocks) in the viewer instead of raw text.
 
 ## Development
 
