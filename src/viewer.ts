@@ -228,16 +228,18 @@ export class AnnotateCard implements Component, Focusable {
     // Inverse stays raw ANSI (theme-neutral): the cursor/selection highlight.
     // Pending ranges underline with raw SGR 4; the cycle target's range adds
     // SGR 1 bold + the theme warning fg, and non-target stack members dim
-    // their underline (SGR 2). Search matches (hlsearch) paint the theme
-    // accent fg + SGR 1 bold, a combination no other span uses, so they stay
-    // distinct from pending emphases while composing with them. The pending
+    // their underline (SGR 2). Search matches (hlsearch) mirror pi's own
+    // transcript search: theme.bg("searchMatchBg") over
+    // theme.fg("searchMatchText"), a background highlight that stays
+    // distinct from the raw inverse of cursor/selection while composing
+    // with pending underlines. The pending
     // gutter marker keeps the theme warning color.
     this.spanStyles = {
       inverse: (s) => INVERSE_ON + s + INVERSE_OFF,
       underline: (s) => UNDERLINE_ON + s + UNDERLINE_OFF,
       target: (s) => this.colors.warning(BOLD_ON + UNDERLINE_ON + s + INTENSITY_OFF + UNDERLINE_OFF),
       dimUnderline: (s) => DIM_ON + UNDERLINE_ON + s + INTENSITY_OFF + UNDERLINE_OFF,
-      match: (s) => this.colors.accent(BOLD_ON + s + INTENSITY_OFF),
+      match: (s) => theme.bg("searchMatchBg", theme.fg("searchMatchText", s)),
     };
     // Tabs are expanded PER LINE before highlighting so display columns agree
     // between the highlighted content and the raw/selection rendering below

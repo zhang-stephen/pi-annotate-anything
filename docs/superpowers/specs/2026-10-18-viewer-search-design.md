@@ -89,7 +89,7 @@ Repeat and count, normal mode only:
 
 ## Match highlighting (`src/viewer.ts`)
 
-- `SpanStyle` gains `"match"`, rendered with a distinct accent-backed style in `spanStyles`.
+- `SpanStyle` gains `"match"`, ~~rendered with a distinct accent-backed style in `spanStyles`~~ amended after user E2E (2026-10-19): accent fg + bold proved too subtle, so matches use the theme's `searchMatchBg`/`searchMatchText` tokens, mirroring pi's transcript search.
   The existing nesting/composition rules are unchanged: `match` composes with `underline`/`dimUnderline`/`target` (different attributes), and `inverse` (selection, cursor cell) still wins over everything.
 - The highlighted pattern is the in-progress `search.query` while in search mode (incremental feedback) and `lastSearch` otherwise; visual and comment modes keep the highlight, matching vim's `hlsearch`.
 - Matches are recomputed once per render from the active pattern over all loaded lines (the 1MB file cap makes this cheap), then mapped to display-column spans per line through the existing `displaySpan` mechanism, before `sliceWindow` cuts the viewport window.

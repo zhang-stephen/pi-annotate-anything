@@ -128,8 +128,8 @@ test("gutterWidth digits track the line count magnitude", () => {
 // real component with a stubbed TUI and a recording theme: fg/bg wrap text in
 // real ANSI codes (so visibleWidth/stripTerminalSequences still work on the
 // rendered rows) and log every token lookup, which lets tests pin the theme
-// tokens the chrome must use (border, dim, accent, warning). The background
-// is transparent by design, so bg lookups never happen.
+// tokens the chrome must use (border, dim, accent, warning, searchMatch*).
+// Search matches are the one background consumer.
 
 const FG_ON = "\x1b[38;5;111m";
 const FG_OFF = "\x1b[39m";
@@ -1072,16 +1072,17 @@ test("comment box borders stay column-aligned when a cut straddles a wide char",
 // Search highlight and wiring -------------------------------------------------
 //
 // Task 5: matches of the live query (search mode) or lastSearch style as
-// theme accent fg + SGR 1 bold ("match"), composing with pending underlines
+// theme searchMatchBg over searchMatchText ("match", mirroring pi's
+// transcript search), composing with pending underlines
 // and losing to inverse selections; the bottom area switches to the / input
 // in search mode, shows the [rank/total] segment, and renders transient
 // reducer messages right-aligned for exactly one keypress.
 
-// The match composite over "foo": accent fg wraps SGR 1 bold. FG_ON+BOLD_ON
-// adjacency is unique to match spans in a rendered row (cursor/selection is
-// raw inverse, pending is raw SGR 4/2), so it also serves as a position
-// anchor for column assertions.
-const MATCH_FOO = FG_ON + BOLD_ON + "foo" + INTENSITY_OFF + FG_OFF;
+// The match composite over "foo": theme searchMatchBg over searchMatchText,
+// mirroring pi's own transcript search. BG_ON+FG_ON adjacency is unique to
+// match spans in a rendered row (cursor/selection is raw inverse, pending is
+// raw SGR 4/2), so it also serves as a position anchor for column assertions.
+const MATCH_FOO = BG_ON + FG_ON + "foo" + FG_OFF + BG_OFF;
 
 // Runs "foo" through the real search flow (/foo<Enter>): lastSearch stored,
 // the incremental jump parks the cursor on the first match's first cell.
@@ -1099,7 +1100,7 @@ test("highlight: matches of lastSearch are styled on tabbed and CJK lines", () =
   // Column proof: the styled wrap starts at the match's DISPLAY column -
   // col 4 on the tabbed line (tab -> stop 4) and col 2 on the CJK line (the
   // wide char counts 2) - behind the frame prefix (2) and the 6-wide gutter.
-  const startCol = (row: string) => visibleWidth(row.slice(0, row.indexOf(FG_ON + BOLD_ON))) - 2 - gutterWidth(2);
+  const startCol = (row: string) => visibleWidth(row.slice(0, row.indexOf(BG_ON + FG_ON))) - 2 - gutterWidth(2);
   assert.equal(startCol(rows[1]), 4, `match at display col 4 on the tabbed line, got: ${JSON.stringify(strip(rows[1]))}`);
   assert.equal(startCol(rows[2]), 2, `match at display col 2 on the CJK line, got: ${JSON.stringify(strip(rows[2]))}`);
 });
