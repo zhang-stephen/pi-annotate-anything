@@ -1,7 +1,7 @@
 ---
 title: Src Module Layout - Implementation Plan
-status: in-progress
-progress: 1/2
+status: done
+progress: 2/2
 spec: ../specs/2026-10-20-src-module-layout-design.md
 ---
 
@@ -140,14 +140,14 @@ Code motion only; private helpers become exported solely for use by sibling `vie
 - Delete: `src/viewer/viewer-state.ts`
 - Split: `test/viewer/viewer-state.test.ts` into `state.test.ts` / `movement.test.ts` / `search-mode.test.ts` / `comment-mode.test.ts`; create `test/viewer/layout.test.ts`
 
-- [ ] **Step 1: extract `layout.ts` from `viewer.ts`**
+- [x] **Step 1: extract `layout.ts` from `viewer.ts`**
 
 Move these to `src/viewer/layout.ts`, each `export`ed: `MIN_VIEWPORT_ROWS`, `CHROME_ROWS`, `MAX_VIEWPORT_ROWS`, `COMMENT_BOX_TITLE`, `PREVIEW_MAX_INNER_ROWS`, `EDITOR_BOX_MAX_WIDTH`, `EDITOR_MAX_INNER_ROWS`, `MARKER_FIELD_WIDTH`, `gutterWidth`, `clampScrollLeft`.
 `viewer.ts` imports them from `./layout.ts`.
 Run: `npx tsc --noEmit` + `npm test` (370 / 0).
 Commit: `refactor(viewer): extract layout constants and helpers`
 
-- [ ] **Step 2: extract `line-style.ts` from `viewer.ts`**
+- [x] **Step 2: extract `line-style.ts` from `viewer.ts`**
 
 Move these to `src/viewer/line-style.ts`, each `export`ed: `UNDERLINE_ON`, `UNDERLINE_OFF`, `BOLD_ON`, `DIM_ON`, `INTENSITY_OFF`, the `SpanStyle` type, the `StyleSpan` interface, `applyStyleSpans`.
 `viewer.ts` imports them from `./line-style.ts`.
@@ -155,7 +155,7 @@ Move these to `src/viewer/line-style.ts`, each `export`ed: `UNDERLINE_ON`, `UNDE
 Run: `npx tsc --noEmit` + `npm test` (370 / 0).
 Commit: `refactor(viewer): extract line styling`
 
-- [ ] **Step 3: split `viewer-state.ts`**
+- [x] **Step 3: split `viewer-state.ts`**
 
 Create from its content, pure motion:
 
@@ -175,7 +175,7 @@ Rules:
 Run: `npx tsc --noEmit` + `npm test` (370 / 0).
 Commit: `refactor(viewer): split viewer-state reducer by concern`
 
-- [ ] **Step 4: split the viewer tests**
+- [x] **Step 4: split the viewer tests**
 
 Split `test/viewer/viewer-state.test.ts` (100 tests, all flat `test(...)` calls) into four files by test-name, applying these rules in order (first match wins, case-insensitive):
 
@@ -194,7 +194,7 @@ Commit: `test(viewer): mirror the viewer module split in the test layout`
 
 ## Final review
 
-- [ ] Broad review pass (fresh reviewer subagent, per subagent-driven-development Phase 5): spec-compliance against every spec section (target layout, dependency rules, non-goals) plus code quality across the full diff; then the controller verifies `npm test` + `npx tsc --noEmit` green and the 370-test total.
+- [x] Broad review pass (fresh reviewer subagent, per subagent-driven-development Phase 5): spec-compliance against every spec section (target layout, dependency rules, non-goals) plus code quality across the full diff; then the controller verifies `npm test` + `npx tsc --noEmit` green and the 370-test total.
 
 ## Follow-ups
 

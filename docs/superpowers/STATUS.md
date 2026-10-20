@@ -8,8 +8,6 @@ Do not open docs marked `done` unless the current work touches that area.
 
 ## Active
 
-- plan: `docs/superpowers/plans/2026-10-20-src-module-layout.md`
-- spec: `docs/superpowers/specs/2026-10-20-src-module-layout-design.md`
 - spec: `docs/superpowers/specs/2026-10-17-ci-tui-e2e-design.md`
 
 ## Known issues (deferred, no spec yet)
@@ -32,6 +30,8 @@ Do not open docs marked `done` unless the current work touches that area.
 
 ## Done
 
+- plan: `docs/superpowers/plans/2026-10-20-src-module-layout.md`
+- spec: `docs/superpowers/specs/2026-10-20-src-module-layout-design.md`
 - plan: `docs/superpowers/plans/2026-10-19-viewer-search.md`
 - spec: `docs/superpowers/specs/2026-10-18-viewer-search-design.md`
 - plan: `docs/superpowers/plans/2026-10-18-annotate-path-completion.md`
