@@ -11,7 +11,7 @@
 import { getLanguageFromPath, highlightCode } from "@earendil-works/pi-coding-agent";
 import type { Theme } from "@earendil-works/pi-coding-agent";
 import type { Component, Focusable, TUI } from "@earendil-works/pi-tui";
-import { matchesKey, sliceByColumn, visibleWidth } from "@earendil-works/pi-tui";
+import { matchesKey, visibleWidth } from "@earendil-works/pi-tui";
 
 import { commentBoxPlacement, frameCommentBox, framePanel, PAD_X, spliceRow } from "../tui/card-chrome.ts";
 import type { ChromeColors } from "../tui/card-chrome.ts";
@@ -22,19 +22,12 @@ import { compilePattern, findMatches } from "../core/search.ts";
 import { normalize } from "../core/selection.ts";
 import type { Range, VisualMode } from "../core/selection.ts";
 import { CHROME_ROWS, clampScrollLeft, COMMENT_BOX_TITLE, EDITOR_BOX_MAX_WIDTH, EDITOR_MAX_INNER_ROWS, MARKER_FIELD_WIDTH, MAX_VIEWPORT_ROWS, MIN_VIEWPORT_ROWS, PREVIEW_MAX_INNER_ROWS, gutterWidth } from "./layout.ts";
+import { applyStyleSpans, BOLD_ON, DIM_ON, INTENSITY_OFF, UNDERLINE_OFF, UNDERLINE_ON } from "./line-style.ts";
+import type { SpanStyle, StyleSpan } from "./line-style.ts";
 import { cardModeOf, renderCommandLine, renderStatusLine } from "./status-line.ts";
 import type { StatusLineInput } from "./status-line.ts";
 import { reduceViewer, stackAtCursor } from "./viewer-state.ts";
 import type { PendingDraft, ViewerMode, ViewerState } from "./viewer-state.ts";
-
-const UNDERLINE_ON = "\x1b[4m";
-const UNDERLINE_OFF = "\x1b[24m";
-// Target emphasis (spec section 2): SGR 1 bold for the cycle target's range,
-// SGR 2 dim for the non-target stack members covering the cursor. SGR 22
-// (normal intensity) is the exact complement of both.
-const BOLD_ON = "\x1b[1m";
-const DIM_ON = "\x1b[2m";
-const INTENSITY_OFF = "\x1b[22m";
 
 // Pending gutter marker: the Nerd Font comment bubble followed by the number
 // of pending drafts STARTING on the line ("+" above 9), shown only on a
@@ -48,47 +41,6 @@ const INTENSITY_OFF = "\x1b[22m";
 export const PENDING_ICON = "\u{F075}"; // nf-fa-comment
 // Continuation marker: a dim vertical bar centered in the marker field.
 export const CONTINUATION_MARK = "\u{2502}"; // box drawings light vertical
-
-// Display-column spans to style within one rendered line. Styling functions
-// wrap text segments (SGR attributes are additive with independent resets),
-// so overlapping spans of different styles can nest safely. "target" and
-// "dimUnderline" are the stacked-draft emphases of spec section 2; "match"
-// is the hlsearch highlight of the active search pattern.
-type SpanStyle = "inverse" | "underline" | "target" | "dimUnderline" | "match" | "matchCurrent";
-interface StyleSpan {
-  start: number; // display column, inclusive
-  end: number; // display column, exclusive
-  style: SpanStyle;
-}
-
-// Wraps the given display-column spans of line (ANSI-aware, zero-width
-// codes ignored) in their styles. Boundaries are walked cell by cell so
-// overlapping spans compose and same-style overlaps collapse into one wrap.
-// Emphasis precedence: only the strongest emphasis paints per segment
-// (target > dimUnderline > underline; all three include underline, so the
-// weaker ones are visually redundant) - a dim span nested inside the target
-// would dim the warning fg into invisibility on dark terminals. Inverse
-// (selection/cursor) and match (hlsearch) always compose on top.
-function applyStyleSpans(line: string, spans: StyleSpan[], styles: Record<SpanStyle, (s: string) => string>): string {
-  const total = visibleWidth(line);
-  const clamped = spans
-    .map((s) => ({ ...s, start: Math.max(0, Math.min(s.start, total)), end: Math.min(Math.max(0, s.end), total) }))
-    .filter((s) => s.end > s.start);
-  if (clamped.length === 0) return line;
-
-  const bounds = [...new Set([0, total, ...clamped.flatMap((s) => [s.start, s.end])])].sort((a, b) => a - b);
-  let out = "";
-  for (let k = 0; k + 1 < bounds.length; k++) {
-    const a = bounds[k];
-    const b = bounds[k + 1];
-    const active = [...new Set(clamped.filter((s) => s.start <= a && a < s.end).map((s) => s.style))];
-    const strongest = active.includes("target") ? "target" : active.includes("dimUnderline") ? "dimUnderline" : active.includes("underline") ? "underline" : null;
-    const final = active.filter((s) => s === "inverse" || s === "match" || s === "matchCurrent" || s === strongest);
-    const seg = sliceByColumn(line, a, b - a);
-    out += final.reduce((text, s) => styles[s](text), seg);
-  }
-  return out;
-}
 
 // (cardModeOf and the FOOTER_HINTS table it keys into live in status-line.ts.)
 
