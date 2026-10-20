@@ -1,5 +1,24 @@
 # Changelog
 
+## [1.4.0](https://github.com/zhang-stephen/pi-annotate-anything/compare/pi-annotate-anything-v1.3.0...pi-annotate-anything-v1.4.0) (2026-10-20)
+
+
+### Features
+
+* **core:** async workspace file index with SWR cache ([3e0e58d](https://github.com/zhang-stephen/pi-annotate-anything/commit/3e0e58d7697bb77c662e70b533fb3e562c8c72b1))
+* **tui:** fuzzy path completion with workspace index ([25dc33a](https://github.com/zhang-stephen/pi-annotate-anything/commit/25dc33a45016c7f12581f5869ae4c8668605b9ee))
+* **tui:** slash queries fuzzy-match the index subtree under dirPart ([2decf91](https://github.com/zhang-stephen/pi-annotate-anything/commit/2decf91e18e4acd0fa17c41c1bf2d4a291c58232))
+
+
+### Bug Fixes
+
+* **ci:** skip workflow runs on release-please PR branches ([973272f](https://github.com/zhang-stephen/pi-annotate-anything/commit/973272f675fb2fbda242bf66352ed6edcd0e9f5f))
+* **core:** fd ignore handling, stderr drain, and defensive entries copy ([2627ba2](https://github.com/zhang-stephen/pi-annotate-anything/commit/2627ba2012ddf86efcb11011dbccbcae47cbb927))
+* **core:** harden findMatches/jumpTarget against degenerate inputs ([86a063e](https://github.com/zhang-stephen/pi-annotate-anything/commit/86a063ed10efd072cd70b22a57d0cc543d067810))
+* **tui:** apply the dotfile rule to the subtree remainder, not the full path ([45fff30](https://github.com/zhang-stephen/pi-annotate-anything/commit/45fff306ac7399a426eb64a5fdb293f830112b9a))
+* **viewer:** correct stale count-consumer comment after arrow parity ([ac7906b](https://github.com/zhang-stephen/pi-annotate-anything/commit/ac7906b9ae345ce578ea2b41df5df03ef2eab03c))
+* **viewer:** vim parity for counts on arrows and digits during pending g ([a459b72](https://github.com/zhang-stephen/pi-annotate-anything/commit/a459b720a5fbd9b11df242f3b6fe1681431dd7db))
+
 ## [1.3.0](https://github.com/zhang-stephen/pi-annotate-anything/compare/pi-annotate-anything-v1.2.0...pi-annotate-anything-v1.3.0) (2026-10-18)
 
 
