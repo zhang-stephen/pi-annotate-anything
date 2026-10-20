@@ -1,6 +1,7 @@
 ---
 title: Fuzzy Path Completion + Viewer Search Vim Parity -- Design
 status: approved
+plan: ../plans/2026-10-20-fuzzy-completion-search-parity.md
 ---
 
 # Fuzzy Path Completion + Viewer Search Vim Parity -- Design

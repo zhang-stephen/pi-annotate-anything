@@ -8,6 +8,7 @@ Do not open docs marked `done` unless the current work touches that area.
 
 ## Active
 
+- plan: `docs/superpowers/plans/2026-10-20-fuzzy-completion-search-parity.md`
 - spec: `docs/superpowers/specs/2026-10-20-fuzzy-completion-search-parity-design.md`
 - spec: `docs/superpowers/specs/2026-10-17-ci-tui-e2e-design.md`
   - draft, on hold: low priority, do not schedule (user call 2026-10-20)
