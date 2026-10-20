@@ -1,6 +1,7 @@
 ---
 title: Src Module Layout - Design
-status: draft
+status: approved
+plan: ../plans/2026-10-20-src-module-layout.md
 ---
 
 # Src Module Layout - Design
