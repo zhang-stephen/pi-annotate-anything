@@ -31,8 +31,6 @@ function view(state: ViewerState, key: string, pending: PendingDraft[] = []) {
   return reduceViewer(state, key, LINES, VP, pending);
 }
 
-// Movement: h j k l --------------------------------------------------------
-
 // Search mode, count prefix, and transient messages ------------------------
 // Matches of "2" in LINES: line 2 col 5, line 12 col 6, lines 20..29 col 5.
 

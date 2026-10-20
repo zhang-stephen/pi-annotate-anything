@@ -31,8 +31,6 @@ function view(state: ViewerState, key: string, pending: PendingDraft[] = []) {
   return reduceViewer(state, key, LINES, VP, pending);
 }
 
-// Movement: h j k l --------------------------------------------------------
-
 test("reduceViewer: c with an active selection enters comment mode", () => {
   const start = viewer({ mode: "visual-line", cursor: { line: 4, col: 3 }, anchor: { line: 2, col: 0 }, visualMode: "line" });
   const res = view(start, "c");

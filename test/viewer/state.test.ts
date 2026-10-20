@@ -81,8 +81,6 @@ function vpv(contentWidth: number, maxLineWidth: number, height = 5) {
 
 const LONG_LINE = "x".repeat(100);
 
-// Movement: h j k l --------------------------------------------------------
-
 // Visual modes -------------------------------------------------------------
 
 test("reduceViewer: v enters char-wise visual from normal", () => {
