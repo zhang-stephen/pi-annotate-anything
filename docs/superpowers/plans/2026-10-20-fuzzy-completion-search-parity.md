@@ -1,7 +1,7 @@
 ---
 title: Fuzzy Path Completion + Viewer Search Vim Parity - Implementation Plan
 status: in-progress
-progress: 2/4
+progress: 3/4
 spec: ../specs/2026-10-20-fuzzy-completion-search-parity-design.md
 ---
 
@@ -84,7 +84,7 @@ Tick Task 2, `progress: 2/4`; land the spec amendment: strike through the count-
 
 **Files:** create `src/core/file-index.ts` and `test/core/file-index.test.ts`; modify `test/architecture.test.ts` (module map 19 -> 20) and `src/AGENTS.md` (core layer gains `file-index.ts`).
 
-- [ ] **Step 1: API sketch + red tests**
+- [x] **Step 1: API sketch + red tests**
 
 Export an async-aware query API along these lines (worker may refine names, keeping the seam injectable):
 
@@ -96,13 +96,13 @@ interface FileIndex { query(root: string, now: number): { state: IndexState; ent
 Behavior under test (stubbed `spawn` and injected `now`): chain order git -> fd -> walk; winner memoized (second build skips probing); over-20k enumeration -> `oversized`; `building` returns current (possibly empty) entries while exactly one build is in flight; stale entries (> 5000 ms) are served while one background refresh runs; all-enumerators-fail -> `failed`.
 Write failing tests first.
 
-- [ ] **Step 2: green -- implement**
+- [x] **Step 2: green -- implement**
 
 Single-slot cache `{ root, state, entries, enumerator, at }`; async enumeration via `child_process.spawn` only; errors land in the entry state, never as unhandled rejections; the walk skips `.git`/`node_modules`/`dist`/`build`, depth cap 8; synthetic directory entries derived from file paths.
 Deterministic ordering: entries are stored in enumeration order (stable tiebreak source for fuzzy ranking).
 Full suite + tsc green; commit `feat(core): async workspace file index with SWR cache`.
 
-- [ ] **Step 3: controller bookkeeping** (controller, after reviewer approval)
+- [x] **Step 3: controller bookkeeping** (controller, after reviewer approval)
 
 Tick Task 3, `progress: 3/4`, commit `docs(superpowers)`.
 
