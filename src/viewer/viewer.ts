@@ -21,6 +21,7 @@ import { displayPath } from "../core/message.ts";
 import { compilePattern, findMatches } from "../core/search.ts";
 import { normalize } from "../core/selection.ts";
 import type { Range, VisualMode } from "../core/selection.ts";
+import { CHROME_ROWS, clampScrollLeft, COMMENT_BOX_TITLE, EDITOR_BOX_MAX_WIDTH, EDITOR_MAX_INNER_ROWS, MARKER_FIELD_WIDTH, MAX_VIEWPORT_ROWS, MIN_VIEWPORT_ROWS, PREVIEW_MAX_INNER_ROWS, gutterWidth } from "./layout.ts";
 import { cardModeOf, renderCommandLine, renderStatusLine } from "./status-line.ts";
 import type { StatusLineInput } from "./status-line.ts";
 import { reduceViewer, stackAtCursor } from "./viewer-state.ts";
@@ -35,27 +36,6 @@ const BOLD_ON = "\x1b[1m";
 const DIM_ON = "\x1b[2m";
 const INTENSITY_OFF = "\x1b[22m";
 
-// File-area height budget: the panel chrome fixes 4 rows (top + bottom
-// border, statusline, cmdline), and the card is capped on tall terminals.
-// The floating comment box occludes content rows and does not consume this
-// budget.
-const MIN_VIEWPORT_ROWS = 1;
-const CHROME_ROWS = 4;
-const MAX_VIEWPORT_ROWS = 30;
-
-// The comment box title (read-only previews in Task 4 reuse the same title).
-const COMMENT_BOX_TITLE = "Comment";
-
-// Hover preview cap: 6 box rows including the 2 borders, i.e. at most 4
-// comment lines (spec goal 7). The editor box instead caps at 8 rows.
-const PREVIEW_MAX_INNER_ROWS = 4;
-
-// The comment EDITOR box: fixed width (it never resizes while typing; long
-// lines soft-wrap instead) and an 8-row height cap (6 content rows), with a
-// scroll window that keeps the cursor's row visible.
-const EDITOR_BOX_MAX_WIDTH = 64;
-const EDITOR_MAX_INNER_ROWS = 6;
-
 // Pending gutter marker: the Nerd Font comment bubble followed by the number
 // of pending drafts STARTING on the line ("+" above 9), shown only on a
 // draft's start line so the gutter counts sum to the title bar's (N) (spec
@@ -68,29 +48,6 @@ const EDITOR_MAX_INNER_ROWS = 6;
 export const PENDING_ICON = "\u{F075}"; // nf-fa-comment
 // Continuation marker: a dim vertical bar centered in the marker field.
 export const CONTINUATION_MARK = "\u{2502}"; // box drawings light vertical
-const MARKER_FIELD_WIDTH = 3; // icon + spacer + count digit
-
-// Left overflow indicator (vim listchars 'precedes' with wrap off): a dim NF
-// chevron replacing the first content cell when text precedes the window
-// (scrollLeft > 0). The right counterpart keeps today's dim "...".
-
-// Render-time safety net: clamps a (possibly stale) scrollLeft into
-// [0, max(0, maxLineWidth - contentWidth + 1)]; the +1 covers the virtual
-// cursor cell when the end-exclusive cursor sits at end of line. The reducer
-// re-clamps on every cursor-moving key; this covers width changes with no
-// keypress in between (terminal resize), which would otherwise slice past
-// the end of every line.
-function clampScrollLeft(scrollLeft: number, maxLineWidth: number, contentWidth: number): number {
-  return Math.min(Math.max(scrollLeft, 0), Math.max(0, maxLineWidth - contentWidth + 1));
-}
-
-// Gutter width for a file with lineCount lines: right-aligned line number
-// (width of the largest 1-based number), a space, the pending-marker field
-// (always present, blank when the line has no drafts, so line numbers never
-// shift horizontally), and a space. Must stay in sync with AnnotateCard.gutter.
-export function gutterWidth(lineCount: number): number {
-  return String(Math.max(1, lineCount)).length + MARKER_FIELD_WIDTH + 2;
-}
 
 // Display-column spans to style within one rendered line. Styling functions
 // wrap text segments (SGR attributes are additive with independent resets),
