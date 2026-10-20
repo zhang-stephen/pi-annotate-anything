@@ -21,6 +21,7 @@ The workflow is spec -> plan -> code, and every step is gated:
 
 - Use git for all version management.
 - Use **semantic commit messages**, e.g. `feat(<component>): ...`, `fix(<component>): ...`, `chore: ...`, `docs: ...`.
+- Commit messages must be self-contained and traceable: never reference ephemeral review-session codes (severity labels like P1/P2, ad-hoc question codes like R1/R2/R3) -- describe the change and its reason in plain words so the message makes sense without the session that produced it.
 - This project is a **Node.js package**; keep `.gitignore` appropriate for Node.js (node_modules, build output, logs, OS/editor files).
 - Multi-task feature work happens in a worktree under `.pi/worktrees/<slug>/` (gitignored, removed after merge).
 - **Linear history only**: branches integrate into master via rebase + fast-forward -- `git rebase master` on the branch, then `git merge --ff-only` on master. Merge commits are never accepted anywhere; if master moved ahead during the work, rebase first and re-verify (tests + typecheck) before the ff merge.
