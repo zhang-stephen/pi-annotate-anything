@@ -1,7 +1,7 @@
 ---
 title: Fuzzy Path Completion + Viewer Search Vim Parity - Implementation Plan
 status: in-progress
-progress: 0/4
+progress: 1/4
 spec: ../specs/2026-10-20-fuzzy-completion-search-parity-design.md
 ---
 
@@ -42,23 +42,23 @@ Defense in depth for exported helpers; no caller changes.
 
 **Files:** modify `src/core/search.ts`; modify `test/core/search.test.ts`.
 
-- [ ] **Step 0: record the baseline**
+- [x] **Step 0: record the baseline**
 
 Run: `node --test "test/**/*.test.ts" 2>&1 | tail -8`
 Expected: `pass 370`, `fail 0`. Record actuals.
 
-- [ ] **Step 1: red -- failing tests**
+- [x] **Step 1: red -- failing tests**
 
 `findMatches` with a hand-built non-global regex (`new RegExp("x", "i")`) terminates and returns the same matches as the global form; `jumpTarget` with `count = 0` and `count = -3` behaves exactly as `count = 1`.
 Run the file's tests; the new cases must fail (hang guard: run with a timeout; a hang proves the bug).
 
-- [ ] **Step 2: green -- implement**
+- [x] **Step 2: green -- implement**
 
 In `findMatches`, if `re.global` is false, rebuild as `new RegExp(re.source, re.flags + "g")` before iterating.
 In `jumpTarget`, treat `count < 1` as `1`.
 Full suite + `npx tsc --noEmit` green; commit `fix(core): harden findMatches/jumpTarget against degenerate inputs`.
 
-- [ ] **Step 3: controller bookkeeping** (controller, after reviewer approval)
+- [x] **Step 3: controller bookkeeping** (controller, after reviewer approval)
 
 Tick Task 1, `progress: 1/4`, commit `docs(superpowers)`.
 
