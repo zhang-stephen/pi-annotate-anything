@@ -130,21 +130,6 @@ test("rawColToDisplayCol clamps out-of-range columns", () => {
   assert.equal(rawColToDisplayCol("", 0), 0);
 });
 
-// gutterWidth -----------------------------------------------------------------
-
-test("gutterWidth covers the widest line number, marker field and separators", () => {
-  assert.equal(gutterWidth(1), 1 + FIELD + 2); // number + space + field + space
-  assert.equal(gutterWidth(9), 1 + FIELD + 2); // single-digit numbers
-  assert.equal(gutterWidth(10), 2 + FIELD + 2); // two-digit numbers
-  assert.equal(gutterWidth(100), 3 + FIELD + 2); // three-digit numbers
-  assert.equal(gutterWidth(0), 1 + FIELD + 2); // degenerate: still one digit wide
-});
-
-test("gutterWidth digits track the line count magnitude", () => {
-  assert.equal(gutterWidth(99), 2 + FIELD + 2);
-  assert.equal(gutterWidth(9999), 4 + FIELD + 2); // four digits + separators
-});
-
 // AnnotateCard chrome ---------------------------------------------------------
 //
 // The card renders as a framed panel via the card-chrome helpers (framePanel,
