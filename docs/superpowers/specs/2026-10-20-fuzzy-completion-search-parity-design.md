@@ -56,21 +56,25 @@ Dotfile rule: entries whose name starts with `.` stay hidden unless the query st
 #### Workspace index
 
 - Root: the session cwd passed into `completePath`.
-- Storage: a module-level `Map<string, IndexEntry>` where `IndexEntry = { state: "building" | "ready" | "oversized" | "failed"; entries: string[]; enumerator: "git" | "fd" | "walk" | null; at: number }`; the map lives and dies with the extension process (per session).
+- Storage: a single in-memory slot `{ root, state: "building" | "ready" | "oversized" | "failed", entries: string[], enumerator: "git" | "fd" | "walk" | null, at: number }` held behind an injectable factory; it serves only the current workspace root and is replaced wholesale if the root changes. This is a plain string array (at most 20k entries), not a database; its only purpose is to keep enumeration off the UI path and to avoid spawning `git` on every completion keystroke.
 - Warm-up: the first argument-completion call for a root with no entry kicks off asynchronous enumeration (`child_process.spawn`, never `spawnSync`) and immediately serves directory-browsing results; once enumeration finishes, the entry flips to `ready`/`oversized`/`failed` and later calls use the index.
-- TTL and refresh: entries older than 5,000 ms are stale; the next completion call keeps serving the stale entries and kicks off one background refresh (stale-while-revalidate); only one build per root is ever in flight.
+- TTL and refresh: entries older than 5,000 ms are stale; the next completion call keeps serving the stale entries and kicks off one background refresh (stale-while-revalidate); only one build is ever in flight.
 - Enumeration chain, first success wins, and the winning enumerator is memoized in the entry so refreshes skip re-probing:
   1. `git ls-files -z --cached --others --exclude-standard` in the root (tracked + untracked, gitignore-respected); directory entries are derived synthetically as all ancestor paths of the listed files.
-  2. `fd --type f --type d` in the root (fd's defaults skip `.git` and respect `.gitignore`); no upfront dependency check is performed -- a missing `fd` is detected by spawn failure at probe time and simply advances the chain, and the memoized enumerator means the probe cost is paid at most once per root per session.
-  3. Bounded recursive walk skipping `.git`, `node_modules`, `dist`, `build`, with depth cap 8.
+  2. `fd --type f --type d` in the root, with ignore handling keyed off the root: if the root contains a `.gitignore` file, pass `--no-require-git` so fd follows it even outside a repository (an fd too old for the flag exits non-zero and the chain falls through to the walk); otherwise pass `-E` excludes for the common non-indexable directory list below. This matters because fd only respects `.gitignore` inside git repositories, and it runs precisely when git failed, so unfiltered fd would enumerate `node_modules` wholesale and stick the root in the `oversized` state. `fd` is deliberately NOT a hard dependency and gets no startup-time dependency check -- a missing `fd` is detected by spawn failure at probe time and simply advances the chain, and the memoized enumerator means the probe cost is paid at most once per session.
+  3. Bounded recursive walk skipping the common non-indexable directory list, with depth cap 8.
+- Common non-indexable directory list (shared by the fd `-E` excludes and the walk skip list): `.git`, `node_modules`, `dist`, `build`, `coverage`, `target`, `.next`, `.nuxt`, `.svelte-kit`, `.turbo`, `.cache`, `.venv`, `venv`, `__pycache__`. `vendor`/`out`/`bin`/`obj` are deliberately NOT excluded (real source lives there in some projects).
+- Symlinks are never followed (no fd `--follow`; the walk does not traverse them): this prevents escaping the workspace root, link cycles, and duplicate candidates. `git ls-files` lists symlinks as plain entries, which read through naturally at annotation time.
 - Cap: 20,000 entries. If enumeration exceeds the cap, the entry becomes `oversized` and no-slash queries fall back to empty-query behavior (directory browsing of cwd).
 - A root where all three enumerators fail becomes `failed` and behaves like `oversized`.
+- A failed refresh clears the entries and resets the memoized enumerator (ratified 2026-10-20 after reviewer verdict: transient enumeration failures are rare; keep-stale-on-failure semantics are deliberately not defended).
 
 #### Host version floor and explicit failure
 
 `fuzzyMatch` / `fuzzyFilter` are exported from `@earendil-works/pi-tui`'s `dist/fuzzy.js`; tarball inspection (2026-10-20) confirms they exist in every published pi-tui from 0.99.0 through 1.3.0.
 Recommended host: **pi >= 1.0** (pi-tui >= 1.0.0), documented in README.
 Because peer ranges must stay `*`, the extension feature-detects in `session_start`: if `fuzzyFilter` is not a function (possible under jiti's CJS interop where a missing named export is `undefined`), the extension surfaces an explicit error notification naming the minimum host version and does not register the `/annotate` argument-completion feature at all; silent fallback to prefix matching is forbidden.
+Dependency policy: the fuzzy algorithm is the only hard dependency (without it there is no fuzzy feature at all); `git` and `fd` are best-effort enumerators whose absence is absorbed by the chain and never gates registration.
 
 ### Testing (A)
 
