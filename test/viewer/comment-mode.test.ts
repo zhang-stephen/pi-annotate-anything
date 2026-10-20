@@ -154,35 +154,6 @@ const DRAFT_B: PendingDraft = {
   range: { startLine: 3, startCol: 1, endLine: 3, endCol: 4 },
   comment: "second",
 };
-// Third draft stacked on (3,2), for three-deep cycling tests.
-const DRAFT_C: PendingDraft = {
-  token: "[a.ts:4-4]#2",
-  range: { startLine: 3, startCol: 2, endLine: 3, endCol: 2 },
-  comment: "third",
-};
-// A draft created after A/B/C, landing on (3,2) as the new newest.
-const DRAFT_NEW: PendingDraft = {
-  token: "[a.ts:4-4]#3",
-  range: { startLine: 3, startCol: 2, endLine: 3, endCol: 5 },
-  comment: "newest",
-};
-// Whole-line (V-mode) draft over line 5: startCol 0 / endCol = line length
-// ("line 5".length = 6), so it hits anywhere on the line.
-const DRAFT_V: PendingDraft = {
-  token: "[a.ts:6-6]",
-  range: { startLine: 5, startCol: 0, endLine: 5, endCol: 6 },
-  comment: "vline",
-};
-
-function editingState(draft: PendingDraft, text: string): ViewerState {
-  return viewer({
-    mode: "comment",
-    cursor: { line: 3, col: 2 },
-    visualMode: "char",
-    comment: { text },
-    editingDraftId: draft.token,
-  });
-}
 
 test("reduceViewer: c on a pending line enters comment mode editing that draft, pre-filled", () => {
   const res = view(viewer({ cursor: { line: 3, col: 2 } }), "c", [DRAFT_A]);
