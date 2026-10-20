@@ -53,6 +53,12 @@ test("findMatches: raw columns on tabbed and CJK lines", () => {
   assert.deepEqual(findMatches(["中中x"], /x/g), [{ line: 0, startCol: 2, endCol: 3 }]);
 });
 
+test("findMatches: non-global regex is upgraded internally and terminates", () => {
+  const lines = ["xax", "bx"];
+  assert.deepEqual(findMatches(lines, new RegExp("x", "i")), findMatches(lines, /x/gi));
+  assert.deepEqual(findMatches(["bbb"], new RegExp("a*", "i")), findMatches(["bbb"], /a*/gi));
+});
+
 test("jumpTarget: forward with counts and wrap flag", () => {
   assert.deepEqual(jumpTarget(M, { line: 1, col: 0 }, 1, 1), { pos: { line: 3, col: 2 }, wrapped: false });
   assert.deepEqual(jumpTarget(M, { line: 1, col: 0 }, 1, 2), { pos: { line: 5, col: 1 }, wrapped: false });
@@ -68,6 +74,15 @@ test("jumpTarget: strictly after the from position", () => {
 test("jumpTarget: backward with wrap flag", () => {
   assert.deepEqual(jumpTarget(M, { line: 3, col: 2 }, -1, 1), { pos: { line: 1, col: 0 }, wrapped: false });
   assert.deepEqual(jumpTarget(M, { line: 1, col: 0 }, -1, 1), { pos: { line: 5, col: 1 }, wrapped: true });
+});
+
+test("jumpTarget: count < 1 is treated as 1", () => {
+  const from = { line: 1, col: 0 };
+  const one = jumpTarget(M, from, 1, 1);
+  assert.deepEqual(jumpTarget(M, from, 1, 0), one);
+  assert.deepEqual(jumpTarget(M, from, 1, -3), one);
+  const backOne = jumpTarget(M, { line: 3, col: 2 }, -1, 1);
+  assert.deepEqual(jumpTarget(M, { line: 3, col: 2 }, -1, 0), backOne);
 });
 
 test("jumpTarget: empty matches return null; zero-width matches are jumpable", () => {

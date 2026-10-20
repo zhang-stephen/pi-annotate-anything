@@ -21,20 +21,21 @@ export function compilePattern(pattern: string): CompiledPattern {
   }
 }
 
-// Scans each line independently for all matches of `re` (pass a global
-// regex). `re.lastIndex` is reset per line; a zero-width match advances
-// lastIndex by one code unit so the scan terminates. Returned columns are
-// raw code-unit offsets.
+// Scans each line independently for all matches of `re`. A non-global regex
+// is upgraded to global internally (the caller's regex is left untouched);
+// `lastIndex` is reset per line; a zero-width match advances lastIndex by one
+// code unit so the scan terminates. Returned columns are raw code-unit offsets.
 export function findMatches(lines: string[], re: RegExp): LineMatch[] {
   const matches: LineMatch[] = [];
+  const global = re.global ? re : new RegExp(re.source, re.flags + "g");
   for (let line = 0; line < lines.length; line++) {
-    re.lastIndex = 0;
+    global.lastIndex = 0;
     const text = lines[line];
-    while (re.lastIndex <= text.length) {
-      const m = re.exec(text);
+    while (global.lastIndex <= text.length) {
+      const m = global.exec(text);
       if (m === null) break;
       matches.push({ line, startCol: m.index, endCol: m.index + m[0].length });
-      if (m[0].length === 0) re.lastIndex++;
+      if (m[0].length === 0) global.lastIndex++;
     }
   }
   return matches;
@@ -45,6 +46,7 @@ export function findMatches(lines: string[], re: RegExp): LineMatch[] {
 // only when it lies strictly after (dir 1) or strictly before (dir -1)
 // `from`; once the strict candidates run out the scan wraps around the
 // whole match list and reports wrapped. Zero-width matches are jumpable.
+// `count < 1` is treated as 1.
 export function jumpTarget(
   matches: LineMatch[],
   from: Position,
@@ -52,6 +54,7 @@ export function jumpTarget(
   count: number,
 ): { pos: Position; wrapped: boolean } | null {
   if (matches.length === 0) return null;
+  const n = count < 1 ? 1 : count;
   const ordered = dir === 1 ? matches : [...matches].reverse();
   const isBeyond = (m: LineMatch): boolean =>
     dir === 1
@@ -60,9 +63,9 @@ export function jumpTarget(
   let firstBeyond = 0;
   while (firstBeyond < ordered.length && !isBeyond(ordered[firstBeyond])) firstBeyond++;
   const candidates = ordered.length - firstBeyond;
-  const index = count <= candidates
-    ? firstBeyond + count - 1
-    : (count - candidates - 1) % ordered.length;
+  const index = n <= candidates
+    ? firstBeyond + n - 1
+    : (n - candidates - 1) % ordered.length;
   const match = ordered[index];
-  return { pos: { line: match.line, col: match.startCol }, wrapped: count > candidates };
+  return { pos: { line: match.line, col: match.startCol }, wrapped: n > candidates };
 }
