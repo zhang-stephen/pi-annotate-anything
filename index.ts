@@ -22,12 +22,20 @@ import type { ExtensionAPI, ExtensionContext } from "@earendil-works/pi-coding-a
 import { AnnotateEditor, withTokenRecolor } from "./src/tui/editor.ts";
 import { extractRange, loadFile, resolvePath } from "./src/core/file-range.ts";
 import { tokenLabel } from "./src/core/message.ts";
-import { completePath } from "./src/tui/path-completion.ts";
+import { completePath, fuzzyAvailable } from "./src/tui/path-completion.ts";
 import { AnnotationStore } from "./src/core/store.ts";
 import { expandTokens } from "./src/core/transform.ts";
 import { AnnotateCard } from "./src/viewer/viewer.ts";
 
 export default function (pi: ExtensionAPI) {
+  annotateExtension(pi, fuzzyAvailable);
+}
+
+// Test seam: the fuzzy availability flag is injected so both registration
+// branches (completion registered vs. explicit-failure gate) are drivable
+// with stubbed pi/ctx; production always passes the runtime probe result
+// from path-completion.ts.
+export function annotateExtension(pi: ExtensionAPI, fuzzy: boolean): void {
   // The composer override is installed on demand by /annotate and removed
   // once no pill tokens remain pending (card closed with nothing pending,
   // or after submit), so the user's configured editor is untouched in
@@ -74,6 +82,16 @@ export default function (pi: ExtensionAPI) {
   pi.on("session_start", (_event, ctx) => {
     store = new AnnotationStore();
     sessionCwd = ctx.cwd;
+    // Explicit-failure gate (spec 2026-10-20 "Host version floor and
+    // explicit failure"): without the fuzzy helpers the user gets the
+    // reason and the version floor, never a silent prefix-matching
+    // fallback -- the completion registration below is omitted entirely.
+    if (!fuzzy) {
+      ctx.ui.notify(
+        "Fuzzy path completion requires pi >= 1.0; /annotate argument completion is disabled.",
+        "error",
+      );
+    }
   });
 
   pi.on("session_shutdown", (_event, ctx) => {
@@ -82,10 +100,15 @@ export default function (pi: ExtensionAPI) {
 
   pi.registerCommand("annotate", {
     description: "Annotate a range of a file: /annotate <path>",
-    // Completion callbacks receive only the argument prefix (no ctx); the
-    // session cwd tracked above keeps relative paths consistent with the
-    // handler's resolvePath(arg, ctx.cwd).
-    getArgumentCompletions: (argumentPrefix) => completePath(argumentPrefix, sessionCwd),
+    // The fuzzy completion feature is registered only when the host pi-tui
+    // exports the fuzzy helpers (link-safe probe in path-completion.ts);
+    // otherwise the property is omitted entirely. Completion callbacks
+    // receive only the argument prefix (no ctx); the session cwd tracked
+    // above keeps relative paths consistent with the handler's
+    // resolvePath(arg, ctx.cwd).
+    ...(fuzzy
+      ? { getArgumentCompletions: (argumentPrefix: string) => completePath(argumentPrefix, sessionCwd) }
+      : {}),
     handler: async (args, ctx) => {
       const arg = args.trim();
       if (!arg) {

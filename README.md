@@ -31,7 +31,7 @@ pi install npm:pi-annotate-anything
 
 - Overlay card with line numbers, syntax highlighting, a live pending-count title bar, and a vim-style mode badge footer.
 - Vim-style `/` search in the viewer: regex + smartcase (case-insensitive unless the pattern has an uppercase letter), jumps to the nearest match as you type, all matches stay highlighted after submit, `n`/`N` hop with wrap messages, `{count}` prefixes work on motions and hops.
-- Path Tab-completion in the `/annotate` argument: session-relative paths, `~` expansion, directories first.
+- Fuzzy path completion in the `/annotate` argument: session-relative paths, `~` expansion, directories first, and workspace-wide fuzzy matching backed by an async file index. Recommended host: pi >= 1.0 (older hosts report an explicit error and get no completion).
 - Composer pills like `[src/a.ts:10-20]` that expand into full quote-block-plus-comment payloads when the message is sent.
 - Annotate-time snapshots: the payload carries the text you saw when annotating, never a silent re-read of the file.
 - Floating comment editor next to the selection with soft wrap and multiline support (`ctrl+j` / `shift+enter`).
