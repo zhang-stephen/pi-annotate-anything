@@ -148,10 +148,15 @@ function fuzzySubtree(entries: string[], dirPart: string, prefix: string, base: 
   const scored: { entry: string; score: number }[] = [];
   for (const entry of entries) {
     if (!entry.startsWith(prefix)) continue;
-    if (!showDotfiles && isDotPath(entry)) continue;
+    const remainder = entry.slice(prefix.length);
+    // The dotfile rule applies to the remainder (the entry's name within
+    // this subtree), not the full path: the user explicitly typed a dot
+    // directory like `.github/` to get here, so its ancestor must not hide
+    // its children.
+    if (!showDotfiles && isDotPath(remainder)) continue;
     // The container directory itself (remainder "") can never match a
     // non-empty base, so it is never offered as its own candidate.
-    const match = tui.fuzzyMatch(base, entry.slice(prefix.length));
+    const match = tui.fuzzyMatch(base, remainder);
     if (match.matches) scored.push({ entry, score: match.score });
   }
   scored.sort((a, b) => a.score - b.score);

@@ -135,6 +135,13 @@ test("ready index: subtree dotfile entries stay hidden unless the query starts w
   assert.deepStrictEqual(completePath("src/.hid", tmp, idx.index)!.map(i => i.value), ["src/.hidden.ts"]);
 });
 
+test("ready index: drilling into a dot directory matches its children", () => {
+  // The dotfile rule applies to the remainder, not the full path: the user
+  // typed the dot directory explicitly, so its children stay matchable.
+  const idx = stubIndex("ready", [".config/app.ts", ".config/db.ts"]);
+  assert.deepStrictEqual(completePath(".config/ap", tmp, idx.index)!.map(i => i.value), [".config/app.ts"]);
+});
+
 test("ready index: empty-remainder slash query still lists immediate entries only", () => {
   const idx = stubIndex("ready", ["rank/bcd/", "rank/bcd/deep.ts", "rank/extra.md"]);
   assert.deepStrictEqual(completePath("rank/", tmp, idx.index)!.map(i => i.label), [
