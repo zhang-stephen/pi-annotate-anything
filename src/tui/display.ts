@@ -1,7 +1,7 @@
-// Display-column helpers shared by the viewer and the viewer-state
-// reducer: tab expansion and the raw-to-display column mapping. A leaf
-// module (depends only on pi-tui) so viewer-state can import these without
-// depending back on viewer.ts.
+// Display-column helpers shared by the viewer and the viewer state
+// machine: tab expansion and the raw-to-display column mapping. A leaf
+// module (depends only on pi-tui) so the viewer state modules can import
+// these without depending back on viewer.ts.
 
 import { sliceByColumn, visibleWidth } from "@earendil-works/pi-tui";
 

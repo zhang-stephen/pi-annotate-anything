@@ -2,8 +2,8 @@
 // The box is plain ANSI-styled strings and the caller supplies the styling
 // function (theme); the only pi import is pi-tui's pure visibleWidth, so
 // this module stays testable without a TUI. The viewer state machine
-// (viewer-state.ts) imports reduceComment and the CommentState/CommentKey
-// types from here.
+// (viewer/state.ts and comment-mode.ts) imports reduceComment and the
+// CommentState/CommentKey types from here.
 
 import { visibleWidth } from "@earendil-works/pi-tui";
 

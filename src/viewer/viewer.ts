@@ -1,6 +1,6 @@
 // AnnotateCard: the pi-tui Component rendering the file card for the
 // /annotate flow. Thin shell over the pure viewer state machine
-// (viewer-state.ts): handleInput feeds reduceViewer and dispatches its
+// (state.ts): handleInput feeds reduceViewer and dispatches its
 // effects (annotate/update/delete/close). Rendering frames the file as a
 // bordered panel via the card-chrome helpers (framePanel, frameCommentBox,
 // commentBoxPlacement) with the two-row bottom area from status-line.ts
@@ -24,10 +24,11 @@ import type { Range, VisualMode } from "../core/selection.ts";
 import { CHROME_ROWS, clampScrollLeft, COMMENT_BOX_TITLE, EDITOR_BOX_MAX_WIDTH, EDITOR_MAX_INNER_ROWS, MARKER_FIELD_WIDTH, MAX_VIEWPORT_ROWS, MIN_VIEWPORT_ROWS, PREVIEW_MAX_INNER_ROWS, gutterWidth } from "./layout.ts";
 import { applyStyleSpans, BOLD_ON, DIM_ON, INTENSITY_OFF, UNDERLINE_OFF, UNDERLINE_ON } from "./line-style.ts";
 import type { SpanStyle, StyleSpan } from "./line-style.ts";
+import { stackAtCursor } from "./movement.ts";
+import { reduceViewer } from "./state.ts";
+import type { PendingDraft, ViewerMode, ViewerState } from "./state.ts";
 import { cardModeOf, renderCommandLine, renderStatusLine } from "./status-line.ts";
 import type { StatusLineInput } from "./status-line.ts";
-import { reduceViewer, stackAtCursor } from "./viewer-state.ts";
-import type { PendingDraft, ViewerMode, ViewerState } from "./viewer-state.ts";
 
 // Pending gutter marker: the Nerd Font comment bubble followed by the number
 // of pending drafts STARTING on the line ("+" above 9), shown only on a

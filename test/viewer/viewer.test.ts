@@ -7,7 +7,7 @@ import type { TUI } from "@earendil-works/pi-tui";
 
 import { rawColToDisplayCol, rawColsToDisplayCols, sliceWindow, tabExpanded } from "../../src/tui/display.ts";
 import type { Range, VisualMode } from "../../src/core/selection.ts";
-import type { PendingDraft } from "../../src/viewer/viewer-state.ts";
+import type { PendingDraft } from "../../src/viewer/state.ts";
 import { gutterWidth } from "../../src/viewer/layout.ts";
 import { AnnotateCard, CONTINUATION_MARK, normalizeKeyRepeat, PENDING_ICON } from "../../src/viewer/viewer.ts";
 

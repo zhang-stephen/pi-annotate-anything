@@ -76,7 +76,7 @@ test("src/viewer relative imports resolve only into src/viewer/, src/tui/, or sr
   assert.deepEqual(violations, []);
 });
 
-test("the scan covers all 14 moved modules (guards against a vacuous walk)", () => {
+test("the scan covers the full src module map (guards against a vacuous walk)", () => {
   const walked = new Set(files.map((f) => relative(SRC_ROOT, f)));
   const moved = [
     "core/selection.ts",
@@ -91,7 +91,12 @@ test("the scan covers all 14 moved modules (guards against a vacuous walk)", () 
     "tui/editor.ts",
     "tui/path-completion.ts",
     "viewer/viewer.ts",
-    "viewer/viewer-state.ts",
+    "viewer/state.ts",
+    "viewer/movement.ts",
+    "viewer/search-mode.ts",
+    "viewer/comment-mode.ts",
+    "viewer/layout.ts",
+    "viewer/line-style.ts",
     "viewer/status-line.ts",
   ];
   const missing = moved.filter((m) => !walked.has(m));
