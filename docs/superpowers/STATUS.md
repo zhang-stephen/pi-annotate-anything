@@ -9,6 +9,7 @@ Do not open docs marked `done` unless the current work touches that area.
 ## Active
 
 - spec: `docs/superpowers/specs/2026-10-17-ci-tui-e2e-design.md`
+  - draft, on hold: low priority, do not schedule (user call 2026-10-20)
 
 ## Known issues (deferred, no spec yet)
 
