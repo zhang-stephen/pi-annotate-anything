@@ -50,8 +50,11 @@ function stubIndex(state: IndexState, entries: string[]) {
   return { index, calls };
 }
 
-// Shared stub for rules 1 and 2, which must never consume index entries.
+// Shared stub for rule 1 and the empty-remainder browse of rule 2, which
+// never consume index entries: a ready index with an empty entry list.
 const noIndex = stubIndex("ready", []).index;
+// Non-ready states drive rule 2's degraded single-directory listing.
+const notReady = stubIndex("building", []).index;
 
 test("fuzzyAvailable is a real boolean exported from the link-safe probe", () => {
   assert.strictEqual(typeof fuzzyAvailable, "boolean");
@@ -83,12 +86,81 @@ test("every completion call warms the index exactly once", () => {
   assert.strictEqual(warm.calls.queries, 2);
 });
 
-// Rule 2: slash query, fuzzy within the fixed directory part.
-test("slash query fuzzy-matches within the fixed directory; dirs before files, each group by fuzzy score", () => {
-  const items = completePath("rank/bc", tmp, noIndex)!;
-  assert.deepStrictEqual(items.map(i => i.value), ["rank/bcd/", "rank/zz-bc.md", "rank/bxc.md"]);
+// Rule 2 (amended 2026-10-20): a slash query with a ready index
+// fuzzy-matches the workspace index subtree under dirPart (recursive); a
+// non-ready index degrades to the non-recursive single-directory listing.
+test("non-ready index degrades slash queries to the single-directory fuzzy listing", () => {
+  for (const state of ["building", "oversized", "failed"] as const) {
+    const items = completePath("rank/bc", tmp, stubIndex(state, ["rank/bcd/deep-junk.ts"]).index)!;
+    assert.deepStrictEqual(items.map(i => i.value), ["rank/bcd/", "rank/zz-bc.md", "rank/bxc.md"]);
+    assert.strictEqual(items[0].description, "dir");
+    assert.ok(!items.some(i => i.label === "qq.md"), "non-matching entries are excluded");
+    assert.ok(!items.some(i => i.value.includes("deep-junk")), "the degraded listing stays non-recursive");
+  }
+});
+
+test("ready index: slash query fuzzy-matches the subtree under dirPart in one shot", () => {
+  const idx = stubIndex("ready", ["src/tui/", "src/viewer/", "src/viewer/state.ts", "docs/spec.md"]);
+  const items = completePath("src/vsta", tmp, idx.index)!;
+  assert.deepStrictEqual(items.map(i => i.value), ["src/viewer/state.ts"]);
+  assert.strictEqual(items[0].label, "src/viewer/state.ts");
+});
+
+test("ready index: subtree directories are /-suffixed dir candidates", () => {
+  const idx = stubIndex("ready", ["src/viewer/", "src/viewer/state.ts"]);
+  const items = completePath("src/vi", tmp, idx.index)!;
+  // "viewer/" and "viewer/state.ts" tie on score (-24.9 each), so
+  // enumeration order (the dir entry first) decides.
+  assert.deepStrictEqual(items.map(i => i.value), ["src/viewer/", "src/viewer/state.ts"]);
   assert.strictEqual(items[0].description, "dir");
-  assert.ok(!items.some(i => i.label === "qq.md"), "non-matching entries are excluded");
+  assert.strictEqual(items[1].description, undefined);
+});
+
+test("ready index: subtree results order by fuzzy score, not enumeration order", () => {
+  const idx = stubIndex("ready", ["r/bxc.md", "r/zz-bc.md", "r/bcd/"]);
+  const items = completePath("r/bc", tmp, idx.index)!;
+  // fuzzyMatch("bc", ...) scores: "bcd/" -24.9 (word-boundary, consecutive),
+  // then "zz-bc.md" -14.3 (boundary b), then "bxc.md" -12.8 (gap penalty).
+  assert.deepStrictEqual(items.map(i => i.value), ["r/bcd/", "r/zz-bc.md", "r/bxc.md"]);
+});
+
+test("ready index: subtree matches stay inside dirPart and keep enumeration order on equal scores", () => {
+  const idx = stubIndex("ready", ["x/p/abc.ts", "x/q/abc.ts", "y/abc.ts"]);
+  assert.deepStrictEqual(completePath("x/abc", tmp, idx.index)!.map(i => i.value), ["x/p/abc.ts", "x/q/abc.ts"]);
+});
+
+test("ready index: subtree dotfile entries stay hidden unless the query starts with a dot", () => {
+  const idx = stubIndex("ready", ["src/.hidden.ts", "src/app.ts"]);
+  assert.deepStrictEqual(completePath("src/hid", tmp, idx.index)!.map(i => i.value), []);
+  assert.deepStrictEqual(completePath("src/.hid", tmp, idx.index)!.map(i => i.value), ["src/.hidden.ts"]);
+});
+
+test("ready index: empty-remainder slash query still lists immediate entries only", () => {
+  const idx = stubIndex("ready", ["rank/bcd/", "rank/bcd/deep.ts", "rank/extra.md"]);
+  assert.deepStrictEqual(completePath("rank/", tmp, idx.index)!.map(i => i.label), [
+    "bcd/",
+    "bxc.md",
+    "qq.md",
+    "zz-bc.md",
+  ]);
+});
+
+test("ready index: caps subtree results at 100 entries", () => {
+  const entries = ["d/", ...Array.from({ length: 150 }, (_, i) => `d/f${String(i).padStart(3, "0")}.ts`)];
+  const idx = stubIndex("ready", entries);
+  assert.strictEqual(completePath("d/f", tmp, idx.index)!.length, 100);
+});
+
+test("ready index: dirPart outside the workspace root degrades to the single-directory listing", () => {
+  const outside = fs.mkdtempSync(path.join(os.tmpdir(), "pi-annotate-pc-out-"));
+  fs.writeFileSync(path.join(outside, "zoom.ts"), "");
+  try {
+    const idx = stubIndex("ready", ["zoom-from-index.ts"]);
+    const items = completePath(outside + "/zo", tmp, idx.index)!;
+    assert.deepStrictEqual(items.map(i => i.value), [outside + "/zoom.ts"]);
+  } finally {
+    fs.rmSync(outside, { recursive: true, force: true });
+  }
 });
 
 test("slash query with empty base keeps the legacy alphabetical listing", () => {
@@ -97,8 +169,8 @@ test("slash query with empty base keeps the legacy alphabetical listing", () => 
 });
 
 test("dotfiles hidden in directory listings unless the query starts with a dot", () => {
-  assert.deepStrictEqual(completePath("dot/r", tmp, noIndex)!.map(i => i.label), ["rc2"]);
-  assert.deepStrictEqual(completePath("dot/.re", tmp, noIndex)!.map(i => i.label), [".readme"]);
+  assert.deepStrictEqual(completePath("dot/r", tmp, notReady)!.map(i => i.label), ["rc2"]);
+  assert.deepStrictEqual(completePath("dot/.re", tmp, notReady)!.map(i => i.label), [".readme"]);
 });
 
 // Rule 3: no-slash non-empty query, fuzzy over the workspace index.
@@ -200,5 +272,5 @@ test("symlink to a directory is offered by Dirent type, without trailing slash",
 // be affected.
 test("caps rule 2 results at 100 entries", () => {
   for (let i = 0; i < 105; i++) fs.writeFileSync(path.join(tmp, "cap", `f${String(i).padStart(3, "0")}`), "");
-  assert.strictEqual(completePath("cap/f", tmp, noIndex)!.length, 100);
+  assert.strictEqual(completePath("cap/f", tmp, notReady)!.length, 100);
 });

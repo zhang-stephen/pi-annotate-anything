@@ -3,17 +3,25 @@
 // null when the target directory cannot be read (the caller decides what to
 // show in that case, e.g. fall back to no completions).
 //
-// Scope rules (spec 2026-10-20 "Query scope rules"), split at the last "/":
+// Scope rules (spec 2026-10-20 "Query scope rules", rule 2 amended
+// 2026-10-20), split at the last "/":
 // 1. Empty query: unchanged directory browsing of cwd (directories first,
 //    then case-insensitive by name).
-// 2. Query with a slash: fuzzyMatch of the base fragment against entry
-//    names of the fixed directory part (non-recursive); directories group
-//    before files and each group is ordered by fuzzy score.
+// 2. Query with a slash: dirPart resolved verbatim; an empty remainder
+//    lists that directory's immediate entries (browsing equivalent);
+//    otherwise the remainder fuzzy-matches the workspace index subtree
+//    under dirPart (recursive, e.g. "src/vsta" reaches
+//    "src/viewer/state.ts"), ordered by fuzzy score with enumeration
+//    order as tiebreak and capped at MAX_ITEMS. While the index is
+//    building/oversized/failed, or dirPart resolves outside the workspace
+//    root, this degrades to the pre-amendment non-recursive
+//    single-directory fuzzy listing.
 // 3. No slash, non-empty: fuzzyFilter over the workspace file index
 //    (src/core/file-index.ts); while the index is building/oversized/failed
 //    this falls back to rule 1 browsing for the duration.
 
 import fs from "node:fs";
+import path from "node:path";
 
 // Namespace import on purpose: probing tui.fuzzyFilter/tui.fuzzyMatch is
 // the link-safe feature detect below. A bare named import of a missing
@@ -79,10 +87,11 @@ function browseDir(dir: string, dirPart: string): AutocompleteItem[] | null {
   return toDirItems(visible, dirPart);
 }
 
-// Rule 2: fuzzyMatch against entry names of one fixed directory
-// (non-recursive). Directories group before files; within each group order
-// by fuzzy score, breaking ties alphabetically -- which keeps a plain
-// "dir/" listing (empty base, every score 0) in rule 1's order.
+// Degraded rule 2 and the empty-remainder browse: fuzzyMatch against entry
+// names of one fixed directory (non-recursive). Directories group before
+// files; within each group order by fuzzy score, breaking ties
+// alphabetically -- which keeps a plain "dir/" listing (empty base, every
+// score 0) in rule 1's order.
 function fuzzyDir(dir: string, dirPart: string, base: string): AutocompleteItem[] | null {
   let entries: fs.Dirent[];
   try {
@@ -113,14 +122,55 @@ function fuzzyDir(dir: string, dirPart: string, base: string): AutocompleteItem[
   );
 }
 
+// The index-prefix form of dirPart: index entries are workspace-relative
+// with "/" separators, so the subtree under dirPart is exactly the entries
+// carrying this prefix (the typed dirPart stays the value prefix, so "~/"
+// and absolute forms keep working). Returns null when dirPart resolves
+// outside the workspace root, where the index has no subtree to serve.
+function indexPrefixFor(dirPart: string, cwd: string): string | null {
+  const rel = path.relative(cwd, resolvePath(dirPart, cwd));
+  if (rel === "") return "";
+  // A real parent escape (".." or "../...") -- not a directory merely named
+  // "..something".
+  if (rel === ".." || rel.startsWith(".." + path.sep) || path.isAbsolute(rel)) return null;
+  return rel.split(path.sep).join("/") + "/";
+}
+
+// Rule 2 (ready index): recursive fuzzy match over the index subtree under
+// dirPart (amended spec rule 2). Entries carrying the index prefix are
+// fuzzy-matched on the remainder, so typing penetrates subdirectories in
+// one shot. Order by fuzzy score with enumeration order as tiebreak
+// (stable sort), capped at MAX_ITEMS; directories carry the enumerator's
+// "/" marker (fd-sourced entries carry none -- the bounded degradation
+// documented at rule 3).
+function fuzzySubtree(entries: string[], dirPart: string, prefix: string, base: string): AutocompleteItem[] {
+  const showDotfiles = base.startsWith(".");
+  const scored: { entry: string; score: number }[] = [];
+  for (const entry of entries) {
+    if (!entry.startsWith(prefix)) continue;
+    if (!showDotfiles && isDotPath(entry)) continue;
+    // The container directory itself (remainder "") can never match a
+    // non-empty base, so it is never offered as its own candidate.
+    const match = tui.fuzzyMatch(base, entry.slice(prefix.length));
+    if (match.matches) scored.push({ entry, score: match.score });
+  }
+  scored.sort((a, b) => a.score - b.score);
+  return scored.slice(0, MAX_ITEMS).map(({ entry }) => {
+    const value = dirPart + entry.slice(prefix.length);
+    const isDir = entry.endsWith("/");
+    return { value, label: value, description: isDir ? "dir" : undefined };
+  });
+}
+
 export function completePath(
   argumentPrefix: string,
   cwd: string,
   index: FileIndex = workspaceIndex,
 ): AutocompleteItem[] | null {
   // Every completion call warms the index (the first call for a root kicks
-  // off exactly one async enumeration); the snapshot is consumed by rule 3
-  // only, so rules 1 and 2 never change behavior with index state.
+  // off exactly one async enumeration); the snapshot is consumed by rule 2
+  // (ready subtree match) and rule 3 only, so the degraded rule 2 and
+  // rule 1 never change behavior with index state.
   const snapshot = index.query(cwd);
 
   // Split at the last "/": dirPart stays verbatim (including its trailing
@@ -161,10 +211,23 @@ export function completePath(
     });
   }
 
-  // Rule 2: query contains a slash -- fuzzy within the fixed directory
-  // part. Unreachable through the host (registration is gated on
-  // fuzzyAvailable); refuse rather than silently fall back to prefix
-  // matching.
+  // Rule 2: query contains a slash. Unreachable through the host
+  // (registration is gated on fuzzyAvailable); refuse rather than silently
+  // fall back to prefix matching.
   if (!fuzzyAvailable) return null;
+
+  // Empty remainder: dirPart is a complete directory path -- list its
+  // immediate entries (browsing equivalent), regardless of index state.
+  if (base === "") return fuzzyDir(resolvePath(dirPart, cwd), dirPart, base);
+
+  // Ready index: recursive fuzzy match over the index subtree under
+  // dirPart. Any state the index cannot serve from --
+  // building/oversized/failed, or dirPart resolving outside the workspace
+  // root -- degrades to the pre-amendment non-recursive single-directory
+  // listing.
+  if (snapshot.state === "ready") {
+    const prefix = indexPrefixFor(dirPart, cwd);
+    if (prefix !== null) return fuzzySubtree(snapshot.entries, dirPart, prefix, base);
+  }
   return fuzzyDir(resolvePath(dirPart, cwd), dirPart, base);
 }
