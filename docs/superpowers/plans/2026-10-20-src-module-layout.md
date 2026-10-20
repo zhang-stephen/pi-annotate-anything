@@ -1,14 +1,14 @@
 ---
 title: Src Module Layout - Implementation Plan
 status: in-progress
-progress: 0/2
+progress: 1/2
 spec: ../specs/2026-10-20-src-module-layout-design.md
 ---
 
 # Src Module Layout - Implementation Plan
 
 > **For agentic workers:** REQUIRED SUB-SKILL: superpowers-zh:subagent-driven-development (controller side) or superpowers-zh:executing-plans (worker side).
-> Steps use checkbox syntax `- [ ]` for tracking.
+> Steps use checkbox syntax `- [x]` for tracking.
 
 **Goal:** reorganize `src/` into explicit layers (`core/`, `tui/`, `viewer/`) and split the viewer monolith, with zero behavior change.
 **Architecture:** one-way dependency direction `core <- tui <- viewer <- index.ts`, enforced by a new `test/architecture.test.ts`; module map documented in `src/AGENTS.md`.
@@ -48,12 +48,12 @@ Pure `git mv` plus import-path rewrites; source names unchanged in this task.
 - Create: `test/architecture.test.ts`, `src/AGENTS.md`
 - Modify: `index.ts` (import paths), root `AGENTS.md` (one pointer line)
 
-- [ ] **Step 0: record the baseline**
+- [x] **Step 0: record the baseline**
 
 Run: `node --test "test/**/*.test.ts" 2>&1 | tail -8`
 Expected: `pass 366`, `fail 0`. Record the numbers in the task ledger.
 
-- [ ] **Step 1: move the files**
+- [x] **Step 1: move the files**
 
 ```bash
 mkdir -p src/core src/tui src/viewer test/core test/tui test/viewer
@@ -67,7 +67,7 @@ git mv test/viewer.test.ts test/viewer-state.test.ts test/status-line.test.ts te
 
 (Adjust the test list to the actual files present; the rule is: each test mirrors its module.)
 
-- [ ] **Step 2: rewrite import paths**
+- [x] **Step 2: rewrite import paths**
 
 Rules (apply to every `import ... from "<spec>"`):
 
@@ -81,7 +81,7 @@ Rules (apply to every `import ... from "<spec>"`):
 Run: `npx tsc --noEmit` (expected: clean) and `npm test` (expected: 366 pass / 0 fail).
 Commit: `refactor(src): group modules into core/, tui/, viewer/ layers`
 
-- [ ] **Step 3: architecture boundary test**
+- [x] **Step 3: architecture boundary test**
 
 Create `test/architecture.test.ts`.
 It walks `src/**/*.ts`, extracts every `from "<specifier>"`, resolves relative specifiers against the importing file, and asserts:
@@ -96,7 +96,7 @@ The file adds exactly 4 tests (three boundary rules plus the scan sanity check).
 Run: `npm test` (expected: 370 pass / 0 fail).
 Commit: `test(src): enforce module layering with an architecture test`
 
-- [ ] **Step 4: src/AGENTS.md and root pointer**
+- [x] **Step 4: src/AGENTS.md and root pointer**
 
 Create `src/AGENTS.md` with exactly this content:
 
