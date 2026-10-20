@@ -150,6 +150,27 @@ test("reduceViewer: 'g' then Esc falls through to normal handling (close)", () =
   assert.equal(res.state.pending, null);
 });
 
+test("reduceViewer: a digit during pending 'g' clears the stroke and arms no count", () => {
+  const start = viewer({ cursor: { line: 15, col: 3 }, scrollTop: 10 });
+  const five = view(view(start, "g").state, "5");
+  assert.equal(five.state.pending, null);
+  assert.equal(five.state.count ?? null, null);
+  assert.deepEqual(five.state.cursor, { line: 15, col: 3 });
+  // "0" counts too: without the pending stroke it is the column-0 motion,
+  // during one it is swallowed like any other digit.
+  const zero = view(view(start, "g").state, "0");
+  assert.equal(zero.state.pending, null);
+  assert.equal(zero.state.count ?? null, null);
+  assert.deepEqual(zero.state.cursor, { line: 15, col: 3 });
+});
+
+test("reduceViewer: 'g' then a non-digit still falls through normally", () => {
+  const start = viewer({ cursor: { line: 15, col: 3 }, scrollTop: 10 });
+  const res = view(view(start, "g").state, "l");
+  assert.equal(res.state.pending, null);
+  assert.deepEqual(res.state.cursor, { line: 15, col: 4 });
+});
+
 // G, ctrl+d/ctrl+u, PgUp/PgDn ----------------------------------------------
 
 test("reduceViewer: G jumps to the last line and scrolls to the last page", () => {
@@ -469,4 +490,27 @@ test("count: bare 0 stays the column-0 motion; 0 extends a pending count", () =>
   assert.deepEqual(view(viewer({ cursor: { line: 0, col: 4 } }), "0").state.cursor.col, 0);
   const twenty = view(view(viewer(), "2").state, "0").state;
   assert.equal(twenty.count, 20);
+});
+
+test("count: 5 then each arrow key moves five cells and consumes the count", () => {
+  const left = view(view(viewer({ cursor: { line: 5, col: 6 } }), "5").state, "\x1b[D");
+  assert.deepEqual(left.state.cursor, { line: 5, col: 1 });
+  assert.equal(left.state.count, null);
+  const right = view(view(viewer(), "5").state, "\x1b[C");
+  assert.deepEqual(right.state.cursor, { line: 0, col: 5 });
+  assert.equal(right.state.count, null);
+  const down = view(view(viewer({ cursor: { line: 3, col: 2 } }), "5").state, "\x1b[B");
+  assert.deepEqual(down.state.cursor, { line: 8, col: 2 });
+  assert.equal(down.state.count, null);
+  const up = view(view(viewer({ cursor: { line: 8, col: 2 } }), "5").state, "\x1b[A");
+  assert.deepEqual(up.state.cursor, { line: 3, col: 2 });
+  assert.equal(up.state.count, null);
+});
+
+test("count: arrows without a pending count move exactly one cell", () => {
+  const start = viewer({ cursor: { line: 3, col: 1 } });
+  assert.deepEqual(view(start, "\x1b[A").state.cursor, { line: 2, col: 1 });
+  assert.deepEqual(view(start, "\x1b[B").state.cursor, { line: 4, col: 1 });
+  assert.deepEqual(view(start, "\x1b[C").state.cursor, { line: 3, col: 2 });
+  assert.deepEqual(view(start, "\x1b[D").state.cursor, { line: 3, col: 0 });
 });

@@ -123,19 +123,19 @@ function handleMode(state: ViewerState, key: string, lines: string[], viewport: 
     case "h":
       return consumeCount(moved(state, { ...state.cursor, col: state.cursor.col - (state.count ?? 1) }, lines, viewport));
     case "\x1b[D":
-      return moved(state, { ...state.cursor, col: state.cursor.col - 1 }, lines, viewport);
+      return consumeCount(moved(state, { ...state.cursor, col: state.cursor.col - (state.count ?? 1) }, lines, viewport));
     case "l":
       return consumeCount(moved(state, { ...state.cursor, col: state.cursor.col + (state.count ?? 1) }, lines, viewport));
     case "\x1b[C":
-      return moved(state, { ...state.cursor, col: state.cursor.col + 1 }, lines, viewport);
+      return consumeCount(moved(state, { ...state.cursor, col: state.cursor.col + (state.count ?? 1) }, lines, viewport));
     case "j":
       return consumeCount(moved(state, { line: state.cursor.line + (state.count ?? 1), col: state.cursor.col }, lines, viewport));
     case "\x1b[B":
-      return moved(state, { line: state.cursor.line + 1, col: state.cursor.col }, lines, viewport);
+      return consumeCount(moved(state, { line: state.cursor.line + (state.count ?? 1), col: state.cursor.col }, lines, viewport));
     case "k":
       return consumeCount(moved(state, { line: state.cursor.line - (state.count ?? 1), col: state.cursor.col }, lines, viewport));
     case "\x1b[A":
-      return moved(state, { line: state.cursor.line - 1, col: state.cursor.col }, lines, viewport);
+      return consumeCount(moved(state, { line: state.cursor.line - (state.count ?? 1), col: state.cursor.col }, lines, viewport));
     case "0":
       return moved(state, { line: state.cursor.line, col: 0 }, lines, viewport);
     case "$": // end-exclusive convention: max clampable col equals line length
@@ -265,6 +265,12 @@ export function reduceViewer(
   // to the existing column-0 motion in handleMode. Digit keys do not move,
   // so they return directly.
   if (state.mode === "normal") {
+    // A digit while a two-stroke is pending is swallowed: it would arm a
+    // count the stroke cannot use, so drop the unmatched prefix instead and
+    // change nothing else. Non-digit keys keep the fall-through below.
+    if (state.pending !== null && key.length === 1 && key >= "0" && key <= "9") {
+      return resetCycleOnMove({ state: { ...state, pending: null } }, state);
+    }
     if (key.length === 1 && key >= "1" && key <= "9") {
       return resetCycleOnMove({ state: { ...state, count: (state.count ?? 0) * 10 + Number(key) } }, state);
     }
