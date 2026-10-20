@@ -1,7 +1,7 @@
 ---
 title: Fuzzy Path Completion + Viewer Search Vim Parity - Implementation Plan
 status: in-progress
-progress: 1/4
+progress: 2/4
 spec: ../specs/2026-10-20-fuzzy-completion-search-parity-design.md
 ---
 
@@ -66,17 +66,17 @@ Tick Task 1, `progress: 1/4`, commit `docs(superpowers)`.
 
 **Files:** modify `src/viewer/state.ts`; modify `test/viewer/movement.test.ts` and/or `test/viewer/state.test.ts` per where the cases live.
 
-- [ ] **Step 1: red -- failing tests**
+- [x] **Step 1: red -- failing tests**
 
 `5` then each of the four arrow escape sequences (`\x1b[D/C/B/A`) moves five cells and clears `count` (mirror the existing `h`/`j`/`k`/`l` count tests); digit during pending `g` clears `pending` and leaves `count` undefined; `g` then a non-digit key still falls through as today; arrows with no pending count move exactly one cell (regression pin).
 
-- [ ] **Step 2: green -- implement**
+- [x] **Step 2: green -- implement**
 
 Arrow cases in `handleMode` apply `(state.count ?? 1)` and wrap with `consumeCount`, mirroring the `h`/`j`/`k`/`l` cases.
 The pending-`g` dispatch swallows digits (clear `pending`, return state unchanged otherwise).
 Full suite + tsc green; commit `fix(viewer): vim parity for counts on arrows and digits during pending g`.
 
-- [ ] **Step 3: controller bookkeeping** (controller, after reviewer approval)
+- [x] **Step 3: controller bookkeeping** (controller, after reviewer approval)
 
 Tick Task 2, `progress: 2/4`; land the spec amendment: strike through the count-consumer bullet in `docs/superpowers/specs/2026-10-18-viewer-search-design.md` (its line 86) with a reason and a pointer to the new spec; commit `docs(superpowers)`.
 

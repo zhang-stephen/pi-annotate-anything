@@ -83,7 +83,7 @@ Repeat and count, normal mode only:
   With no matches at all, `message` becomes `Pattern not found: <pattern>` (vim's E486) and the cursor does not move.
   Without a `lastSearch`, `n`/`N` are inert.
 - Count prefix: digits `1`-`9` start `count`, `0`-`9` extend it; a bare `0` with no pending count remains the column-0 motion, exactly like vim.
-  `count` is consumed and cleared by `n`/`N`, `j`/`k`, `h`/`l`, and `G` (`{count}G` goes to line `count`, clamped); any other key clears it without effect.
+  ~~`count` is consumed and cleared by `n`/`N`, `j`/`k`, `h`/`l`, and `G` (`{count}G` goes to line `count`, clamped); any other key clears it without effect.~~ (Amended 2026-10-20: the four arrow keys are also consumers -- they apply the count to the motion and clear it; see `2026-10-20-fuzzy-completion-search-parity-design.md` Part B.)
   The pending count is not displayed anywhere (vim default shows nothing either).
 - Any keypress clears `message` after applying its own effect (so a message survives exactly one render).
 
