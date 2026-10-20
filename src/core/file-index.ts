@@ -19,7 +19,7 @@
 // tiebreak source for fuzzy ranking.
 
 import { spawn as nodeSpawn } from "node:child_process";
-import { readdir } from "node:fs/promises";
+import { readdir, stat } from "node:fs/promises";
 import { join } from "node:path";
 
 export type IndexState = "building" | "ready" | "oversized" | "failed";
@@ -50,15 +50,37 @@ export interface IndexSnapshot {
 export interface FileIndex {
   // Returns the current snapshot for root and may start a build or a
   // single background refresh; it never blocks and never throws. The
-  // entries array is the live cached list in enumeration order; treat it
-  // as read-only.
+  // entries array is a defensive copy of the cached list in enumeration
+  // order; callers may sort or mutate it freely.
   query(root: string): IndexSnapshot;
 }
 
 const STALE_MS = 5000;
 const MAX_ENTRIES = 20000;
 const MAX_DEPTH = 8;
-const SKIP_DIRS = new Set([".git", "node_modules", "dist", "build"]);
+
+// Common non-indexable directory list shared by the fd -E excludes and the
+// walk skip set (spec 2026-10-20 "Workspace index"): fd runs precisely when
+// git failed, so without these excludes it would enumerate build output
+// wholesale and stick the root in the oversized state. vendor/out/bin/obj
+// are deliberately NOT excluded (real source lives there in some projects).
+export const NON_INDEXABLE_DIRS: readonly string[] = [
+  ".git",
+  "node_modules",
+  "dist",
+  "build",
+  "coverage",
+  "target",
+  ".next",
+  ".nuxt",
+  ".svelte-kit",
+  ".turbo",
+  ".cache",
+  ".venv",
+  "venv",
+  "__pycache__",
+];
+const SKIP_DIRS = new Set<string>(NON_INDEXABLE_DIRS);
 
 type SpawnOutput = { ok: true; out: Buffer } | { ok: false };
 type EnumResult =
@@ -67,7 +89,9 @@ type EnumResult =
 
 // Runs one child process to completion, buffering stdout. A spawn error
 // (e.g. ENOENT for a missing binary), a signal kill, or a non-zero exit
-// resolves to { ok: false }; this promise never rejects.
+// resolves to { ok: false }; this promise never rejects. stderr is ignored
+// entirely at spawn time: nothing drains it, so a piped stderr would fill
+// its OS buffer on a chatty child and block it forever.
 function runProcess(io: FileIndexDeps, cmd: string, args: string[], cwd: string): Promise<SpawnOutput> {
   return new Promise((resolve) => {
     let settled = false;
@@ -78,7 +102,7 @@ function runProcess(io: FileIndexDeps, cmd: string, args: string[], cwd: string)
       resolve(result);
     };
     try {
-      const child = io.spawn(cmd, args, { cwd });
+      const child = io.spawn(cmd, args, { cwd, stdio: ["ignore", "pipe", "ignore"] });
       child.on("error", () => finish({ ok: false }));
       child.stdout?.on("data", (chunk: Buffer) => {
         out = Buffer.concat([out, chunk]);
@@ -124,11 +148,20 @@ async function enumerateWithGit(io: FileIndexDeps, root: string): Promise<EnumRe
   return { ok: true, enumerator: "git", entries: withSyntheticDirs(files) };
 }
 
-// fd's defaults already skip .git and respect .gitignore; a missing fd is
-// a spawn failure at probe time and simply advances the chain. fd's plain
-// listing cannot mark directories, so entries are stored verbatim.
+// Ignore handling is keyed off the root because fd only respects
+// .gitignore inside a git repository and runs precisely when git failed:
+// with a root .gitignore, --no-require-git makes fd follow it even outside
+// a repository (an fd too old for the flag exits non-zero and the chain
+// falls through to the walk); otherwise the shared non-indexable list is
+// passed as -E excludes. A missing fd is a spawn failure at probe time and
+// simply advances the chain. fd's plain listing cannot mark directories,
+// so entries are stored verbatim.
 async function enumerateWithFd(io: FileIndexDeps, root: string): Promise<EnumResult> {
-  const result = await runProcess(io, "fd", ["--type", "f", "--type", "d"], root);
+  const args: string[] = ["--type", "f", "--type", "d"];
+  const gitignore = await stat(join(root, ".gitignore")).catch(() => null);
+  if (gitignore !== null && gitignore.isFile()) args.push("--no-require-git");
+  else for (const dir of NON_INDEXABLE_DIRS) args.push("-E", dir);
+  const result = await runProcess(io, "fd", args, root);
   if (!result.ok) return { ok: false };
   const entries = result.out.toString("utf8").split("\n").filter((p) => p.length > 0);
   return { ok: true, enumerator: "fd", entries };
@@ -225,13 +258,13 @@ export function createFileIndex(deps: Partial<FileIndexDeps> = {}): FileIndex {
       const fresh: FileIndexSlot = { root, state: "building", entries: [], enumerator: null, at: io.now() };
       slot = fresh;
       startBuild(fresh);
-      return { state: fresh.state, entries: fresh.entries };
+      return { state: fresh.state, entries: fresh.entries.slice() };
     }
     // Stale-while-revalidate: serve the stale snapshot and start exactly
     // one refresh; the state stays "ready"/"oversized"/"failed" until the
     // refresh completes.
     if (!building.has(slot) && io.now() - slot.at > STALE_MS) startBuild(slot);
-    return { state: slot.state, entries: slot.entries };
+    return { state: slot.state, entries: slot.entries.slice() };
   }
 
   return { query };
