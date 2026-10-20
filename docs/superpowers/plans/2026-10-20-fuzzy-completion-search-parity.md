@@ -1,7 +1,7 @@
 ---
 title: Fuzzy Path Completion + Viewer Search Vim Parity - Implementation Plan
 status: in-progress
-progress: 3/4
+progress: 4/4
 spec: ../specs/2026-10-20-fuzzy-completion-search-parity-design.md
 ---
 
@@ -110,22 +110,22 @@ Tick Task 3, `progress: 3/4`, commit `docs(superpowers)`.
 
 **Files:** modify `src/tui/path-completion.ts`, `index.ts`, `README.md` (one line: recommended host pi >= 1.0 for fuzzy completion); modify `test/tui/path-completion.test.ts`.
 
-- [ ] **Step 1: red tests for scope rules**
+- [x] **Step 1: red tests for scope rules**
 
 Fixture trees via `fs.mkdtemp`: empty query lists cwd (unchanged); slash query fuzzy-matches within the fixed directory (dirs first, then files, each group by fuzzy score); non-empty no-slash query fuzzy-matches the index with directories included as `/`-suffixed candidates; dotfiles hidden unless query starts with `.`; `MAX_ITEMS` cap respected; `building`/`oversized`/`failed` index states fall back to empty-query browsing.
 Equal-score tiebreak follows enumeration order.
 
-- [ ] **Step 2: green -- implement scope rules**
+- [x] **Step 2: green -- implement scope rules**
 
 Rewrite `completePath` per the spec's three scope rules, using `fuzzyMatch`/`fuzzyFilter` probed via a link-safe namespace import; expose a `fuzzyAvailable`-style flag from the module.
 
-- [ ] **Step 3: registration gate**
+- [x] **Step 3: registration gate**
 
 In `index.ts` `session_start`: if fuzzy helpers are unavailable, surface an explicit error notification naming the minimum host version (pi >= 1.0) and skip registering the `/annotate` argument completion; never fall back to prefix matching silently.
 Add a seam test for both branches (available / unavailable) with stubbed `ctx.ui`.
 README one-liner. Full suite + tsc green; commit `feat(tui): fuzzy path completion with workspace index`.
 
-- [ ] **Step 4: controller bookkeeping** (controller, after reviewer approval)
+- [x] **Step 4: controller bookkeeping** (controller, after reviewer approval)
 
 Tick Task 4, `progress: 4/4`, commit `docs(superpowers)`.
 
