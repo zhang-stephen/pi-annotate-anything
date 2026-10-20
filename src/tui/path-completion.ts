@@ -7,7 +7,7 @@ import fs from "node:fs";
 
 import type { AutocompleteItem } from "@earendil-works/pi-tui";
 
-import { resolvePath } from "./file-range.ts";
+import { resolvePath } from "../core/file-range.ts";
 
 const MAX_ITEMS = 100;
 

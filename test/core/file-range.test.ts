@@ -4,8 +4,8 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 
-import { resolvePath, loadFile, extractRange } from "../src/file-range.ts";
-import type { Range } from "../src/selection.ts";
+import { resolvePath, loadFile, extractRange } from "../../src/core/file-range.ts";
+import type { Range } from "../../src/core/selection.ts";
 
 const MIB = 1024 * 1024;
 

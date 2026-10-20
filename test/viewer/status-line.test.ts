@@ -3,8 +3,8 @@ import assert from "node:assert/strict";
 
 import { stripTerminalSequences, visibleWidth } from "@earendil-works/pi-tui";
 
-import { cardModeOf, FOOTER_HINTS, renderCommandLine, renderStatusLine } from "../src/status-line.ts";
-import type { ChromeColors } from "../src/card-chrome.ts";
+import { cardModeOf, FOOTER_HINTS, renderCommandLine, renderStatusLine } from "../../src/viewer/status-line.ts";
+import type { ChromeColors } from "../../src/tui/card-chrome.ts";
 
 // Marker color functions: wrap text so exact string assertions can see where
 // each color function was applied, independent of real ANSI codes.

@@ -6,9 +6,9 @@ import {
   clampPosition,
   type Position,
   type Selection,
-} from "../src/selection.ts";
-import { rangeLabel } from "../src/message.ts";
-import { extractRange } from "../src/file-range.ts";
+} from "../../src/core/selection.ts";
+import { rangeLabel } from "../../src/core/message.ts";
+import { extractRange } from "../../src/core/file-range.ts";
 
 const lines = ["alpha", "beta", "gamma"];
 

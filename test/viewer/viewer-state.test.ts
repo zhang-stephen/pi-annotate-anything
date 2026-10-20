@@ -1,8 +1,8 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 
-import { cycleTarget, reduceViewer, stackAtCursor } from "../src/viewer-state.ts";
-import type { PendingDraft, ViewerState } from "../src/viewer-state.ts";
+import { cycleTarget, reduceViewer, stackAtCursor } from "../../src/viewer/viewer-state.ts";
+import type { PendingDraft, ViewerState } from "../../src/viewer/viewer-state.ts";
 
 // 30-line fixture: "line 0" .. "line 29" (col max 6 for single-digit lines).
 const LINES = Array.from({ length: 30 }, (_, i) => `line ${i}`);

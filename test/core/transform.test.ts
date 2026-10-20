@@ -1,10 +1,10 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 
-import { AnnotationStore } from "../src/store.ts";
-import { formatPayload, tokenLabel } from "../src/message.ts";
-import { expandTokens } from "../src/transform.ts";
-import type { Range, VisualMode } from "../src/selection.ts";
+import { AnnotationStore } from "../../src/core/store.ts";
+import { formatPayload, tokenLabel } from "../../src/core/message.ts";
+import { expandTokens } from "../../src/core/transform.ts";
+import type { Range, VisualMode } from "../../src/core/selection.ts";
 
 const CWD = "/repo";
 

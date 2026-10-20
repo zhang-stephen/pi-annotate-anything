@@ -2,13 +2,13 @@
 // viewer state plus an optional effect (annotate/close). No I/O and no pi
 // imports, so the TUI component stays a thin shell over this reducer.
 
-import { rawColToDisplayCol } from "./display.ts";
-import { clampPosition, normalize } from "./selection.ts";
-import type { Position, Range, Selection, VisualMode } from "./selection.ts";
-import { reduceComment } from "./comment-input.ts";
-import type { CommentKey, CommentState } from "./comment-input.ts";
-import { draftAtCursor } from "./card-chrome.ts";
-import { compilePattern, findMatches, jumpTarget } from "./search.ts";
+import { rawColToDisplayCol } from "../tui/display.ts";
+import { clampPosition, normalize } from "../core/selection.ts";
+import type { Position, Range, Selection, VisualMode } from "../core/selection.ts";
+import { reduceComment } from "../tui/comment-input.ts";
+import type { CommentKey, CommentState } from "../tui/comment-input.ts";
+import { draftAtCursor } from "../tui/card-chrome.ts";
+import { compilePattern, findMatches, jumpTarget } from "../core/search.ts";
 
 export type ViewerMode = "normal" | "visual-char" | "visual-line" | "comment" | "search";
 

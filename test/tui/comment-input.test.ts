@@ -2,8 +2,8 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import { visibleWidth as tuiVisibleWidth } from "@earendil-works/pi-tui";
 
-import { reduceComment, withCursorCell, wrapCommentLines } from "../src/comment-input.ts";
-import type { CommentState } from "../src/comment-input.ts";
+import { reduceComment, withCursorCell, wrapCommentLines } from "../../src/tui/comment-input.ts";
+import type { CommentState } from "../../src/tui/comment-input.ts";
 
 // ANSI inverse-video wrapper, same shape the plan uses for width-preservation
 // checks (marker wrappers like "<s>" would change the visible width).

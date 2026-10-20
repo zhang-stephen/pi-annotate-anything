@@ -1,8 +1,8 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 
-import type { Range } from "../src/selection.ts";
-import { AnnotationStore, type Draft } from "../src/store.ts";
+import type { Range } from "../../src/core/selection.ts";
+import { AnnotationStore, type Draft } from "../../src/core/store.ts";
 
 const rangeA: Range = { startLine: 9, startCol: 0, endLine: 19, endCol: 5 };
 const rangeB: Range = { startLine: 0, startCol: 1, endLine: 2, endCol: 3 };

@@ -1,8 +1,8 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 
-import { compilePattern, findMatches, jumpTarget } from "../src/search.ts";
-import type { LineMatch } from "../src/search.ts";
+import { compilePattern, findMatches, jumpTarget } from "../../src/core/search.ts";
+import type { LineMatch } from "../../src/core/search.ts";
 
 const M: LineMatch[] = [
   { line: 1, startCol: 0, endCol: 3 },

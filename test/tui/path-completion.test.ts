@@ -4,7 +4,7 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 
-import { completePath } from "../src/path-completion.ts";
+import { completePath } from "../../src/tui/path-completion.ts";
 
 // One fixture root per test file. The symlink fixture is deliberately NOT
 // created here: it lives inside the symlink test only, so the exact-list

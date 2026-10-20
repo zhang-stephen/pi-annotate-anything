@@ -1,7 +1,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { visibleWidth, type EditorComponent } from "@earendil-works/pi-tui";
-import { recolorTokens, withTokenRecolor } from "../src/editor.ts";
+import { recolorTokens, withTokenRecolor } from "../../src/tui/editor.ts";
 
 // Visible marker wrapper for content assertions (per task brief).
 const marker = (s: string) => `<${s}>`;

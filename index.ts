@@ -19,13 +19,13 @@
 
 import type { ExtensionAPI, ExtensionContext } from "@earendil-works/pi-coding-agent";
 
-import { AnnotateEditor, withTokenRecolor } from "./src/editor.ts";
-import { extractRange, loadFile, resolvePath } from "./src/file-range.ts";
-import { tokenLabel } from "./src/message.ts";
-import { completePath } from "./src/path-completion.ts";
-import { AnnotationStore } from "./src/store.ts";
-import { expandTokens } from "./src/transform.ts";
-import { AnnotateCard } from "./src/viewer.ts";
+import { AnnotateEditor, withTokenRecolor } from "./src/tui/editor.ts";
+import { extractRange, loadFile, resolvePath } from "./src/core/file-range.ts";
+import { tokenLabel } from "./src/core/message.ts";
+import { completePath } from "./src/tui/path-completion.ts";
+import { AnnotationStore } from "./src/core/store.ts";
+import { expandTokens } from "./src/core/transform.ts";
+import { AnnotateCard } from "./src/viewer/viewer.ts";
 
 export default function (pi: ExtensionAPI) {
   // The composer override is installed on demand by /annotate and removed

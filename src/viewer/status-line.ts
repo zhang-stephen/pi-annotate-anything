@@ -7,7 +7,7 @@
 
 import { truncateToWidth, visibleWidth } from "@earendil-works/pi-tui";
 
-import type { ChromeColors } from "./card-chrome.ts";
+import type { ChromeColors } from "../tui/card-chrome.ts";
 import type { ViewerMode } from "./viewer-state.ts";
 
 export type CardMode = "normal" | "visualChar" | "visualLine" | "comment" | "search";

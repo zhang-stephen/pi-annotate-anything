@@ -6,8 +6,8 @@ import {
   displayPath,
   tokenLabel,
   formatPayload,
-} from "../src/message.ts";
-import type { Range, VisualMode } from "../src/selection.ts";
+} from "../../src/core/message.ts";
+import type { Range, VisualMode } from "../../src/core/selection.ts";
 
 function range(
   startLine: number,

@@ -5,10 +5,10 @@ import type { Theme } from "@earendil-works/pi-coding-agent";
 import { stripTerminalSequences, visibleWidth } from "@earendil-works/pi-tui";
 import type { TUI } from "@earendil-works/pi-tui";
 
-import { rawColToDisplayCol, rawColsToDisplayCols, sliceWindow, tabExpanded } from "../src/display.ts";
-import type { Range, VisualMode } from "../src/selection.ts";
-import type { PendingDraft } from "../src/viewer-state.ts";
-import { AnnotateCard, CONTINUATION_MARK, gutterWidth, normalizeKeyRepeat, PENDING_ICON } from "../src/viewer.ts";
+import { rawColToDisplayCol, rawColsToDisplayCols, sliceWindow, tabExpanded } from "../../src/tui/display.ts";
+import type { Range, VisualMode } from "../../src/core/selection.ts";
+import type { PendingDraft } from "../../src/viewer/viewer-state.ts";
+import { AnnotateCard, CONTINUATION_MARK, gutterWidth, normalizeKeyRepeat, PENDING_ICON } from "../../src/viewer/viewer.ts";
 
 // Pending-marker field width: a fixed 2 cells (icon renders 1 cell in NF
 // Mono + 1 count digit).
