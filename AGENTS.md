@@ -50,6 +50,7 @@ The workflow is spec -> plan -> code, and every step is gated:
 - Acquire/release resources in `session_start` / `session_shutdown` handlers, not at the top level of the factory function.
 - `package.json` carries `"keywords": ["pi-package"]`.
 - Host packages such as `@earendil-works/pi-coding-agent` go in `peerDependencies` with `"*"`, never in `dependencies`.
+- Module layout and dependency rules for `src/` live in `src/AGENTS.md` (auto-loaded when files under `src/` are read).
 
 ## Releases
 
