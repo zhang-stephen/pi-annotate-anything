@@ -23,6 +23,7 @@ The workflow is spec -> plan -> code, and every step is gated:
 - Use **semantic commit messages**, e.g. `feat(<component>): ...`, `fix(<component>): ...`, `chore: ...`, `docs: ...`.
 - This project is a **Node.js package**; keep `.gitignore` appropriate for Node.js (node_modules, build output, logs, OS/editor files).
 - Multi-task feature work happens in a worktree under `.pi/worktrees/<slug>/` (gitignored, removed after merge).
+- Worktree branches integrate into master via **rebase + fast-forward only**: `git rebase master` on the branch, then `git merge --ff-only` on master. Never create merge commits; if master moved ahead during the work, rebase first and re-verify (tests + typecheck) before the ff merge.
 - Small fixes may go directly on master; the review gates above still apply.
 
 ## Character set rules
