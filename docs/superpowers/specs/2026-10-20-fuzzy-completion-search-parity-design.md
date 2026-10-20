@@ -1,6 +1,6 @@
 ---
 title: Fuzzy Path Completion + Viewer Search Vim Parity -- Design
-status: approved
+status: done
 plan: ../plans/2026-10-20-fuzzy-completion-search-parity.md
 ---
 
@@ -62,6 +62,7 @@ Dotfile rule: entries whose name starts with `.` stay hidden unless the query st
 - Enumeration chain, first success wins, and the winning enumerator is memoized in the entry so refreshes skip re-probing:
   1. `git ls-files -z --cached --others --exclude-standard` in the root (tracked + untracked, gitignore-respected); directory entries are derived synthetically as all ancestor paths of the listed files.
   2. `fd --type f --type d` in the root, with ignore handling keyed off the root: if the root contains a `.gitignore` file, pass `--no-require-git` so fd follows it even outside a repository (an fd too old for the flag exits non-zero and the chain falls through to the walk); otherwise pass `-E` excludes for the common non-indexable directory list below. This matters because fd only respects `.gitignore` inside git repositories, and it runs precisely when git failed, so unfiltered fd would enumerate `node_modules` wholesale and stick the root in the `oversized` state. `fd` is deliberately NOT a hard dependency and gets no startup-time dependency check -- a missing `fd` is detected by spawn failure at probe time and simply advances the chain, and the memoized enumerator means the probe cost is paid at most once per session.
+  Note: fd-sourced entries carry no directory marker, so when the fd enumerator wins (git absent), directory candidates appear without the `/` suffix and drill-down requires a typed `/`; accepted as bounded degradation (amendment recorded 2026-10-20 at final review).
   3. Bounded recursive walk skipping the common non-indexable directory list, with depth cap 8.
 - Common non-indexable directory list (shared by the fd `-E` excludes and the walk skip list): `.git`, `node_modules`, `dist`, `build`, `coverage`, `target`, `.next`, `.nuxt`, `.svelte-kit`, `.turbo`, `.cache`, `.venv`, `venv`, `__pycache__`. `vendor`/`out`/`bin`/`obj` are deliberately NOT excluded (real source lives there in some projects).
 - Symlinks are never followed (no fd `--follow`; the walk does not traverse them): this prevents escaping the workspace root, link cycles, and duplicate candidates. `git ls-files` lists symlinks as plain entries, which read through naturally at annotation time.

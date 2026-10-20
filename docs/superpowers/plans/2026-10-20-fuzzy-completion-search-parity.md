@@ -1,6 +1,6 @@
 ---
 title: Fuzzy Path Completion + Viewer Search Vim Parity - Implementation Plan
-status: in-progress
+status: done
 progress: 4/4
 spec: ../specs/2026-10-20-fuzzy-completion-search-parity-design.md
 ---
@@ -131,7 +131,7 @@ Tick Task 4, `progress: 4/4`, commit `docs(superpowers)`.
 
 ## Final review
 
-- [ ] Broad review pass (fresh reviewer subagent, per subagent-driven-development Phase 5): spec-compliance against every spec section (Part A scope rules, index design, dependency policy, Part B amendments and their recording) plus code quality across the full diff; then the controller verifies `node --test` + `npx tsc --noEmit` green, updates STATUS.md (plan/spec to Done), and presents the branch for merge approval.
+- [x] Broad review pass (fresh reviewer subagent, per subagent-driven-development Phase 5): spec-compliance against every spec section (Part A scope rules, index design, dependency policy, Part B amendments and their recording) plus code quality across the full diff; then the controller verifies `node --test` + `npx tsc --noEmit` green, updates STATUS.md (plan/spec to Done), and presents the branch for merge approval.
 
 ## Follow-ups
 
