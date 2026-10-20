@@ -45,8 +45,10 @@ There is no workspace-wide completion: without a slash the user can only complet
 `completePath(argumentPrefix, cwd)` splits at the last `/` as today:
 
 1. **Empty prefix** (`argumentPrefix === ""`): unchanged; list cwd entries, directories first, prefix filter trivially passes.
-2. **Prefix contains a slash**: `dirPart` is resolved verbatim as today; the `base` fragment is matched with `fuzzyMatch` against entry names of that single directory (non-recursive).
-   Directories are still grouped before files; within each group, order by fuzzy score instead of alphabetical.
+2. **Prefix contains a slash**: `dirPart` is resolved verbatim as today; the query fuzzy-matches the **workspace index subtree under `dirPart`** (recursive): index entries with the `dirPart` prefix are fuzzy-matched on the remainder, so typing can penetrate subdirectories in one shot (e.g. `src/vsta` reaches `src/viewer/state.ts`); a `dirPart` that is itself a complete directory path with an empty remainder lists that directory's immediate entries (browsing equivalent).
+   Directories appear as `/`-suffixed candidates; order by fuzzy score with enumeration order as tiebreak; `MAX_ITEMS` (100) cap applies.
+   While the index is `building` / `oversized` / `failed`, this rule degrades to a non-recursive fuzzy listing of the single `dirPart` directory (the pre-amendment behavior).
+   (Amended 2026-10-20 after manual E2E: the original non-recursive rule made every directory level a separate completion round-trip, which blocked drill-down typing.)
 3. **No slash, non-empty**: fuzzy-match against the workspace index (below); `fuzzyFilter` ranks by score; results are capped at `MAX_ITEMS` (100) as today.
    While the index is `building` / `oversized` / `failed`, this rule falls back to rule 1 behavior for the duration.
    Directory candidates are included (value suffixed with `/`) so the user can drill into a directory without typing its full path.
