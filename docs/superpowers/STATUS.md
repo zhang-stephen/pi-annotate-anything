@@ -13,6 +13,8 @@ Do not open docs marked `done` unless the current work touches that area.
 
 ## Known issues (deferred, no spec yet)
 
+- 2026-10-20: path-completion symlinked dirPart: the ready-index subtree match is lexical, so a symlinked directory part (linkdir/ -> sub/) matches nothing in the index while the degraded path lists through the symlink; candidate fix: treat "no entry carries the prefix at all" as a fall-through to the live directory listing. Also absorbs the case-mismatched dirPart edge on case-insensitive filesystems.
+
 - 2026-10-20: annotation payload mini-prompt (next batch): append ONE permission-style line per message after token expansion in transform.ts (HTML-comment form, e.g. `<!-- Read the referenced files for surrounding context as needed. -->`); amends the payload contract in specs/2026-10-17-annotate-anything-mvp-design.md (line ~73); not per-annotation, not imperative.
 - 2026-10-20: viewer curswant goal-column memory (next batch): j/k (and arrows post-B1) should preserve the wanted column across short lines instead of losing it to the clamp (movement.ts:113 MVP simplification); h/l, gg/G, search jumps, mouse, mode transitions reset it; needs ViewerState.wantedCol, ~6 touchpoints, ~10 tests.
 - 2026-10-20: viewer pending-g leftovers (future): if screen-line motions (the g0/gj/gk family) are ever added, the pending-g digit swallow needs a carve-out for `0`; the `g` keypress itself already clears any armed count, so no count survives the swallow.
