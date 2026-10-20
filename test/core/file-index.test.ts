@@ -23,6 +23,28 @@ const FD_BASE_ARGS = ["--type", "f", "--type", "d"];
 // Without a root .gitignore the shared non-indexable list is passed as -E
 // excludes; with one, fd follows it via --no-require-git instead.
 const FD_EXCLUDE_ARGS = [...FD_BASE_ARGS, ...NON_INDEXABLE_DIRS.flatMap((d) => ["-E", d])];
+
+// Pin the list contents literally: every other consumer derives from the
+// constant, so an accidental edit (e.g. adding vendor) would otherwise stay
+// green while violating the spec's deliberate non-exclusion.
+test("NON_INDEXABLE_DIRS matches the spec's shared list exactly", () => {
+  assert.deepEqual([...NON_INDEXABLE_DIRS], [
+    ".git",
+    "node_modules",
+    "dist",
+    "build",
+    "coverage",
+    "target",
+    ".next",
+    ".nuxt",
+    ".svelte-kit",
+    ".turbo",
+    ".cache",
+    ".venv",
+    "venv",
+    "__pycache__",
+  ]);
+});
 const FD_FOLLOW_GITIGNORE_ARGS = [...FD_BASE_ARGS, "--no-require-git"];
 
 // The parent passes stdio ["ignore", "pipe", "ignore"] so a chatty child's
