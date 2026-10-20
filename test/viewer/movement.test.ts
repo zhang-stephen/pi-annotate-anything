@@ -513,6 +513,6 @@ test("count: arrows without a pending count move exactly one cell", () => {
   assert.deepEqual(view(start, "\x1b[B").state.cursor, { line: 4, col: 1 });
   assert.deepEqual(view(start, "\x1b[C").state.cursor, { line: 3, col: 2 });
   assert.deepEqual(view(start, "\x1b[D").state.cursor, { line: 3, col: 0 });
-  // ...and leave no armed count behind (reviewer P2: pin the count side too).
+  // ...and leave no armed count behind (pin the count side too).
   assert.equal(view(start, "\x1b[B").state.count ?? null, null);
 });

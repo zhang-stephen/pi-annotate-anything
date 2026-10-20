@@ -68,7 +68,8 @@ export function resetCycleOnMove(res: ViewerResult, prev: ViewerState): ViewerRe
 }
 
 // Count wrapper: a pending count applies to exactly one keypress. The count
-// consumers (j/k/h/l/G/n/N) clear it themselves; any other non-digit key
+// consumers (j/k/h/l/G/n/N and the four arrow keys) clear it
+// themselves; any other non-digit key
 // that returned the count unchanged still takes its normal effect but drops
 // the count, so a stale count never leaks into a later motion. Only a
 // non-null incoming count is cleared in place, so keys that are no-ops on
