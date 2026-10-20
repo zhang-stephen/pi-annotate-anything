@@ -81,6 +81,7 @@ test("the scan covers the full src module map (guards against a vacuous walk)", 
   const moved = [
     "core/selection.ts",
     "core/file-range.ts",
+    "core/file-index.ts",
     "core/search.ts",
     "core/store.ts",
     "core/message.ts",
