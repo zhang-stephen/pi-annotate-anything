@@ -1,7 +1,7 @@
 ---
 title: Vim behavior alignment (curswant + showcmd) implementation plan
 status: in-progress
-progress: 1/2
+progress: 2/2
 spec: none
 ---
 
@@ -28,11 +28,11 @@ Files: `src/viewer/state.ts`, `src/viewer/movement.ts`, `test/viewer/state.test.
 
 Files: `src/viewer/movement.ts`, `src/viewer/viewer.ts`, `src/viewer/status-line.ts`, `test/viewer/status-line.test.ts`, `test/viewer/viewer.test.ts`
 
-- [ ] Pure derivation `pendingKeysOf(state: ViewerState): string` in `movement.ts`: `(state.count !== null ? String(state.count) : "") + (state.pending ?? "")`.
-- [ ] `renderCommandLine` in `status-line.ts` (line ~159): when no input prompt is active, right-align the pending string in the cmdline row alongside the left-side hints; a transient message already owns the right corner (accent), so while a message is showing the keys are dropped entirely (vim's shared-corner behavior).
-- [ ] Suppressed entirely while a prompt (search, comment, command) is active.
-- [ ] Tests: derivation cases (count only / pending `g` only / both / none); right alignment; message + keys coexistence; overlap drops keys; prompt-active suppression.
-- [ ] Steps: failing tests first, implement, suite green, commit `feat(viewer): show pending keys in the cmdline row`.
+- [x] Pure derivation `pendingKeysOf(state: ViewerState): string` in `movement.ts`: `(state.count !== null ? String(state.count) : "") + (state.pending ?? "")`.
+- [x] `renderCommandLine` in `status-line.ts` (line ~159): when no input prompt is active, right-align the pending string in the cmdline row alongside the left-side hints; a transient message already owns the right corner (accent), so while a message is showing the keys are dropped entirely (vim's shared-corner behavior).
+- [x] Suppressed entirely while a prompt (search, comment, command) is active (the input variant carries the field but never renders it).
+- [x] Tests: 5 derivation cases in `test/viewer/movement.test.ts` (count only, pending `g` only, both as pure construction, neither, and the `03`-shows-`3` pin); 4 render tests in `test/viewer/status-line.test.ts` (right alignment with hints cut, message drops keys byte-identically, input-row suppression, narrow/over-wide sanity); 1 painted-frame integration test in `test/viewer/viewer.test.ts` following actual reducer semantics per supervisor decision: `3` shows `3`, `g` shows `g`, `3` then `g` shows `g` (clearUnusedCount drops the count; no stale `3g`), `g` then `5` shows no keys.
+- [x] Steps: failing tests first, implement, suite green (438 pass), commit `feat(viewer): show pending keys in the cmdline row` (`974a33d`).
 
 ## Review focus
 
