@@ -1,6 +1,7 @@
 ---
 title: Viewer Command Line (:) - Design
 status: approved
+plan: ../plans/2026-10-22-viewer-command-line.md
 ---
 
 # Viewer Command Line (:) - Design
