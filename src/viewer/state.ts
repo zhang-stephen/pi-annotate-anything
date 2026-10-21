@@ -157,9 +157,9 @@ function handleMode(state: ViewerState, key: string, lines: string[], viewport: 
       return consumeCount(moved({ ...state, wantedCol: wanted }, { line: state.cursor.line - (state.count ?? 1), col: wanted }, lines, viewport));
     }
     case "0":
-      return moved(state, { line: state.cursor.line, col: 0 }, lines, viewport);
+      return moved({ ...state, wantedCol: null }, { line: state.cursor.line, col: 0 }, lines, viewport);
     case "$": // end-exclusive convention: max clampable col equals line length
-      return moved(state, { line: state.cursor.line, col: Number.MAX_SAFE_INTEGER }, lines, viewport);
+      return moved({ ...state, wantedCol: null }, { line: state.cursor.line, col: Number.MAX_SAFE_INTEGER }, lines, viewport);
     case "G": {
       // {count}G goes to the 1-based line `count`, clamped into the file;
       // plain G keeps the last-line jump.
@@ -179,14 +179,22 @@ function handleMode(state: ViewerState, key: string, lines: string[], viewport: 
       return repeatSearch({ ...state, wantedCol: null }, key === "n" ? 1 : -1, state.count ?? 1, lines, viewport);
     case "g":
       return { state: { ...state, pending: "g" } };
-    case "\x04": // ctrl+d: half page down
-      return moved(state, { line: state.cursor.line + HALF_PAGE(vh), col: state.cursor.col }, lines, viewport);
-    case "\x15": // ctrl+u: half page up
-      return moved(state, { line: state.cursor.line - HALF_PAGE(vh), col: state.cursor.col }, lines, viewport);
-    case "\x1b[6~": // PgDn
-      return moved(state, { line: state.cursor.line + vh, col: state.cursor.col }, lines, viewport);
-    case "\x1b[5~": // PgUp
-      return moved(state, { line: state.cursor.line - vh, col: state.cursor.col }, lines, viewport);
+    case "\x04": { // ctrl+d: half page down; vertical family, aim at the goal
+      const wanted = state.wantedCol ?? state.cursor.col;
+      return moved({ ...state, wantedCol: wanted }, { line: state.cursor.line + HALF_PAGE(vh), col: wanted }, lines, viewport);
+    }
+    case "\x15": { // ctrl+u: half page up
+      const wanted = state.wantedCol ?? state.cursor.col;
+      return moved({ ...state, wantedCol: wanted }, { line: state.cursor.line - HALF_PAGE(vh), col: wanted }, lines, viewport);
+    }
+    case "\x1b[6~": { // PgDn
+      const wanted = state.wantedCol ?? state.cursor.col;
+      return moved({ ...state, wantedCol: wanted }, { line: state.cursor.line + vh, col: wanted }, lines, viewport);
+    }
+    case "\x1b[5~": { // PgUp
+      const wanted = state.wantedCol ?? state.cursor.col;
+      return moved({ ...state, wantedCol: wanted }, { line: state.cursor.line - vh, col: wanted }, lines, viewport);
+    }
     case "v":
       if (state.mode === "normal") return { state: { ...state, mode: "visual-char", anchor: state.cursor, visualMode: "char" } };
       if (state.mode === "visual-char") return { state: { ...state, mode: "normal", anchor: null } };

@@ -439,3 +439,32 @@ test("curswant: Right (\\x1b[C) resets the goal column like l", () => {
   const next = viewOn(RAILS, right.state, "j");
   assert.deepEqual(next.state.cursor, { line: 2, col: 2 });
 });
+test("curswant: 0 and $ reset the goal column", () => {
+  const down = viewOn(RAILS, viewer({ cursor: { line: 0, col: 10 } }), "j");
+  const zero = viewOn(RAILS, down.state, "0");
+  assert.equal(zero.state.wantedCol, null);
+  const next = viewOn(RAILS, zero.state, "j");
+  assert.deepEqual(next.state.cursor, { line: 2, col: 0 }); // fresh goal 0, not 10
+  const dollar = viewOn(RAILS, down.state, "$"); // "ab" end, col 2
+  assert.equal(dollar.state.wantedCol, null);
+  const after = viewOn(RAILS, dollar.state, "j");
+  assert.deepEqual(after.state.cursor, { line: 2, col: 2 }); // fresh goal 2, not 10
+});
+
+test("curswant: ctrl+d/ctrl+u and PgDn/PgUp keep the goal column", () => {
+  // Rails every few lines so half-page (2 of vh 5) and full-page (5) jumps
+  // land on long lines and the aimed column shows.
+  const R = "x".repeat(20);
+  const tall = [R, "a", "ab", R, "ab", "ab", "ab", "ab", R];
+  const down = viewOn(tall, viewer({ cursor: { line: 0, col: 10 } }), "j"); // clamps to col 1 on "a", goal 10 kept
+  const half = viewOn(tall, down.state, "\x04"); // ctrl+d: line 1+2 lands on the rail
+  assert.deepEqual(half.state.cursor, { line: 3, col: 10 }); // aimed at the goal
+  assert.equal(half.state.wantedCol, 10);
+  const dn = viewOn(tall, half.state, "\x1b[6~"); // PgDn: 3+5 lands on the last rail
+  assert.deepEqual(dn.state.cursor, { line: 8, col: 10 });
+  const full = viewOn(tall, dn.state, "\x1b[5~"); // PgUp: 8-5 back to the rail
+  assert.deepEqual(full.state.cursor, { line: 3, col: 10 });
+  const up = viewOn(tall, full.state, "\x15"); // ctrl+u: 3-2 clamps onto "a"
+  assert.deepEqual(up.state.cursor, { line: 1, col: 1 }); // clamp holds, goal kept
+  assert.equal(up.state.wantedCol, 10);
+});
