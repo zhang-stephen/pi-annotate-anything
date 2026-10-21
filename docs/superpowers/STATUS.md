@@ -12,7 +12,7 @@ Do not open docs marked `done` unless the current work touches that area.
   - approved: `:` command mode, minimal table (quit/nohlsearch + bare address), buffer-ready grammar
   - plan: `docs/superpowers/plans/2026-10-22-viewer-command-line.md` (draft, 0/5)
 - plan: `docs/superpowers/plans/2026-10-22-vim-behavior-alignment.md`
-  - draft (spec: none), 0/2: curswant goal-column memory + showcmd pending keys
+  - in progress (spec: none), 1/2: curswant done (`bbf1150` + acceptance fix `095ac08`); showcmd next
 - spec: `docs/superpowers/specs/2026-10-17-ci-tui-e2e-design.md`
   - draft, on hold: low priority, do not schedule (user call 2026-10-20)
 
