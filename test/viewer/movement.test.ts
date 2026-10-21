@@ -73,14 +73,14 @@ test("reduceViewer: h/l clamp at column bounds without wrapping lines", () => {
   assert.deepEqual(atStart.state.cursor, { line: 0, col: 0 });
 });
 
-test("reduceViewer: j/k move lines and clamp the column to the landed line", () => {
+test("reduceViewer: j/k preserve the goal column across short lines", () => {
   const lines = ["alpha", "hi", "omega"];
   const down = reduceViewer(viewer({ cursor: { line: 0, col: 5 } }), "j", lines, VP);
-  assert.deepEqual(down.state.cursor, { line: 1, col: 2 });
+  assert.deepEqual(down.state.cursor, { line: 1, col: 2 }); // the short-line clamp still holds
   const down2 = reduceViewer(down.state, "j", lines, VP);
-  assert.deepEqual(down2.state.cursor, { line: 2, col: 2 });
+  assert.deepEqual(down2.state.cursor, { line: 2, col: 5 }); // goal column restored, not the clamp
   const up = reduceViewer(down2.state, "k", lines, VP);
-  assert.deepEqual(up.state.cursor, { line: 1, col: 2 });
+  assert.deepEqual(up.state.cursor, { line: 1, col: 2 }); // k re-clamps toward the goal
 });
 
 test("reduceViewer: j/k clamp at file bounds", () => {

@@ -67,6 +67,18 @@ export function resetCycleOnMove(res: ViewerResult, prev: ViewerState): ViewerRe
   return { ...res, state: { ...st, cycleOrdinal: 0 } };
 }
 
+// wantedCol lifecycle: the goal column belongs to one j/k session, so any
+// mode transition (v/V/c/Esc//, a comment or search submit) ends the session
+// and starts a fresh one. Applied post-reducer by comparing the incoming and
+// outgoing mode, so every transition branch is covered without touching each
+// one. Mouse clicks have no reducer touchpoint yet; when they land, they
+// must reset wantedCol like any other transition.
+export function resetWantedColOnModeChange(res: ViewerResult, prev: ViewerState): ViewerResult {
+  const st = res.state;
+  if (st.mode === prev.mode || (st.wantedCol ?? null) === null) return res;
+  return { ...res, state: { ...st, wantedCol: null } };
+}
+
 // Count wrapper: a pending count applies to exactly one keypress. The count
 // consumers (j/k/h/l/G/n/N and the four arrow keys) clear it
 // themselves; any other non-digit key
@@ -111,9 +123,9 @@ export function keepVisible(state: ViewerState, lines: string[], viewport: Viewe
 }
 
 export function moved(state: ViewerState, to: Position, lines: string[], viewport: ViewerViewport): ViewerResult {
-  // MVP simplification: no goal-column (curswant) memory - j/k onto a short
-  // line loses the original column permanently. Deliberate; revisit if users
-  // report it as un-vim-like.
+  // clampPosition pins the landing col to the target line's length; the
+  // pre-clamp goal column survives in state.wantedCol, which the j/k arms
+  // capture and re-aim on the next vertical move (vim curswant).
   return { state: keepVisible({ ...state, cursor: clampPosition(to, lines) }, lines, viewport) };
 }
 

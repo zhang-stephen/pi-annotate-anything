@@ -307,3 +307,135 @@ test("message: cleared by the next keypress, re-shown on a repeated identical ev
   const rewrapped = view(wrapped.state, "N"); // wrap the other way from the same spot
   assert.equal(rewrapped.state.message, "search hit TOP, continuing at BOTTOM");
 });
+
+// Goal-column memory (curswant) ---------------------------------------------
+
+// Two long rails (20 cols) around short lines: a goal column of 10 must
+// survive the short hops and come back on the next rail. contentWidth 30
+// exceeds every line, so no horizontal follow interferes.
+const RAILS = ["x".repeat(20), "ab", "x".repeat(20), "cd", "x".repeat(20)];
+
+function viewOn(lines: string[], state: ViewerState, key: string) {
+  return reduceViewer(state, key, lines, vpv(30, 20));
+}
+
+test("curswant: j over a short line restores the original column on the way back", () => {
+  const down = viewOn(RAILS, viewer({ cursor: { line: 0, col: 10 } }), "j");
+  assert.deepEqual(down.state.cursor, { line: 1, col: 2 }); // clamped on "ab"
+  assert.equal(down.state.wantedCol, 10); // the goal survives the clamp
+  const back = viewOn(RAILS, down.state, "j");
+  assert.deepEqual(back.state.cursor, { line: 2, col: 10 }); // restored
+});
+
+test("curswant: k mirrors the goal-column restore across a short line", () => {
+  const up = viewOn(RAILS, viewer({ cursor: { line: 2, col: 10 } }), "k");
+  assert.deepEqual(up.state.cursor, { line: 1, col: 2 });
+  const back = viewOn(RAILS, up.state, "k");
+  assert.deepEqual(back.state.cursor, { line: 0, col: 10 });
+});
+
+test("curswant: repeated j through a field of short lines keeps the goal column", () => {
+  const field = ["x".repeat(20), "a", "b", "c", "x".repeat(20)];
+  let state = viewer({ cursor: { line: 0, col: 10 } });
+  for (const line of [1, 2, 3]) {
+    state = viewOn(field, state, "j").state;
+    assert.deepEqual(state.cursor, { line, col: 1 }); // clamped, goal kept
+  }
+  const back = viewOn(field, state, "j");
+  assert.deepEqual(back.state.cursor, { line: 4, col: 10 }); // goal restored
+});
+
+test("curswant: h resets the goal column", () => {
+  const down = viewOn(RAILS, viewer({ cursor: { line: 0, col: 10 } }), "j");
+  const left = viewOn(RAILS, down.state, "h");
+  assert.equal(left.state.wantedCol, null);
+  const next = viewOn(RAILS, left.state, "j"); // aims at the clamped col, not the stale goal
+  assert.deepEqual(next.state.cursor, { line: 2, col: 1 });
+});
+
+test("curswant: l resets the goal column", () => {
+  const down = viewOn(RAILS, viewer({ cursor: { line: 0, col: 10 } }), "j");
+  const right = viewOn(RAILS, down.state, "l"); // parked at "ab" end, col stays 2
+  assert.equal(right.state.wantedCol, null);
+  const next = viewOn(RAILS, right.state, "j");
+  assert.deepEqual(next.state.cursor, { line: 2, col: 2 }); // not 10
+});
+
+test("curswant: gg resets the goal column", () => {
+  const up = viewOn(RAILS, viewer({ cursor: { line: 4, col: 10 } }), "k");
+  assert.equal(up.state.wantedCol, 10);
+  const home = viewOn(RAILS, viewOn(RAILS, up.state, "g").state, "g");
+  assert.deepEqual(home.state.cursor, { line: 0, col: 2 }); // gg keeps the clamped col
+  assert.equal(home.state.wantedCol, null);
+  const next = viewOn(RAILS, viewOn(RAILS, home.state, "j").state, "j");
+  assert.deepEqual(next.state.cursor, { line: 2, col: 2 }); // fresh goal 2, not 10
+});
+
+test("curswant: G resets the goal column", () => {
+  const down = viewOn(RAILS, viewer({ cursor: { line: 0, col: 10 } }), "j");
+  const last = viewOn(RAILS, down.state, "G");
+  assert.deepEqual(last.state.cursor, { line: 4, col: 2 }); // G keeps the clamped col
+  assert.equal(last.state.wantedCol, null);
+  const next = viewOn(RAILS, viewOn(RAILS, last.state, "k").state, "k");
+  assert.deepEqual(next.state.cursor, { line: 2, col: 2 }); // fresh goal 2, not 10
+});
+
+test("curswant: an n jump resets the goal column", () => {
+  const down = viewOn(RAILS, viewer({ cursor: { line: 0, col: 10 }, lastSearch: "x" }), "j");
+  assert.equal(down.state.wantedCol, 10);
+  const jump = viewOn(RAILS, down.state, "n"); // next "x" match at/after (1,2) is (2,0)
+  assert.deepEqual(jump.state.cursor, { line: 2, col: 0 });
+  assert.equal(jump.state.wantedCol, null);
+  const next = viewOn(RAILS, jump.state, "k");
+  assert.deepEqual(next.state.cursor, { line: 1, col: 0 }); // fresh goal 0, not 10
+});
+
+test("curswant: a mode transition resets the goal column", () => {
+  const down = viewOn(RAILS, viewer({ cursor: { line: 0, col: 10 } }), "j");
+  const visual = viewOn(RAILS, down.state, "v"); // normal -> visual resets
+  assert.equal(visual.state.wantedCol, null);
+  const back = viewOn(RAILS, visual.state, "\x1b"); // Esc to normal stays none
+  assert.equal(back.state.wantedCol, null);
+  const next = viewOn(RAILS, back.state, "j");
+  assert.deepEqual(next.state.cursor, { line: 2, col: 2 }); // aims at clamped col, not 10
+});
+
+test("curswant: visual-mode j/k preserve the goal column too", () => {
+  let res = viewOn(RAILS, viewer({ cursor: { line: 0, col: 10 } }), "v");
+  assert.equal(res.state.mode, "visual-char");
+  res = viewOn(RAILS, res.state, "j");
+  assert.deepEqual(res.state.cursor, { line: 1, col: 2 }); // clamped
+  res = viewOn(RAILS, res.state, "j");
+  assert.deepEqual(res.state.cursor, { line: 2, col: 10 }); // goal restored in visual
+  assert.deepEqual(res.state.anchor, { line: 0, col: 10 }); // anchor never moved
+});
+
+test("curswant: Down (\\x1b[B) preserves the goal column like j", () => {
+  const down = viewOn(RAILS, viewer({ cursor: { line: 0, col: 10 } }), "\x1b[B");
+  assert.deepEqual(down.state.cursor, { line: 1, col: 2 });
+  const next = viewOn(RAILS, down.state, "\x1b[B");
+  assert.deepEqual(next.state.cursor, { line: 2, col: 10 });
+});
+
+test("curswant: Up (\\x1b[A) preserves the goal column like k", () => {
+  const up = viewOn(RAILS, viewer({ cursor: { line: 2, col: 10 } }), "\x1b[A");
+  assert.deepEqual(up.state.cursor, { line: 1, col: 2 });
+  const next = viewOn(RAILS, up.state, "\x1b[A");
+  assert.deepEqual(next.state.cursor, { line: 0, col: 10 });
+});
+
+test("curswant: Left (\\x1b[D) resets the goal column like h", () => {
+  const down = viewOn(RAILS, viewer({ cursor: { line: 0, col: 10 } }), "\x1b[B");
+  const left = viewOn(RAILS, down.state, "\x1b[D");
+  assert.equal(left.state.wantedCol, null);
+  const next = viewOn(RAILS, left.state, "j");
+  assert.deepEqual(next.state.cursor, { line: 2, col: 1 });
+});
+
+test("curswant: Right (\\x1b[C) resets the goal column like l", () => {
+  const down = viewOn(RAILS, viewer({ cursor: { line: 0, col: 10 } }), "\x1b[B");
+  const right = viewOn(RAILS, down.state, "\x1b[C"); // parked at "ab" end
+  assert.equal(right.state.wantedCol, null);
+  const next = viewOn(RAILS, right.state, "j");
+  assert.deepEqual(next.state.cursor, { line: 2, col: 2 });
+});

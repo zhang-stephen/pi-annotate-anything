@@ -14,6 +14,7 @@ import {
   moved,
   ordinalOf,
   resetCycleOnMove,
+  resetWantedColOnModeChange,
   stackAtCursor,
 } from "./movement.ts";
 import { repeatSearch, searchStep } from "./search-mode.ts";
@@ -74,6 +75,14 @@ export interface ViewerState {
   // callers that construct this state without the field (pre-count callers)
   // stay valid; the reducer treats undefined like null.
   count?: number | null;
+  // Goal column (vim curswant) of vertical motions: j/k capture it before
+  // moving, land at min(wanted, target line length), and keep the unclamped
+  // goal so crossing short lines preserves the aim. h/l/G/gg/n/N and every
+  // mode transition reset it to null, which makes the next j/k fall back to
+  // the cursor column. Optional so callers that construct this state without
+  // the field (pre-alignment callers) stay valid; the reducer treats
+  // undefined like null.
+  wantedCol?: number | null;
   // Transient statusline feedback ("search hit BOTTOM...", "Pattern not
   // found", pattern compile errors): reduceViewer drops the incoming message
   // before dispatch and branches that want one set it fresh, so a message
@@ -121,21 +130,32 @@ function handleMode(state: ViewerState, key: string, lines: string[], viewport: 
   const visual = state.mode === "visual-char" || state.mode === "visual-line";
   switch (key) {
     case "h":
-      return consumeCount(moved(state, { ...state.cursor, col: state.cursor.col - (state.count ?? 1) }, lines, viewport));
+      return consumeCount(moved({ ...state, wantedCol: null }, { ...state.cursor, col: state.cursor.col - (state.count ?? 1) }, lines, viewport));
     case "\x1b[D":
-      return consumeCount(moved(state, { ...state.cursor, col: state.cursor.col - (state.count ?? 1) }, lines, viewport));
+      return consumeCount(moved({ ...state, wantedCol: null }, { ...state.cursor, col: state.cursor.col - (state.count ?? 1) }, lines, viewport));
     case "l":
-      return consumeCount(moved(state, { ...state.cursor, col: state.cursor.col + (state.count ?? 1) }, lines, viewport));
+      return consumeCount(moved({ ...state, wantedCol: null }, { ...state.cursor, col: state.cursor.col + (state.count ?? 1) }, lines, viewport));
     case "\x1b[C":
-      return consumeCount(moved(state, { ...state.cursor, col: state.cursor.col + (state.count ?? 1) }, lines, viewport));
-    case "j":
-      return consumeCount(moved(state, { line: state.cursor.line + (state.count ?? 1), col: state.cursor.col }, lines, viewport));
-    case "\x1b[B":
-      return consumeCount(moved(state, { line: state.cursor.line + (state.count ?? 1), col: state.cursor.col }, lines, viewport));
-    case "k":
-      return consumeCount(moved(state, { line: state.cursor.line - (state.count ?? 1), col: state.cursor.col }, lines, viewport));
-    case "\x1b[A":
-      return consumeCount(moved(state, { line: state.cursor.line - (state.count ?? 1), col: state.cursor.col }, lines, viewport));
+      return consumeCount(moved({ ...state, wantedCol: null }, { ...state.cursor, col: state.cursor.col + (state.count ?? 1) }, lines, viewport));
+    case "j": {
+      // Goal-column memory: aim at the stored goal (or the current column on
+      // a fresh session); moved() lands on it clamped to the target line and
+      // the unclamped goal rides in wantedCol for the next vertical move.
+      const wanted = state.wantedCol ?? state.cursor.col;
+      return consumeCount(moved({ ...state, wantedCol: wanted }, { line: state.cursor.line + (state.count ?? 1), col: wanted }, lines, viewport));
+    }
+    case "\x1b[B": {
+      const wanted = state.wantedCol ?? state.cursor.col;
+      return consumeCount(moved({ ...state, wantedCol: wanted }, { line: state.cursor.line + (state.count ?? 1), col: wanted }, lines, viewport));
+    }
+    case "k": {
+      const wanted = state.wantedCol ?? state.cursor.col;
+      return consumeCount(moved({ ...state, wantedCol: wanted }, { line: state.cursor.line - (state.count ?? 1), col: wanted }, lines, viewport));
+    }
+    case "\x1b[A": {
+      const wanted = state.wantedCol ?? state.cursor.col;
+      return consumeCount(moved({ ...state, wantedCol: wanted }, { line: state.cursor.line - (state.count ?? 1), col: wanted }, lines, viewport));
+    }
     case "0":
       return moved(state, { line: state.cursor.line, col: 0 }, lines, viewport);
     case "$": // end-exclusive convention: max clampable col equals line length
@@ -145,7 +165,7 @@ function handleMode(state: ViewerState, key: string, lines: string[], viewport: 
       // plain G keeps the last-line jump.
       const cnt = state.count ?? null;
       const line = cnt === null ? lines.length - 1 : Math.min(Math.max(cnt - 1, 0), lines.length - 1);
-      return consumeCount(moved(state, { line, col: state.cursor.col }, lines, viewport));
+      return consumeCount(moved({ ...state, wantedCol: null }, { line, col: state.cursor.col }, lines, viewport));
     }
     case "/":
       // Search entry: the cursor becomes the origin that incremental jumps
@@ -155,7 +175,8 @@ function handleMode(state: ViewerState, key: string, lines: string[], viewport: 
     case "n":
     case "N":
       if (state.mode !== "normal") return { state };
-      return repeatSearch(state, key === "n" ? 1 : -1, state.count ?? 1, lines, viewport);
+      // A jump re-aims the cursor: the goal-column session ends here.
+      return repeatSearch({ ...state, wantedCol: null }, key === "n" ? 1 : -1, state.count ?? 1, lines, viewport);
     case "g":
       return { state: { ...state, pending: "g" } };
     case "\x04": // ctrl+d: half page down
@@ -257,8 +278,8 @@ export function reduceViewer(
   // bit-for-bit unchanged (undefined stays absent).
   if ((state.message ?? null) !== null) state = { ...state, message: null };
 
-  if (state.mode === "comment") return resetCycleOnMove(commentStep(state, key, lines, viewport), state);
-  if (state.mode === "search") return resetCycleOnMove(searchStep(state, key, lines, viewport), state);
+  if (state.mode === "comment") return resetCycleOnMove(resetWantedColOnModeChange(commentStep(state, key, lines, viewport), state), state);
+  if (state.mode === "search") return resetCycleOnMove(resetWantedColOnModeChange(searchStep(state, key, lines, viewport), state), state);
 
   // Count prefix, normal mode only, before two-stroke handling: 1-9 start a
   // pending count, 0-9 extend it; a bare 0 (no pending count) falls through
@@ -286,7 +307,7 @@ export function reduceViewer(
   let res: ViewerResult;
   if (current.pending !== null) {
     if (key === current.pending) {
-      res = moved({ ...current, pending: null }, { line: 0, col: current.cursor.col }, lines, viewport);
+      res = moved({ ...current, pending: null, wantedCol: null }, { line: 0, col: current.cursor.col }, lines, viewport);
     } else {
       current = { ...current, pending: null };
       res = handleMode(current, key, lines, viewport, pending);
@@ -294,5 +315,5 @@ export function reduceViewer(
   } else {
     res = handleMode(current, key, lines, viewport, pending);
   }
-  return resetCycleOnMove(clearUnusedCount(res, key, state), state);
+  return resetCycleOnMove(clearUnusedCount(resetWantedColOnModeChange(res, state), key, state), state);
 }
