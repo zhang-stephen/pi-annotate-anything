@@ -1,7 +1,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 
-import { stackAtCursor, cycleTarget } from "../../src/viewer/movement.ts";
+import { stackAtCursor, cycleTarget, pendingKeysOf } from "../../src/viewer/movement.ts";
 import { reduceViewer } from "../../src/viewer/state.ts";
 import type { PendingDraft, ViewerState } from "../../src/viewer/state.ts";
 
@@ -515,4 +515,35 @@ test("count: arrows without a pending count move exactly one cell", () => {
   assert.deepEqual(view(start, "\x1b[D").state.cursor, { line: 3, col: 0 });
   // ...and leave no armed count behind (pin the count side too).
   assert.equal(view(start, "\x1b[B").state.count ?? null, null);
+});
+
+// pendingKeysOf (showcmd derivation) ---------------------------------------
+
+test("pendingKeysOf: a count alone renders as its number", () => {
+  assert.equal(pendingKeysOf(viewer({ count: 3 })), "3");
+});
+
+test("pendingKeysOf: a pending stroke alone renders the stroke", () => {
+  assert.equal(pendingKeysOf(viewer({ pending: "g" })), "g");
+});
+
+test("pendingKeysOf: count and pending concatenate in keystroke order", () => {
+  // Direct state construction: via reduceViewer the count never survives
+  // the "g" stroke (clearUnusedCount drops it), so "3g" exists only as a
+  // derived view of such a state, never as reducer output.
+  assert.equal(pendingKeysOf(viewer({ count: 3, pending: "g" })), "3g");
+});
+
+test("pendingKeysOf: neither count nor pending renders empty", () => {
+  assert.equal(pendingKeysOf(viewer()), "");
+});
+
+test("pendingKeysOf renders String(count): leading zeros cannot appear (03 shows 3)", () => {
+  // The count is a number and digits only extend it (3 then 0 -> 30), while
+  // a bare 0 is the column-0 motion, so the keystrokes 0 then 3 leave
+  // count 3: the display is String(3), never a literal "03".
+  const zero = view(viewer(), "0");
+  const three = view(zero.state, "3");
+  assert.equal(three.state.count, 3);
+  assert.equal(pendingKeysOf(three.state), "3");
 });

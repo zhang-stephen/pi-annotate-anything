@@ -17,6 +17,16 @@ export function ordinalOf(state: ViewerState): number {
   return state.cycleOrdinal ?? 0;
 }
 
+// showcmd: the pending keys display, in keystroke order (count prefix first):
+// count 3 -> "3", pending "g" -> "g", both -> "3g", neither -> "". The count
+// renders as its number (String), so leading zeros cannot appear - a bare 0
+// is the column-0 motion, never stored. Derived at render time, so the
+// display always shows the state of the same frame (a digit that clears the
+// pending stroke can never leave a stale "3g" on screen).
+export function pendingKeysOf(state: ViewerState): string {
+  return ((state.count ?? null) !== null ? String(state.count) : "") + (state.pending ?? "");
+}
+
 // All pending drafts covering the cursor position, newest first (pending
 // arrives oldest first). Peels the most-recent hit repeatedly with
 // draftAtCursor, so coverage follows exactly the draftAtCursor rules:

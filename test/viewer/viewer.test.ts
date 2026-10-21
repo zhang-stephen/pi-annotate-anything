@@ -286,6 +286,40 @@ test("statusline and cmdline follow the mode: badge in accent, hints in dim", ()
   assert.ok(bare[bare.length - 2].includes("Enter submit  ctrl+j newline  Esc cancel"));
 });
 
+test("cmdline shows pending keys right-aligned, following state the same frame", () => {
+  const cmdlineOf = (card: AnnotateCard) => card.render(80).map(strip)[4]; // statusline, cmdline, border
+
+  // A count paints alone at the right edge, hints stay on the left.
+  const count = makeCard({ lines: ["alpha", "beta"] });
+  count.card.handleInput("3");
+  let row = cmdlineOf(count.card);
+  assert.ok(row.endsWith(" 3 \u2502"), row);
+  assert.ok(row.startsWith("\u2502 hjkl move"), row);
+  assert.equal(visibleWidth(row), 80);
+
+  // The gg stroke paints alone.
+  const stroke = makeCard({ lines: ["alpha", "beta"] });
+  stroke.card.handleInput("g");
+  assert.ok(cmdlineOf(stroke.card).endsWith(" g \u2502"));
+
+  // "3" then "g": arming the stroke drops the count (existing
+  // clearUnusedCount rule), so the row shows "g", never a stale "3g".
+  const strokeAfterCount = makeCard({ lines: ["alpha", "beta"] });
+  strokeAfterCount.card.handleInput("3");
+  strokeAfterCount.card.handleInput("g");
+  row = cmdlineOf(strokeAfterCount.card);
+  assert.ok(row.endsWith(" g \u2502"), row);
+  assert.ok(!row.includes("3g"), row);
+
+  // A digit during pending "g" clears the stroke and arms no count (pinned
+  // reducer rule): the row is byte-identical to a fresh card's, no keys.
+  const digitAfterStroke = makeCard({ lines: ["alpha", "beta"] });
+  digitAfterStroke.card.handleInput("g");
+  digitAfterStroke.card.handleInput("5");
+  const fresh = makeCard({ lines: ["alpha", "beta"] });
+  assert.equal(cmdlineOf(digitAfterStroke.card), cmdlineOf(fresh.card));
+});
+
 // Geometry --------------------------------------------------------------------
 
 test("content rows clip to the content width (borders + padding take 4 columns)", () => {

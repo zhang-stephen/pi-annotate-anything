@@ -240,3 +240,42 @@ test("cmdline input: an over-wide message falls back to truncation", () => {
   assert.ok(stripTerminalSequences(row).startsWith("m".repeat(17)));
 });
 
+// renderCommandLine: pending keys (showcmd) ---------------------------------
+
+test("renderCommandLine right-aligns pending keys in dim, hints cut to make room", () => {
+  const row = renderCommandLine({ kind: "hints", mode: "normal", pendingKeys: "3" }, 40, plain);
+  // Same right-corner layout as a transient message: the hints lose one
+  // budget column plus the one-space gap, the keys sit flush at the edge.
+  assert.equal(row, FOOTER_HINTS.normal.hints.slice(0, 38) + " 3");
+  assert.equal(visibleWidth(row), 40);
+  const styled = renderCommandLine({ kind: "hints", mode: "normal", pendingKeys: "3" }, 40, colors);
+  assert.ok(styled.endsWith("d(3)"), "keys share the hints' dim style");
+});
+
+test("renderCommandLine drops pending keys while a message owns the right corner", () => {
+  const row = renderCommandLine(
+    { kind: "hints", mode: "normal", message: "Pattern not found: foo", pendingKeys: "3g" },
+    40,
+    colors,
+  );
+  // Byte-identical to the no-keys message row: the accent message keeps the
+  // corner, the keys never paint (vim's shared-corner behavior).
+  assert.equal(row, "d(hjkl move  v/V se) a(Pattern not found: foo)");
+});
+
+test("renderCommandLine never shows pending keys on the input row", () => {
+  const row = renderCommandLine({ kind: "input", prompt: "/", value: "foo", cursorCol: 3, pendingKeys: "3g" }, 10, plain);
+  assert.equal(row, "/foo\x1b[7m \x1b[27m     ");
+});
+
+test("renderCommandLine keeps the pending-keys row sane at narrow widths", () => {
+  const row = renderCommandLine({ kind: "hints", mode: "normal", pendingKeys: "3g" }, 10, plain);
+  assert.equal(row, "hjkl mo 3g");
+  assert.equal(visibleWidth(row), 10);
+  // Degenerate: keys wider than the whole row truncate instead of clipping
+  // the row or wrapping (truncateToWidth carries a trailing ANSI reset, so
+  // assert on the stripped text like the over-wide message test above).
+  const over = renderCommandLine({ kind: "hints", mode: "normal", pendingKeys: "3".repeat(15) }, 10, plain);
+  assert.equal(visibleWidth(over), 10);
+  assert.ok(stripTerminalSequences(over) === "3".repeat(10));
+});

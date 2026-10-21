@@ -24,7 +24,7 @@ import type { Range, VisualMode } from "../core/selection.ts";
 import { CHROME_ROWS, clampScrollLeft, COMMENT_BOX_TITLE, EDITOR_BOX_MAX_WIDTH, EDITOR_MAX_INNER_ROWS, MARKER_FIELD_WIDTH, MAX_VIEWPORT_ROWS, MIN_VIEWPORT_ROWS, PREVIEW_MAX_INNER_ROWS, gutterWidth } from "./layout.ts";
 import { applyStyleSpans, BOLD_ON, DIM_ON, INTENSITY_OFF, UNDERLINE_OFF, UNDERLINE_ON } from "./line-style.ts";
 import type { SpanStyle, StyleSpan } from "./line-style.ts";
-import { stackAtCursor } from "./movement.ts";
+import { pendingKeysOf, stackAtCursor } from "./movement.ts";
 import { reduceViewer } from "./state.ts";
 import type { PendingDraft, ViewerMode, ViewerState } from "./state.ts";
 import { cardModeOf, renderCommandLine, renderStatusLine } from "./status-line.ts";
@@ -317,7 +317,9 @@ export class AnnotateCard implements Component, Focusable {
     // Cmdline: search mode shows the / input itself (the emulated cursor
     // cell rides at the end of the query); every other mode shows the
     // per-mode hints, carrying the reducer's transient message (it survives
-    // exactly one render, right-aligned).
+    // exactly one render, right-aligned) and the showcmd string derived
+    // from the same state, which the renderer drops while a message owns
+    // the corner (and never shows on the input row).
     const searchInput = this.state.mode === "search" ? this.state.search ?? null : null;
     const cmdline = searchInput !== null
       ? renderCommandLine(
@@ -326,7 +328,7 @@ export class AnnotateCard implements Component, Focusable {
         this.colors,
       )
       : renderCommandLine(
-        { kind: "hints", mode: cardModeOf(this.state.mode), message: this.state.message ?? null },
+        { kind: "hints", mode: cardModeOf(this.state.mode), message: this.state.message ?? null, pendingKeys: pendingKeysOf(this.state) },
         contentW,
         this.colors,
       );

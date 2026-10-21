@@ -60,10 +60,13 @@ export interface StatusLineInput {
 // Discriminated union so future input modes plug in without touching the
 // chrome: "hints" shows the per-mode hint line (plus an optional transient
 // message); "input" is the / search line, ready for future : command
-// variants.
+// variants. pendingKeys is the showcmd string (count + pending stroke) for
+// the hints row's right corner; a transient message owns that corner
+// instead (keys are dropped while it shows), and the input row never shows
+// keys regardless of the field.
 export type CommandLineInput =
-  | { kind: "hints"; mode: CardMode; message?: string | null }
-  | { kind: "input"; prompt: string; value: string; cursorCol: number; message?: string | null };
+  | { kind: "hints"; mode: CardMode; message?: string | null; pendingKeys?: string }
+  | { kind: "input"; prompt: string; value: string; cursorCol: number; message?: string | null; pendingKeys?: string };
 
 // Raw SGR for the emulated cmdline cursor cell, mirroring viewer.ts's
 // INVERSE_ON/INVERSE_OFF (defined locally so status-line keeps its imports
@@ -151,11 +154,13 @@ export function renderStatusLine(input: StatusLineInput, innerWidth: number, col
 // hint text in dim, cut from the right when narrow; an optional message
 // (e.g. "Pattern not found: foo") renders right-aligned in accent, with the
 // hints cut first to make room, and the message preserved whole unless it
-// alone exceeds the width (then truncateToWidth). "input": the prompt in
-// accent, the value in default text, and one inverse cursor cell; on
-// overflow the value windows tail-biased so the prompt never scrolls and the
-// cursor cell stays the last column. cursorCol stays in the type reserved
-// for future mid-line editing; rendering is append-only.
+// alone exceeds the width (then truncateToWidth). The pendingKeys showcmd
+// string right-aligns in dim the same way when no message is showing (they
+// share the corner, never coexist); the "input" variant ignores the field.
+// "input": the prompt in accent, the value in default text, and one inverse
+// cursor cell; on overflow the value windows tail-biased so the prompt never
+// scrolls and the cursor cell stays the last column. cursorCol stays in the
+// type reserved for future mid-line editing; rendering is append-only.
 export function renderCommandLine(input: CommandLineInput, innerWidth: number, colors: ChromeColors): string {
   if (input.kind === "input") {
     const promptW = visibleWidth(input.prompt);
@@ -184,8 +189,20 @@ export function renderCommandLine(input: CommandLineInput, innerWidth: number, c
   }
   const message = input.message ? input.message : null;
   if (message === null) {
-    const shown = headByWidth(FOOTER_HINTS[input.mode].hints, innerWidth);
-    return colors.dim(shown) + " ".repeat(Math.max(0, innerWidth - visibleWidth(shown)));
+    const keys = input.pendingKeys ?? "";
+    if (keys === "") {
+      const shown = headByWidth(FOOTER_HINTS[input.mode].hints, innerWidth);
+      return colors.dim(shown) + " ".repeat(Math.max(0, innerWidth - visibleWidth(shown)));
+    }
+    // Showcmd shares the transient message's right corner (the input row
+    // never shows keys): the hints are cut first, the keys stay whole unless
+    // they alone exceed the width, and they keep the hints' dim style.
+    const keysW = visibleWidth(keys);
+    if (keysW > innerWidth) return colors.dim(truncateToWidth(keys, innerWidth, ""));
+    const hintBudget = innerWidth - keysW - 1;
+    const shownHints = hintBudget > 0 ? headByWidth(FOOTER_HINTS[input.mode].hints, hintBudget) : "";
+    const gap = " ".repeat(Math.max(0, innerWidth - keysW - visibleWidth(shownHints)));
+    return colors.dim(shownHints) + gap + colors.dim(keys);
   }
   const msgW = visibleWidth(message);
   if (msgW > innerWidth) return colors.accent(truncateToWidth(message, innerWidth, ""));
