@@ -1,6 +1,6 @@
 ---
 title: Composer editor single-install - Design
-status: approved
+status: done
 plan:
   - ../plans/2026-10-22-editor-single-install-plan.md
 ---

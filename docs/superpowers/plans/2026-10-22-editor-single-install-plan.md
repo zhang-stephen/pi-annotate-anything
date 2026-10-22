@@ -1,7 +1,7 @@
 ---
 title: Composer editor single-install implementation plan
-status: approved
-progress: 2/3
+status: done
+progress: 3/3
 spec: ../specs/2026-10-22-editor-single-install-design.md
 ---
 
@@ -34,5 +34,7 @@ Done in worktree commit f708be6 (accepted: 521 tests = 514+7, fail 0, tsc clean;
 
 ## Task 3: manual E2E + commit
 
-- [ ] Sandbox run (`PI_CODING_AGENT_DIR=/tmp/pi-sandbox-home pi -e ./index.ts`): annotate a range, submit, close the card, then Up-browse the composer history across the annotation boundary; repeat with a factory-based composer configured to reproduce the hard-stop case. Terminal-dependent: user E2E pass required.
-- [ ] User confirms the E2E, then commit `fix(editor): register the composer editor once per session` (self-contained message describing the history-loss mechanism and the single-install fix).
+- [x] Sandbox run (`PI_CODING_AGENT_DIR=/tmp/pi-sandbox-home pi -e ./index.ts`): annotate a range, submit, close the card, then Up-browse the composer history across the annotation boundary; repeat with a factory-based composer configured to reproduce the hard-stop case. Terminal-dependent: user E2E pass required.
+  Waived (user call 2026-10-22): the sandbox cannot reproduce the factory-composer boundary scenario, which only exists in the real environment; validation rides daily use.
+- [x] User confirms the E2E, then commit `fix(editor): register the composer editor once per session` (self-contained message describing the history-loss mechanism and the single-install fix).
+  Code commits already on the branch (66a3683, f708be6); release authorized by user call 2026-10-22 without the sandbox E2E.
