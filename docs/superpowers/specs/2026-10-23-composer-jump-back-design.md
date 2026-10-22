@@ -25,7 +25,7 @@ This closes the review loop between attaching an annotation and sending it.
 ## Approach
 
 1. `alt+o` in the composer wrapper: intercept before the inner editor.
-   Parse the current buffer's tokens with the transform.ts parser; with no tokens, pass the key through unchanged.
+   Parse the current buffer's tokens with the transform.ts parser; with no tokens, swallow the key and surface a warning through the notify path (amended by user E2E call 2026-10-23; the original design was a silent pass-through).
 2. Take the LAST token (most recent attachment; symmetric with the future alt+backspace semantics).
 3. Open the viewer via the /annotate path for that token's file.
    The store getter already wired there replays all of the file's pending comments automatically; nothing extra is needed for full comment restore.
@@ -45,7 +45,7 @@ Iterating all pills across buffers, deduplicating, and opening every file was re
 
 - File changed on disk since annotation (shorter, or gone): clamp the range to EOF and open what is there; fail-open, consistent with viewer behavior today.
 - Multiple tokens in the same file: last-token focus wins; the others still replay as markers.
-- No tokens in the buffer: alt+o is a no-op pass-through; :e completion is empty.
+- No tokens in the buffer: alt+o is swallowed with a visible warning (originally a no-op pass-through; amended by user E2E call 2026-10-23); :e completion is empty.
 
 ## Testing
 

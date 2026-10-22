@@ -11,7 +11,7 @@ Date: 2026-10-23
 
 ## Task 1: alt+o interception and reopen
 
-Implementation done in 3729979 (accepted: 582/582, tsc clean). User E2E below stays open until the train close-out pass.
+Implementation done in 3729979 (accepted: 582/582, tsc clean). Amended after user E2E: no-pill alt+o now warns through the notify path instead of a silent no-op (ff81295, user call 2026-10-23). User E2E below stays open until the train close-out pass.
 
 - [x] The composer wrapper proxies key handling before the inner editor: `alt+o` is intercepted, every other key (including lone Esc) is forwarded unchanged.
 - [x] With no tokens in the buffer, `alt+o` is a no-op pass-through.

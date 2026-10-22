@@ -24,7 +24,7 @@ Done in b3e0c1c (accepted: 561/561, tsc clean; two delegated workers, one superv
 
 ## Task 2: hardware cursor rendering
 
-Implementation done in ced4475 (accepted: 565/565, tsc clean; the SettingsManager read the original bullet demanded was a design error and is gone -- the marker contract carries both render modes). User E2E below stays open until the train close-out pass.
+Implementation done in ced4475 (accepted: 565/565, tsc clean; the SettingsManager read the original bullet demanded was a design error and is gone -- the marker contract carries both render modes). Amended after user E2E: the `:` cmdline and the `/` search input emit the same marker at their caret cells (bd73a4f, user call 2026-10-23), and comment box rows now render exactly at the wrap width so a row-end caret can never be truncated away (20acb09). User E2E below stays open until the train close-out pass.
 
 - [x] Replace the painted fake cursor cell (`withCursorCell`, `src/viewer/viewer.ts`) with the terminal's hardware cursor positioned at the caret cell, shown while the comment box has focus and hidden while unfocused.
 - [x] Emit CURSOR_MARKER at the caret cell while focused (Focusable contract); the TUI owns the `showHardwareCursor` on/off branch, so the extension never reads the setting.
