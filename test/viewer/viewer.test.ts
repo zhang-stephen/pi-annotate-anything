@@ -1333,3 +1333,58 @@ test("highlight: searchHL undefined renders byte-identical to explicit true (def
   state.searchHL = undefined;
   assert.deepEqual(h.card.render(80), lit);
 });
+
+// Command-name completion panel ------------------------------------------------
+//
+// The shell only paints the unified panel: the live candidate list while
+// typing (no selection), the frozen anchor list with the inverted selection
+// while Tab cycles, over the bottom-most body rows above the footers. The
+// reducer owns every key; nothing here feeds the panel back into input.
+
+test("wiring: a typed prefix paints the candidate row over the last body row", () => {
+  const h = makeCard({ lines: ["foo", "bar"] });
+  for (const key of [":", "n"]) h.card.handleInput(key);
+  const rows = h.card.render(80);
+  const bare = rows.map(strip);
+  // One candidate: exactly the bottom-most body row is covered; the body
+  // row above keeps the file line.
+  assert.ok(bare[2].includes("nohlsearch  clear search highlight"), `panel row painted, got: ${JSON.stringify(bare[2])}`);
+  assert.ok(bare[1].includes("foo"), `body row above untouched, got: ${bare[1]}`);
+  // Live mode: the suggestion is shown, never selected.
+  assert.ok(!rows[2].includes("\x1b[7m"), `no inverted selection while typing, got: ${JSON.stringify(rows[2])}`);
+  // Badge, position, and the cmdline row are never displaced.
+  assert.ok(bare[3].includes("-- COMMAND --") && bare[3].endsWith("1:1 \u2502"), `statusline intact, got: ${bare[3]}`);
+  assert.ok(bare[4].startsWith("\u2502 :n"), `cmdline intact, got: ${bare[4]}`);
+});
+
+test("wiring: bare : paints no panel", () => {
+  const h = makeCard({ lines: ["foo", "bar"] });
+  h.card.handleInput(":");
+  const bare = h.card.render(80).map(strip);
+  assert.ok(bare[1].includes("foo") && bare[2].includes("bar"), `body rows untouched, got: ${bare[1]} / ${bare[2]}`);
+  for (const row of bare) {
+    assert.ok(!row.includes("nohlsearch") && !row.includes("close the card"), `no panel, got: ${row}`);
+  }
+});
+
+test("wiring: Tab completes the cmdline value and the panel selection inverts", () => {
+  const h = makeCard({ lines: ["foo", "bar"] });
+  for (const key of [":", "n", "\t"]) h.card.handleInput(key);
+  const rows = h.card.render(80);
+  const bare = rows.map(strip);
+  assert.ok(bare[4].startsWith("\u2502 :nohlsearch"), `completed value painted, got: ${bare[4]}`);
+  // The panel still shows the frozen anchor list, selection inverted.
+  assert.ok(bare[2].includes("nohlsearch"), `panel still up, got: ${bare[2]}`);
+  assert.ok(rows[2].includes("\x1b[7m"), `selected row inverted, got: ${JSON.stringify(rows[2])}`);
+});
+
+test("wiring: Esc leaves command mode and the panel disappears with it", () => {
+  const h = makeCard({ lines: ["foo", "bar"] });
+  for (const key of [":", "n", "\t", "\x1b"]) h.card.handleInput(key);
+  const bare = h.card.render(80).map(strip);
+  assert.ok(bare[3].includes("-- NORMAL --"), `normal badge, got: ${bare[3]}`);
+  assert.ok(bare[4].startsWith("\u2502 hjkl move"), `hints restored, got: ${bare[4]}`);
+  for (const row of bare) {
+    assert.ok(!row.includes("nohlsearch"), `panel gone, got: ${row}`);
+  }
+});

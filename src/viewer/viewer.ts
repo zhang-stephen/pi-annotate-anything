@@ -15,6 +15,7 @@ import { matchesKey, visibleWidth } from "@earendil-works/pi-tui";
 
 import { commentBoxPlacement, frameCommentBox, framePanel, PAD_X, spliceRow } from "../tui/card-chrome.ts";
 import type { ChromeColors } from "../tui/card-chrome.ts";
+import { completionCandidates, renderCompletionRows } from "./completion-panel.ts";
 import { INVERSE_OFF, INVERSE_ON, withCursorCell, wrapCommentLines } from "../tui/comment-input.ts";
 import { rawColToDisplayCol, rawColsToDisplayCols, sliceWindow, tabExpanded } from "../tui/display.ts";
 import { displayPath } from "../core/message.ts";
@@ -287,6 +288,7 @@ export class AnnotateCard implements Component, Focusable {
     }
     if (this.state.mode === "comment") this.overlayCommentBox(rows, first, contentW, sl);
     else if (this.state.mode === "normal" && this.state.previewOn) this.overlayPreview(rows, first, contentW, sl);
+    else if (this.state.mode === "command") this.overlayCompletion(rows, contentW);
 
     const count = this.pending().length;
     const title = "Annotate: " + displayPath(this.file.path, this.cwd) + (count > 0 ? ` (${count})` : "");
@@ -472,6 +474,21 @@ export class AnnotateCard implements Component, Focusable {
       shown[cursorRow] = withCursorCell(shown[cursorRow], wrapped.cursorCol);
     }
     this.paintCommentBox(rows, first, contentW, shown, boxW, anchor, COMMENT_BOX_TITLE, sl);
+  }
+
+  // Command-name completion panel: replaces the bottom-most body rows with
+  // the candidate rows while command mode shows candidates, so the panel
+  // sits directly above the statusline/cmdline footers (which are separate
+  // framePanel rows and are never displaced, badge and position included).
+  // At most MAX_COMPLETION_ROWS body lines are covered, transiently. Render
+  // only: the reducer owns Tab and the cycling state; nothing here feeds
+  // the panel back into input.
+  private overlayCompletion(rows: string[], contentW: number): void {
+    const panel = completionCandidates(this.state);
+    if (panel.rows.length === 0) return;
+    const painted = renderCompletionRows(panel, contentW, this.colors);
+    const count = Math.min(painted.length, rows.length);
+    for (let k = 0; k < count; k++) rows[rows.length - count + k] = painted[k];
   }
 
   // Normal-mode hover preview: read-only Comment box for the CURRENT cycle

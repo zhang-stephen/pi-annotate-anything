@@ -3,6 +3,8 @@ import assert from "node:assert/strict";
 
 import { reduceViewer } from "../../src/viewer/state.ts";
 import type { PendingDraft, ViewerState } from "../../src/viewer/state.ts";
+import { COMMANDS } from "../../src/viewer/commands.ts";
+import type { CommandSpec } from "../../src/viewer/commands.ts";
 
 // 30-line fixture: "line 0" .. "line 29" (col max 6 for single-digit lines).
 const LINES = Array.from({ length: 30 }, (_, i) => `line ${i}`);
@@ -571,9 +573,10 @@ test("command: Enter on the empty line returns to normal silently", () => {
 });
 
 test("command: newline-shaped and control keys are ignored while editing", () => {
+  // Tab is no longer inert: it drives completion cycling (tests below).
   let st = view(viewer(), ":").state;
   st = view(st, "q").state;
-  for (const key of ["\n", "\x1b\r", "\t", "\x01"]) {
+  for (const key of ["\n", "\x1b\r", "\x01"]) {
     const res = view(st, key);
     assert.equal(res.state.mode, "command");
     assert.deepEqual(res.state.command, { value: "q" });
@@ -609,4 +612,118 @@ test("command mode: backspace at the empty value exits to normal mode like Esc",
   st = reduceViewer(st, "\x7f", RAILS, vpv(30, 20)).state;
   assert.equal(st.mode, "normal");
   assert.equal(st.command, null);
+});
+
+// Command-name completion (Tab cycling) ----------------------------------------
+//
+// Tab is completion's only special key: the first press snapshots the live
+// candidates of the current value (the anchor) and accepts the first;
+// further presses advance the snapshot, wrapping; every other key drops
+// back to live mode. Enter/Esc keep their exact pre-completion behavior.
+
+// A crafted second "noh..." entry so a multi-candidate anchor exists (the
+// shipped table's names share no prefix); pushed per test, popped in
+// finally, mirroring the ambiguity fixture in commands.test.ts.
+function craftedCommand(name: string): CommandSpec {
+  return { name, short: name, desc: "extra", args: "none", run: (state) => ({ state }) };
+}
+
+test("command: Tab accepts the first candidate into the value", () => {
+  let st = view(viewer(), ":").state;
+  st = view(st, "n").state;
+  st = view(st, "\t").state;
+  assert.deepEqual(st.command, { value: "nohlsearch", completion: { anchor: "n", index: 0 } });
+});
+
+test("command: repeated Tabs cycle the snapshot and wrap around", () => {
+  COMMANDS.push(craftedCommand("nohextra"));
+  try {
+    let st = view(viewer(), ":").state;
+    st = view(st, "n").state;
+    st = view(st, "\t").state;
+    st = view(st, "\t").state; // advance to the crafted entry
+    assert.deepEqual(st.command, { value: "nohextra", completion: { anchor: "n", index: 1 } });
+    st = view(st, "\t").state; // wrap to the first candidate again
+    assert.deepEqual(st.command, { value: "nohlsearch", completion: { anchor: "n", index: 0 } });
+    assert.equal(st.command?.completion?.anchor, "n"); // anchor frozen throughout
+  } finally {
+    COMMANDS.pop();
+  }
+});
+
+test("command: the completion anchor freezes while the value changes", () => {
+  // After the first Tab the value holds the accepted name; the snapshot
+  // must stay the candidates of the ORIGINAL value ("n" matches both
+  // entries with the crafted one, the accepted name only itself), so the
+  // next Tab still reaches the second candidate.
+  COMMANDS.push(craftedCommand("nohextra"));
+  try {
+    let st = view(viewer(), ":").state;
+    st = view(st, "n").state;
+    st = view(st, "\t").state;
+    st = view(st, "\t").state;
+    assert.equal(st.command?.completion?.anchor, "n");
+    assert.equal(st.command?.value, "nohextra");
+  } finally {
+    COMMANDS.pop();
+  }
+});
+
+test("command: typing clears the completion but keeps the accepted value", () => {
+  let st = view(viewer(), ":").state;
+  st = view(st, "q").state;
+  st = view(st, "\t").state; // accept "quit"
+  assert.deepEqual(st.command, { value: "quit", completion: { anchor: "q", index: 0 } });
+  st = view(st, "x").state; // live mode again: the draft drops the cycling state
+  assert.deepEqual(st.command, { value: "quitx" });
+  assert.equal(st.mode, "command");
+});
+
+test("command: Backspace clears the completion and pops the accepted value", () => {
+  let st = view(viewer(), ":").state;
+  st = view(st, "q").state;
+  st = view(st, "\t").state;
+  st = view(st, "\x7f").state;
+  assert.deepEqual(st.command, { value: "qui" });
+});
+
+test("command: an ignored control key clears the completion and keeps the value", () => {
+  let st = view(viewer(), ":").state;
+  st = view(st, "q").state;
+  st = view(st, "\t").state;
+  st = view(st, "\x01").state;
+  assert.equal(st.mode, "command");
+  assert.deepEqual(st.command, { value: "quit" });
+});
+
+test("command: Tab with no candidates is a no-op", () => {
+  let st = view(viewer(), ":").state;
+  st = view(st, "z").state;
+  st = view(st, "\t").state;
+  assert.deepEqual(st.command, { value: "z" });
+  st = view(st, "\t").state; // still no candidates: still a no-op
+  assert.deepEqual(st.command, { value: "z" });
+  // Bare ":" has an empty value and no candidates either.
+  const empty = view(view(viewer(), ":").state, "\t").state;
+  assert.deepEqual(empty.command, { value: "" });
+});
+
+test("command: Enter executes the accepted value with the completion active", () => {
+  let st = view(viewer(), ":").state;
+  st = view(st, "q").state;
+  st = view(st, "\t").state;
+  const res = view(st, "\r");
+  assert.equal(res.state.mode, "normal");
+  assert.deepEqual(res.effect, { type: "close" }); // quit ran
+  assert.equal(res.state.command, null);
+});
+
+test("command: Esc exits command mode with the completion active", () => {
+  let st = view(viewer(), ":").state;
+  st = view(st, "q").state;
+  st = view(st, "\t").state;
+  const res = view(st, "\x1b");
+  assert.equal(res.state.mode, "normal");
+  assert.equal(res.state.command, null);
+  assert.equal(res.effect, undefined);
 });

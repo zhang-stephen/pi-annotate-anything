@@ -33,6 +33,8 @@ export interface CommandSpec {
   // the typed name to start with it (and the name to start with the typed
   // prefix), so "n" resolves to nothing while "noh" resolves to nohlsearch.
   short: string;
+  // One-line description shown in the completion panel's candidate rows.
+  desc: string;
   args: "none";
   run(state: ViewerState, lines: string[], viewport: ViewerViewport): ViewerResult;
 }
@@ -51,16 +53,28 @@ export const COMMANDS: CommandSpec[] = [
   {
     name: "quit",
     short: "q",
+    desc: "close the card",
     args: "none",
     run: (state) => ({ state: { ...state, mode: "normal" }, effect: { type: "close" } }),
   },
   {
     name: "nohlsearch",
     short: "noh",
+    desc: "clear search highlight",
     args: "none",
     run: (state) => ({ state: { ...state, mode: "normal", searchHL: false } }),
   },
 ];
+
+// Live candidates for the completion panel's command-name source: the table
+// entries whose full name starts with the typed word, in table order. Empty
+// input (bare ":") hides the panel, and whitespace-bearing input hides it
+// too - the name is done there and arguments begin, but no v1 command has a
+// completion source for them.
+export function completeFor(input: string): { name: string; desc: string }[] {
+  if (input === "" || /\s/.test(input)) return [];
+  return COMMANDS.filter((spec) => spec.name.startsWith(input)).map((spec) => ({ name: spec.name, desc: spec.desc }));
+}
 
 export function executeCommand(state: ViewerState, raw: string, lines: string[], viewport: ViewerViewport): ViewerResult {
   // Total normalization: every execution ends command mode with the draft

@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 
 import { reduceViewer } from "../../src/viewer/state.ts";
 import type { ViewerState } from "../../src/viewer/state.ts";
-import { COMMANDS, executeCommand, parseCommandLine, resolveAgainst } from "../../src/viewer/commands.ts";
+import { COMMANDS, completeFor, executeCommand, parseCommandLine, resolveAgainst } from "../../src/viewer/commands.ts";
 import type { CommandSpec } from "../../src/viewer/commands.ts";
 
 // Same fixtures as state.test.ts: 30 lines, viewport height 10, no
@@ -89,8 +89,8 @@ test("resolveAgainst: two crafted specs sharing a short are ambiguous", () => {
   // The shipped table can never be ambiguous, so craft one that is: both
   // entries claim short "no", and "no" matches both.
   const table: CommandSpec[] = [
-    { name: "noa", short: "no", args: "none", run: () => ({ state: viewer() }) },
-    { name: "nob", short: "no", args: "none", run: () => ({ state: viewer() }) },
+    { name: "noa", short: "no", desc: "crafted", args: "none", run: () => ({ state: viewer() }) },
+    { name: "nob", short: "no", desc: "crafted", args: "none", run: () => ({ state: viewer() }) },
   ];
   assert.equal(resolveAgainst(table, "no"), "ambiguous");
 });
@@ -168,7 +168,7 @@ test("executeCommand: an unknown command is rejected with E492", () => {
 test("executeCommand: an ambiguous abbreviation is rejected with E464", () => {
   // The shipped table can never be ambiguous, so craft a third entry that
   // collides with quit's short, then remove it again.
-  const crafted: CommandSpec = { name: "quux", short: "q", args: "none", run: () => ({ state: viewer() }) };
+  const crafted: CommandSpec = { name: "quux", short: "q", desc: "crafted", args: "none", run: () => ({ state: viewer() }) };
   COMMANDS.push(crafted);
   try {
     const res = executeCommand(viewer(), "q", LINES, VP);
@@ -203,4 +203,27 @@ test("executeCommand: :q! runs quit exactly (:q parity)", () => {
   const plain = executeCommand(start, "q", LINES, VP);
   assert.deepEqual(banged.effect, plain.effect);
   assert.deepEqual(banged.state, plain.state);
+});
+
+// Command-name completion -----------------------------------------------------
+
+// The completion source of the unified panel: a live prefix filter over the
+// command table. Empty input (bare ":") and whitespace-bearing input (the
+// name is done, arguments begin; no v1 command completes arguments) hide the
+// panel; otherwise the entries whose full name starts with the word, in
+// table order.
+test("completeFor: empty and whitespace-bearing inputs hide the panel", () => {
+  assert.deepEqual(completeFor(""), []);
+  assert.deepEqual(completeFor("q "), []);
+  assert.deepEqual(completeFor("noh "), []);
+});
+
+test("completeFor: a bare word returns the prefix-matching entries in table order", () => {
+  assert.deepEqual(completeFor("q"), [{ name: "quit", desc: "close the card" }]);
+  assert.deepEqual(completeFor("n"), [{ name: "nohlsearch", desc: "clear search highlight" }]);
+  assert.deepEqual(completeFor("noh"), [{ name: "nohlsearch", desc: "clear search highlight" }]);
+});
+
+test("completeFor: a non-matching word yields no candidates", () => {
+  assert.deepEqual(completeFor("zzz"), []);
 });

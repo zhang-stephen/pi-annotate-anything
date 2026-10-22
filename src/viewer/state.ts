@@ -5,7 +5,7 @@
 import type { Position, Range, VisualMode } from "../core/selection.ts";
 import type { CommentState } from "../tui/comment-input.ts";
 import { commentStep, toCommentKey } from "./comment-mode.ts";
-import { executeCommand } from "./commands.ts";
+import { completeFor, executeCommand } from "./commands.ts";
 import {
   clearUnusedCount,
   consumeCount,
@@ -74,9 +74,13 @@ export interface ViewerState {
   searchHL?: boolean;
   // Command-line state (command mode): the line typed after ":", edited with
   // the same single-line rules as the search input and executed on Enter.
+  // completion carries the Tab-cycling snapshot while it is active: anchor
+  // is the value the candidate list was frozen at (further Tabs cycle that
+  // list, never a refilter of the accepted value) and index is the selected
+  // candidate; any other key drops back to live mode by dropping the field.
   // Optional so callers that construct this state without the field
   // (pre-command callers) stay valid; the reducer treats undefined like null.
-  command?: { value: string } | null;
+  command?: { value: string; completion?: { anchor: string; index: number } } | null;
   // Pending count prefix ({count}j / {count}G / {count}n), normal mode only:
   // digits start/extend it in reduceViewer, exactly one motion consumes it
   // (read as count ?? 1), and any other non-digit key clears it. Optional so
@@ -284,10 +288,44 @@ function handleMode(state: ViewerState, key: string, lines: string[], viewport: 
 // cursor never moves while editing, so there is no origin to remember: Esc
 // just restores normal mode. Enter hands the typed line to executeCommand,
 // which always ends command mode (success, error, and empty input alike).
+// Tab runs the command-name completion before that classification: the
+// first press freezes the live candidates of the current value (the anchor)
+// and accepts the first, further presses cycle that snapshot (wrapping) and
+// write the selected name into the value; with no candidates it stays the
+// inert key it was before completion. Every other key (typing, Backspace,
+// Enter, Esc, ignored controls) drops back to live mode: the editing cases
+// build a fresh draft without the completion field, and Enter/Esc end the
+// draft whole. Enter always executes the literal cmdline value.
 function commandStep(state: ViewerState, key: string, lines: string[], viewport: ViewerViewport): ViewerResult {
-  const mapped = toCommentKey(key);
-  if (mapped === null) return { state };
   const command = state.command ?? { value: "" }; // invariant: non-null in command mode
+  const completion = command.completion ?? null;
+  if (key === "\t") {
+    if (completion === null) {
+      const candidates = completeFor(command.value);
+      if (candidates.length === 0) return { state }; // nothing to accept: inert Tab
+      return {
+        state: {
+          ...state,
+          command: { value: candidates[0].name, completion: { anchor: command.value, index: 0 } },
+        },
+      };
+    }
+    const candidates = completeFor(completion.anchor);
+    const index = (completion.index + 1) % candidates.length;
+    return {
+      state: {
+        ...state,
+        command: { value: candidates[index].name, completion: { anchor: completion.anchor, index } },
+      },
+    };
+  }
+  const mapped = toCommentKey(key);
+  if (mapped === null) {
+    // Ignored keys keep the value but drop an active cycling snapshot; with
+    // none they stay bit-for-bit no-ops.
+    if (completion === null) return { state };
+    return { state: { ...state, command: { value: command.value } } };
+  }
   switch (mapped.kind) {
     case "newline":
       return { state };
