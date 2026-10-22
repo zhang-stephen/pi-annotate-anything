@@ -468,3 +468,122 @@ test("curswant: ctrl+d/ctrl+u and PgDn/PgUp keep the goal column", () => {
   assert.deepEqual(up.state.cursor, { line: 1, col: 1 }); // clamp holds, goal kept
   assert.equal(up.state.wantedCol, 10);
 });
+
+// Command mode (:) -----------------------------------------------------------
+
+test("command: : enters command mode and drops any pending count", () => {
+  const res = view(viewer({ cursor: { line: 2, col: 3 }, count: 5 }), ":");
+  assert.equal(res.state.mode, "command");
+  assert.deepEqual(res.state.command, { value: "" });
+  assert.equal(res.state.count ?? null, null);
+  assert.equal(res.effect, undefined);
+});
+
+test("command: : is inert in visual, comment, and search modes", () => {
+  const char = view(viewer({ mode: "visual-char", cursor: { line: 2, col: 3 }, anchor: { line: 2, col: 3 } }), ":");
+  assert.equal(char.state.mode, "visual-char");
+  assert.equal(char.state.command ?? null, null);
+  assert.equal(char.effect, undefined);
+  const line = view(
+    viewer({ mode: "visual-line", cursor: { line: 2, col: 3 }, anchor: { line: 2, col: 3 }, visualMode: "line" }),
+    ":",
+  );
+  assert.equal(line.state.mode, "visual-line");
+  assert.equal(line.state.command ?? null, null);
+  // Comment and search inputs keep receiving the keystroke; command mode is
+  // not entered from either.
+  const comment = view(commentState(""), ":");
+  assert.equal(comment.state.mode, "comment");
+  assert.deepEqual(comment.state.comment, { text: ":" });
+  const search = view(
+    viewer({ mode: "search", cursor: { line: 2, col: 3 }, search: { query: "", origin: { line: 2, col: 3 } } }),
+    ":",
+  );
+  assert.equal(search.state.mode, "search");
+  assert.deepEqual(search.state.search, { query: ":", origin: { line: 2, col: 3 } });
+});
+
+test("command: typing appends whole and Backspace pops without exiting at empty", () => {
+  let st = view(viewer(), ":").state;
+  st = view(st, "q").state;
+  assert.deepEqual(st.command, { value: "q" });
+  st = view(st, "noh").state; // multi-char chunks (pastes) append whole
+  assert.deepEqual(st.command, { value: "qnoh" });
+  st = view(st, "\x7f").state;
+  st = view(st, "\x7f").state;
+  st = view(st, "\x7f").state;
+  assert.deepEqual(st.command, { value: "q" });
+  st = view(st, "\x7f").state;
+  st = view(st, "\x7f").state; // popping at the empty value keeps editing
+  assert.equal(st.mode, "command");
+  assert.deepEqual(st.command, { value: "" });
+});
+
+test("command: Esc returns to normal with the line cleared and no effect", () => {
+  let st = view(viewer(), ":").state;
+  st = view(st, "q").state;
+  const res = view(st, "\x1b");
+  assert.equal(res.state.mode, "normal");
+  assert.equal(res.state.command, null);
+  assert.equal(res.effect, undefined);
+});
+
+test("command: Enter on :q closes the card in normal mode", () => {
+  let st = view(viewer(), ":").state;
+  st = view(st, "q").state;
+  const res = view(st, "\r");
+  assert.equal(res.state.mode, "normal");
+  assert.equal(res.state.command, null);
+  assert.deepEqual(res.effect, { type: "close" });
+});
+
+test("command: Enter on :zzz reports E492 and returns to normal", () => {
+  let st = view(viewer(), ":").state;
+  st = view(st, "zzz").state;
+  const res = view(st, "\r");
+  assert.equal(res.state.mode, "normal");
+  assert.equal(res.state.message, "E492: Not an editor command: zzz");
+  assert.equal(res.effect, undefined);
+});
+
+test("command: :noh darkens the highlight and the next n re-lights it", () => {
+  // A completed search first: /2 jumps to the "2" on line 2, storing lastSearch.
+  let st = view(viewer(), "/").state;
+  st = view(st, "2").state;
+  st = view(st, "\r").state;
+  assert.deepEqual(st.cursor, { line: 2, col: 5 });
+  let res = view(st, ":");
+  res = view(res.state, "noh"); // the whole word lands as one append
+  res = view(res.state, "\r");
+  assert.equal(res.state.mode, "normal");
+  assert.equal(res.state.searchHL, false); // nohlsearch ran
+  const next = view(res.state, "n");
+  assert.equal(next.state.searchHL, true); // explicitly re-lit by the search command
+  assert.deepEqual(next.state.cursor, { line: 12, col: 6 }); // and the search repeated
+});
+
+test("command: Enter on the empty line returns to normal silently", () => {
+  const res = view(view(viewer(), ":").state, "\r");
+  assert.equal(res.state.mode, "normal");
+  assert.equal(res.state.command, null); // the line draft is dropped, not kept
+  assert.equal(res.state.message ?? null, null);
+  assert.equal(res.effect, undefined);
+});
+
+test("command: newline-shaped and control keys are ignored while editing", () => {
+  let st = view(viewer(), ":").state;
+  st = view(st, "q").state;
+  for (const key of ["\n", "\x1b\r", "\t", "\x01"]) {
+    const res = view(st, key);
+    assert.equal(res.state.mode, "command");
+    assert.deepEqual(res.state.command, { value: "q" });
+    assert.equal(res.effect, undefined);
+  }
+});
+
+test("command: : entry resets the goal column", () => {
+  const down = viewOn(RAILS, viewer({ cursor: { line: 0, col: 10 } }), "j");
+  assert.equal(down.state.wantedCol, 10);
+  const cmd = viewOn(RAILS, down.state, ":");
+  assert.equal(cmd.state.wantedCol ?? null, null);
+});

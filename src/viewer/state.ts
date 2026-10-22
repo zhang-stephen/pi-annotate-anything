@@ -4,7 +4,8 @@
 
 import type { Position, Range, VisualMode } from "../core/selection.ts";
 import type { CommentState } from "../tui/comment-input.ts";
-import { commentStep } from "./comment-mode.ts";
+import { commentStep, toCommentKey } from "./comment-mode.ts";
+import { executeCommand } from "./commands.ts";
 import {
   clearUnusedCount,
   consumeCount,
@@ -19,7 +20,7 @@ import {
 } from "./movement.ts";
 import { repeatSearch, searchStep } from "./search-mode.ts";
 
-export type ViewerMode = "normal" | "visual-char" | "visual-line" | "comment" | "search";
+export type ViewerMode = "normal" | "visual-char" | "visual-line" | "comment" | "search" | "command";
 
 export interface ViewerState {
   mode: ViewerMode;
@@ -71,6 +72,11 @@ export interface ViewerState {
   lastSearch?: string | null;
   // Search highlight toggle (:nohlsearch sets false; undefined means true).
   searchHL?: boolean;
+  // Command-line state (command mode): the line typed after ":", edited with
+  // the same single-line rules as the search input and executed on Enter.
+  // Optional so callers that construct this state without the field
+  // (pre-command callers) stay valid; the reducer treats undefined like null.
+  command?: { value: string } | null;
   // Pending count prefix ({count}j / {count}G / {count}n), normal mode only:
   // digits start/extend it in reduceViewer, exactly one motion consumes it
   // (read as count ?? 1), and any other non-digit key clears it. Optional so
@@ -174,11 +180,19 @@ function handleMode(state: ViewerState, key: string, lines: string[], viewport: 
       // run from and Esc restores; any pending count is dropped.
       if (state.mode !== "normal") return { state };
       return { state: { ...state, mode: "search", search: { query: "", origin: state.cursor }, count: null } };
+    case ":":
+      // Command-line entry: opens the command line empty; any pending count
+      // is dropped, same as search entry. Inert from visual (comment and
+      // search modes dispatch before this switch and keep the keystroke).
+      if (state.mode !== "normal") return { state };
+      return { state: { ...state, mode: "command", command: { value: "" }, count: null } };
     case "n":
     case "N":
       if (state.mode !== "normal") return { state };
-      // A jump re-aims the cursor: the goal-column session ends here.
-      return repeatSearch({ ...state, wantedCol: null }, key === "n" ? 1 : -1, state.count ?? 1, lines, viewport);
+      // A jump re-aims the cursor: the goal-column session ends here. The
+      // jump is itself a search command, so it re-lights the search
+      // highlight, clearing a prior :nohlsearch.
+      return repeatSearch({ ...state, wantedCol: null, searchHL: true }, key === "n" ? 1 : -1, state.count ?? 1, lines, viewport);
     case "g":
       return { state: { ...state, pending: "g" } };
     case "\x04": { // ctrl+d: half page down; vertical family, aim at the goal
@@ -263,6 +277,31 @@ function handleMode(state: ViewerState, key: string, lines: string[], viewport: 
   }
 }
 
+// Command mode routes every key through toCommentKey's classification,
+// mirroring searchStep: chunks append whole (pastes included), Backspace
+// pops one code unit and is a no-op at the empty value (never exits),
+// newline-shaped and control keys are ignored, Esc discards the line. The
+// cursor never moves while editing, so there is no origin to remember: Esc
+// just restores normal mode. Enter hands the typed line to executeCommand,
+// which always ends command mode (success, error, and empty input alike).
+function commandStep(state: ViewerState, key: string, lines: string[], viewport: ViewerViewport): ViewerResult {
+  const mapped = toCommentKey(key);
+  if (mapped === null) return { state };
+  const command = state.command ?? { value: "" }; // invariant: non-null in command mode
+  switch (mapped.kind) {
+    case "newline":
+      return { state };
+    case "backspace":
+      return { state: { ...state, command: { value: command.value.slice(0, -1) } } };
+    case "char":
+      return { state: { ...state, command: { value: command.value + mapped.ch } } };
+    case "cancel":
+      return { state: { ...state, mode: "normal", command: null } };
+    case "submit":
+      return executeCommand({ ...state, command: null }, command.value, lines, viewport);
+  }
+}
+
 export function reduceViewer(
   state: ViewerState,
   key: string,
@@ -289,7 +328,15 @@ export function reduceViewer(
   if ((state.message ?? null) !== null) state = { ...state, message: null };
 
   if (state.mode === "comment") return resetCycleOnMove(resetWantedColOnModeChange(commentStep(state, key, lines, viewport), state), state);
-  if (state.mode === "search") return resetCycleOnMove(resetWantedColOnModeChange(searchStep(state, key, lines, viewport), state), state);
+  if (state.mode === "search") {
+    let res = searchStep(state, key, lines, viewport);
+    // Enter is the only submit key: a completed search re-lights the search
+    // highlight (clearing a prior :nohlsearch); Esc-cancel and an invalid
+    // pattern, which keeps editing, leave it untouched.
+    if (key === "\r" && res.state.mode === "normal") res = { ...res, state: { ...res.state, searchHL: true } };
+    return resetCycleOnMove(resetWantedColOnModeChange(res, state), state);
+  }
+  if (state.mode === "command") return resetCycleOnMove(resetWantedColOnModeChange(commandStep(state, key, lines, viewport), state), state);
 
   // Count prefix, normal mode only, before two-stroke handling: 1-9 start a
   // pending count, 0-9 extend it; a bare 0 (no pending count) falls through

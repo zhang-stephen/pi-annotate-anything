@@ -10,7 +10,7 @@ import { truncateToWidth, visibleWidth } from "@earendil-works/pi-tui";
 import type { ChromeColors } from "../tui/card-chrome.ts";
 import type { ViewerMode } from "./state.ts";
 
-export type CardMode = "normal" | "visualChar" | "visualLine" | "comment" | "search";
+export type CardMode = "normal" | "visualChar" | "visualLine" | "comment" | "search" | "command";
 
 export interface FooterHints {
   // Mode badge shown before the hints in the accent color. Every mode has
@@ -29,6 +29,9 @@ export const FOOTER_HINTS: Record<CardMode, FooterHints> = {
   // While the / input is open the cmdline row shows the input itself, so the
   // hints text is empty; the badge keeps the mode line complete.
   search: { badge: "-- SEARCH --", hints: "" },
+  // Same shape as search: the : input occupies the cmdline row, so the
+  // hints text is empty; the badge keeps the mode line complete.
+  command: { badge: "-- COMMAND --", hints: "" },
   visualChar: { badge: "-- VISUAL --", hints: "hjkl extend  o swap  c comment  Esc cancel" },
   visualLine: { badge: "-- VISUAL LINE --", hints: "hjkl extend  o swap  c comment  Esc cancel" },
   comment: { badge: "-- COMMENT --", hints: "Enter submit  ctrl+j newline  Esc cancel" },
