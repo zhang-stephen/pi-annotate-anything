@@ -106,6 +106,12 @@ export function searchStep(state: ViewerState, key: string, lines: string[], vie
     case "newline":
       return { state };
     case "backspace": {
+      // Backspace at the empty query exits to normal mode on the origin
+      // cursor, exactly like Esc (real vim behavior: backspacing before
+      // the prompt start cancels the command line; amended 2026-10-22).
+      if (search.query.length === 0) {
+        return { state: keepVisible({ ...state, mode: "normal", search: null, cursor: search.origin }, lines, viewport) };
+      }
       const next = { ...search, query: search.query.slice(0, -1) };
       return incrementalJump({ ...state, search: next }, next, lines, viewport);
     }

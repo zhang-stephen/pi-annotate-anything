@@ -142,3 +142,24 @@ test("search: Enter on a zero-match pattern stores lastSearch, stays at origin, 
   assert.deepEqual(res.state.cursor, { line: 2, col: 3 });
   assert.equal(res.state.message, "Pattern not found: zz");
 });
+test("search: backspace at the empty query exits to normal mode on the origin cursor", () => {
+  let st = viewer({ cursor: { line: 4, col: 2 } });
+  st = reduceViewer(st, "/", LINES, VP).state;
+  assert.equal(st.mode, "search");
+  st = reduceViewer(st, "\x7f", LINES, VP).state; // immediate backspace: cancel like Esc
+  assert.equal(st.mode, "normal");
+  assert.equal(st.search, null);
+  assert.deepEqual(st.cursor, { line: 4, col: 2 });
+});
+
+test("search: backspaces pop the query, then one more exits to the origin", () => {
+  let st = viewer({ cursor: { line: 0, col: 0 } });
+  st = reduceViewer(st, "/", LINES, VP).state;
+  st = reduceViewer(st, "2", LINES, VP).state; // incremental jump may move the cursor
+  const popped = reduceViewer(st, "\x7f", LINES, VP).state;
+  assert.equal(popped.mode, "search");
+  assert.deepEqual(popped.search?.query, "");
+  const exited = reduceViewer(popped, "\x7f", LINES, VP).state;
+  assert.equal(exited.mode, "normal");
+  assert.deepEqual(exited.cursor, popped.search?.origin ?? { line: 0, col: 0 });
+});

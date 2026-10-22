@@ -66,7 +66,7 @@ interface ViewerState {
 Search mode:
 
 - `/` in normal mode enters search mode with `search = { query: "", origin: cursor }` and resets `count`.
-- Keys in search mode are handled by a small `reduceSearch` (single-line; printable text appends, backspace pops, Enter submits, Esc cancels).
+- Keys in search mode are handled by a small `reduceSearch` (single-line; printable text appends, ~~backspace pops~~, Enter submits, Esc cancels). Amended 2026-10-22 after E2E: backspace pops, and at the empty query it exits to normal mode on the origin cursor exactly like Esc, matching real vim command-line behavior (backspacing before the prompt start cancels the line).
   Printable-text classification reuses the same bytes-as-text convention as the comment input, so IME/CJK input works the same way.
 - After every query change the reducer recompiles and rescans:
   - valid pattern with a match: the cursor jumps (incremental, forward from `origin`, no wrap) to the match start via the existing `moved()`/`keepVisible()` path, so vertical and horizontal scroll follow for free;
