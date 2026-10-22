@@ -4,6 +4,14 @@ on:
   push:
     branches: [master]
   pull_request:
+    # Never trigger on release-please branches at all: their PR runs are
+    # bot-created (they sit in approval/limbo states and die as phantom
+    # "workflow file issue" failures if the PR merges while the run is
+    # still initializing), and merging to master triggers the full suite
+    # via the push event anyway. The job-level if below stays as defense
+    # in depth.
+    branches-ignore:
+      - "release-please--**"
 
 jobs:
   test:
