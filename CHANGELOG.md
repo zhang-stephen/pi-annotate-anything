@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.5.1](https://github.com/zhang-stephen/pi-annotate-anything/compare/pi-annotate-anything-v1.5.0...pi-annotate-anything-v1.5.1) (2026-10-22)
+
+
+### Documentation
+
+* **readme:** document the command line, completion, and alignment features ([9590e3f](https://github.com/zhang-stephen/pi-annotate-anything/commit/9590e3fd222b1729078bf5d9f96e3a7e605c3fba))
+
 ## [1.5.0](https://github.com/zhang-stephen/pi-annotate-anything/compare/pi-annotate-anything-v1.4.0...pi-annotate-anything-v1.5.0) (2026-10-22)
 
 

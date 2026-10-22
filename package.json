@@ -1,6 +1,6 @@
 {
   "name": "pi-annotate-anything",
-  "version": "1.5.0",
+  "version": "1.5.1",
   "description": "Pi extension: annotate arbitrary line/character ranges of any local file, injected as a quote block plus comment",
   "type": "module",
   "main": "index.ts",
