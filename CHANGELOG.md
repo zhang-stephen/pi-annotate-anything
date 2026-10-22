@@ -1,5 +1,28 @@
 # Changelog
 
+## [2.0.0](https://github.com/zhang-stephen/pi-annotate-anything/compare/pi-annotate-anything-v1.5.2...pi-annotate-anything-v2.0.0) (2026-10-22)
+
+
+### ⚠ BREAKING CHANGES
+
+* **viewer:** the viewer's normal-mode q and Esc mappings are removed; :q is the only close.
+
+### Features
+
+* **composer:** alt+o jumps back to the last annotation ([3729979](https://github.com/zhang-stephen/pi-annotate-anything/commit/37299797c4d93076cdfec508f8332dc5e651e02e))
+* **viewer:** hardware cursor in the cmdline input ([bd73a4f](https://github.com/zhang-stephen/pi-annotate-anything/commit/bd73a4fa42e7dea55dcf464b0c67ab8cb7c52c7f))
+* **viewer:** hardware cursor in the comment box ([ced4475](https://github.com/zhang-stephen/pi-annotate-anything/commit/ced44753cbd5263460df0c24d2cd751418454c72))
+* **viewer:** movable caret in the comment input ([b3e0c1c](https://github.com/zhang-stephen/pi-annotate-anything/commit/b3e0c1ca9ddce603cf233a04fcbe2694be352fc3))
+
+
+### Bug Fixes
+
+* **composer:** clearer no-pill alt+o warning ([e1624c0](https://github.com/zhang-stephen/pi-annotate-anything/commit/e1624c0f1c2cc5f3a00aa679f48737306bfaef79))
+* **composer:** warn when alt+o finds no pills ([ff81295](https://github.com/zhang-stephen/pi-annotate-anything/commit/ff812952181296a006aaaa1a6303a8daef717c16))
+* **viewer:** close only via :q ([3ecb5a9](https://github.com/zhang-stephen/pi-annotate-anything/commit/3ecb5a9e7cf22ba05915e63b32e57d92af8c3efc))
+* **viewer:** one-press row transitions at soft-wrap boundaries ([46bb671](https://github.com/zhang-stephen/pi-annotate-anything/commit/46bb67181337774f08313b90947aeaea8072f6a6))
+* **viewer:** render comment box rows at the wrap width ([20acb09](https://github.com/zhang-stephen/pi-annotate-anything/commit/20acb098a1e9c355b8757b1238f897151bc874aa))
+
 ## [1.5.2](https://github.com/zhang-stephen/pi-annotate-anything/compare/pi-annotate-anything-v1.5.1...pi-annotate-anything-v1.5.2) (2026-10-22)
 
 
