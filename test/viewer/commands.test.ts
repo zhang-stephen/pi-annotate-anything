@@ -187,3 +187,20 @@ test("executeCommand: the address jump ends command mode like every other path",
   assert.equal(res.state.command, null);
   assert.equal(res.state.cursor.line, 6);
 });
+
+test("parser: a single trailing bang is stripped from the command name", () => {
+  assert.deepEqual(parseCommandLine("q!"), { kind: "command", name: "q", args: [] });
+  assert.deepEqual(parseCommandLine("noh!"), { kind: "command", name: "noh", args: [] });
+});
+
+test("parser: a second bang stays in the name and fails resolution", () => {
+  assert.deepEqual(parseCommandLine("q!!"), { kind: "command", name: "q!", args: [] });
+});
+
+test("executeCommand: :q! runs quit exactly (:q parity)", () => {
+  const start = viewer({ cursor: { line: 0, col: 0 } });
+  const banged = executeCommand(start, "q!", LINES, VP);
+  const plain = executeCommand(start, "q", LINES, VP);
+  assert.deepEqual(banged.effect, plain.effect);
+  assert.deepEqual(banged.state, plain.state);
+});

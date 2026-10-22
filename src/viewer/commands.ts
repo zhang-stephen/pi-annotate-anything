@@ -20,7 +20,10 @@ export function parseCommandLine(raw: string): Parsed {
   const trimmed = raw.trim();
   if (trimmed === "") return { kind: "none" };
   if (/^\d+$/.test(trimmed)) return { kind: "address", line: Number(trimmed) };
-  const [name, ...args] = trimmed.split(/\s+/);
+  let [name, ...args] = trimmed.split(/\s+/);
+  // A single trailing bang is stripped and silently ignored (:q! == :q);
+  // a second bang stays in the name and fails resolution as E492.
+  if (name.length > 1 && name.endsWith("!")) name = name.slice(0, -1);
   return { kind: "command", name, args };
 }
 

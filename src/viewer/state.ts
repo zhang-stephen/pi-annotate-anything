@@ -292,6 +292,11 @@ function commandStep(state: ViewerState, key: string, lines: string[], viewport:
     case "newline":
       return { state };
     case "backspace":
+      // At the empty value, backspace exits to normal mode like Esc
+      // (E2E amendment 2026-10-22; vim's no-op-at-start yields here).
+      if (command.value.length === 0) {
+        return { state: { ...state, mode: "normal", command: null } };
+      }
       return { state: { ...state, command: { value: command.value.slice(0, -1) } } };
     case "char":
       return { state: { ...state, command: { value: command.value + mapped.ch } } };

@@ -22,7 +22,7 @@ The grammar is deliberately tiny -- a bare numeric address or a word with option
 
 - `:` in normal mode enters `command` mode (`state.command = { value: "" }`); any pending count is dropped, same as `/` entry.
 - From visual, comment, and search modes `:` does nothing in v1 (vim's `:'<,'>` range prefill is deferred together with ranges generally).
-- Editing mirrors searchStep exactly: printable chunks append whole (pastes included), Backspace pops one code unit (a no-op at the empty value, not an exit), Esc cancels back to normal mode, Enter executes, and newline-shaped or control keys are ignored.
+- Editing mirrors searchStep except where amended: printable chunks append whole (pastes included), Backspace pops one code unit, ~~a no-op at the empty value, not an exit~~ at the empty value it exits to normal mode like Esc (amended 2026-10-22 after E2E: the user wants a keyboard-only exit path; vim's no-op-at-start behavior yields to daily-driver comfort), Esc cancels back to normal mode, Enter executes, and newline-shaped or control keys are ignored.
 - The cursor never moves while editing (no incremental jumps), so there is no origin to remember: Esc simply restores normal mode.
 - Execution always ends command mode; success, error, and empty input alike return to normal mode.
 - Rendering: a `-- COMMAND --` badge, empty hints text (the cmdline row shows the input itself), and the `:` prompt through the existing `{ kind: "input" }` cmdline variant.
@@ -35,6 +35,7 @@ After trimming, the whole line is either an address or a command; nothing else p
 - `address` -- `^\d+$`; jumps to that 1-based line with exactly `{count}G` semantics (column preserved, line clamped into the file, viewport follows).
 - `command` -- whitespace-split into a name and argument tokens.
 
+A command name may carry one trailing `!`, stripped before resolution (`:q!` resolves as `quit`; a second bang is part of the name and fails as E492).
 Name resolution: an input matches a table entry when the entry's full name starts with the input and the input is at least the entry's `short` form (vim's shortest-abbreviation model, so `:n` is not `nohlsearch`); exactly one match executes, zero matches reports `E492: Not an editor command: <name>`, and two or more report `E464: Ambiguous command`.
 Matching is case-sensitive, like vim.
 All v1 commands declare `args: "none"`; any argument tokens report `E488: Trailing characters`.
@@ -58,7 +59,7 @@ function executeCommand(state: ViewerState, raw: string, lines: string[], viewpo
 
 v1 table:
 
-- `quit` (short `q`) -- emits the existing `close` effect; no `!` variant (the card has no unsaved state).
+- `quit` (short `q`) -- emits the existing `close` effect. ~~no `!` variant (the card has no unsaved state).~~ Amended 2026-10-22 after E2E: a single trailing bang on a command name is stripped and silently ignored, so `:q!` runs `quit`; there is nothing to force, so the bang is a no-op kept purely for muscle-memory compatibility.
 - `nohlsearch` (short `noh`) -- turns off search highlighting without clearing `lastSearch`.
 
 `:nohlsearch` semantics (vim-faithful): highlight and the `[rank/total]` statusline segment are currently driven at render time by `lastSearch`; the command sets a new `state.searchHL = false` flag that suppresses both, while `n`/`N` repeats and a new `/` submission set it back to true.

@@ -503,7 +503,7 @@ test("command: : is inert in visual, comment, and search modes", () => {
   assert.deepEqual(search.state.search, { query: ":", origin: { line: 2, col: 3 } });
 });
 
-test("command: typing appends whole and Backspace pops without exiting at empty", () => {
+test("command: typing appends whole and Backspace pops; at empty it exits", () => {
   let st = view(viewer(), ":").state;
   st = view(st, "q").state;
   assert.deepEqual(st.command, { value: "q" });
@@ -514,9 +514,9 @@ test("command: typing appends whole and Backspace pops without exiting at empty"
   st = view(st, "\x7f").state;
   assert.deepEqual(st.command, { value: "q" });
   st = view(st, "\x7f").state;
-  st = view(st, "\x7f").state; // popping at the empty value keeps editing
-  assert.equal(st.mode, "command");
-  assert.deepEqual(st.command, { value: "" });
+  st = view(st, "\x7f").state; // popping at the empty value exits to normal (E2E amendment)
+  assert.equal(st.mode, "normal");
+  assert.equal(st.command, null);
 });
 
 test("command: Esc returns to normal with the line cleared and no effect", () => {
@@ -601,4 +601,12 @@ test("command mode: after :7 executes, a fresh : starts a clean input", () => {
   st = reduceViewer(st, ":", RAILS, vpv(30, 20)).state;
   assert.equal(st.mode, "command");
   assert.deepEqual(st.command, { value: "" });
+});
+
+test("command mode: backspace at the empty value exits to normal mode like Esc", () => {
+  let st = viewer({ cursor: { line: 0, col: 0 } });
+  st = reduceViewer(st, ":", RAILS, vpv(30, 20)).state;
+  st = reduceViewer(st, "\x7f", RAILS, vpv(30, 20)).state;
+  assert.equal(st.mode, "normal");
+  assert.equal(st.command, null);
 });
