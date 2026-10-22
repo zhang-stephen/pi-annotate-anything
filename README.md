@@ -10,8 +10,9 @@ A [Pi](https://github.com/earendil-works/pi-coding-agent) coding agent extension
 
 - **Vim-like modal interaction.** The annotation card is a modal viewer; if your fingers know vim, they already know this card:
   - normal / visual / comment modes, char-wise and line-wise selection with `o` to swap endpoints
-  - motions: `h j k l`, `0` `$`, `gg` `G`, half/full page jumps, `{count}` prefixes
+  - motions: `h j k l`, `0` `$`, `gg` `G`, half/full page jumps, `{count}` prefixes shown as you type
   - `/` search: regex + smartcase, incremental jump as you type, persistent highlight, `n`/`N` to hop between matches
+  - `:` command line: `:q`, `:noh`, line addresses, and a Tab-triggered completion drawer
   - `Tab` cycling when annotations stack at the cursor
 - **Annotate anything.** Any local file, not just code: source, logs, configs, docs, data. Any range, down to character precision. Each annotation becomes a pill in the composer and ships to the agent as an exact annotate-time snapshot plus your comment.
 
@@ -30,7 +31,11 @@ pi install npm:pi-annotate-anything
 ## Features
 
 - Overlay card with line numbers, syntax highlighting, a live pending-count title bar, and a vim-style mode badge footer.
-- Vim-style `/` search in the viewer: regex + smartcase (case-insensitive unless the pattern has an uppercase letter), jumps to the nearest match as you type, all matches stay highlighted after submit, `n`/`N` hop with wrap messages, `{count}` prefixes work on motions and hops.
+- Vim-style `/` search in the viewer: regex + smartcase (case-insensitive unless the pattern has an uppercase letter), jumps to the nearest match as you type, all matches stay highlighted after submit, `n`/`N` hop with wrap messages, `{count}` prefixes work on motions and hops, and backspace at the empty prompt exits like `Esc`.
+- `:` command line in the viewer: `quit` (`:q`) closes the card, `nohlsearch` (`:noh`) clears the search highlight while `n`/`N` keep working, and a bare number (`:7`) jumps like `7G`; a single trailing `!` is ignored (`:q!`), prefixes resolve down to each command's short form (`:noh`, never `:n`), and unknown or malformed input reports vim-style errors (`E492`, `E464`, `E488`).
+- Command completion behind Tab: an enclosed drawer (labeled divider with the cycling count, dim descriptions, closing rule) opens on Tab with the matching commands, further Tabs cycle the selection, and typing closes it keeping the accepted value; this drawer is the surface future sources (paths for `:e`, buffers) plug into.
+- Pending keys render right-aligned in the cmdline row (showcmd): a pending count or the `g` of `gg` stays visible until the sequence lands.
+- The goal column survives short lines (curswant): vertical moves keep aiming at the column you came from; horizontal moves, jumps, searches, and mode switches end the session.
 - Fuzzy path completion in the `/annotate` argument: session-relative paths, `~` expansion, directories first, and workspace-wide fuzzy matching backed by an async file index. Recommended host: pi >= 1.0 (older hosts report an explicit error and get no completion).
 - Composer pills like `[src/a.ts:10-20]` that expand into full quote-block-plus-comment payloads when the message is sent.
 - Annotate-time snapshots: the payload carries the text you saw when annotating, never a silent re-read of the file.
@@ -50,29 +55,30 @@ pi install npm:pi-annotate-anything
 
 ### Keys
 
-Every key is listed per mode; `-` means the key does nothing in that mode. The search `/` column applies while the search prompt is open, the comment box column while the floating comment editor is open.
+Every key is listed per mode; `-` means the key does nothing in that mode. The search `/` column applies while the search prompt is open, the command `:` column while the command line is open, the comment box column while the floating comment editor is open.
 
-| Key | Normal | Visual | Search `/` | Comment box |
-| --- | --- | --- | --- | --- |
-| `h` `j` `k` `l` / arrows | move the cursor | expand / shrink the selection | - | - |
-| `0` / `$` | start / end of the line | same, keeping the anchor | - | - |
-| `gg` / `G` | first / last line; `{count}G` jumps to line N | same, keeping the anchor | - | - |
-| `ctrl+d` `ctrl+u` / `PgDn` `PgUp` | half / full page | same | - | - |
-| `1`-`9` (then digits) | count prefix for `j` `k` `h` `l` `G` `n` `N`; never displayed | - | - | - |
-| `/` | enter search mode | - | - | - |
-| `n` / `N` | next / previous match (wraps, with a message) | same | - | - |
-| printable text | - | - | append to the pattern; the match jumps as you type | insert |
-| `Backspace` | - | - | delete the last pattern char | delete char |
-| `Enter` | - | - | submit (empty pattern repeats the last search) | submit the annotation |
-| `ctrl+j` / `shift+enter` | - | - | - | insert a newline |
-| `v` / `V` | enter visual char / line mode | switch mode, or exit to normal | - | - |
-| `o` | - | swap the anchor and cursor ends | - | - |
-| `Tab` | cycle the target among stacked pending annotations | - | - | - |
-| `c` | edit the targeted annotation's comment (pre-filled) | comment the selection | - | - |
-| `x` | delete the targeted annotation (and its pill) | - | - | - |
-| `p` | toggle the hover preview of pending comments | - | - | - |
-| `Esc` | close the card | exit to normal mode | cancel; the cursor returns to where `/` started | cancel the edit |
-| `q` | close the card | - | - | - |
+| Key | Normal | Visual | Search `/` | Command `:` | Comment box |
+| --- | --- | --- | --- | --- | --- |
+| `h` `j` `k` `l` / arrows | move the cursor | expand / shrink the selection | - | - | - |
+| `0` / `$` | start / end of the line | same, keeping the anchor | - | - | - |
+| `gg` / `G` | first / last line; `{count}G` jumps to line N | same, keeping the anchor | - | - | - |
+| `ctrl+d` `ctrl+u` / `PgDn` `PgUp` | half / full page | same | - | - | - |
+| `1`-`9` (then digits) | count prefix for `j` `k` `h` `l` `G` `n` `N`, shown in the cmdline row until the motion lands | - | - | - | - |
+| `/` | enter search mode | - | - | - | - |
+| `n` / `N` | next / previous match (wraps, with a message) | same | - | - | - |
+| `:` | enter command mode | - | - | - | - |
+| printable text | - | - | append to the pattern; the match jumps as you type | append to the command line | insert |
+| `Backspace` | - | - | delete the last pattern char; at empty, exit to normal | delete the last char; at empty, exit to normal | delete char |
+| `Enter` | - | - | submit (empty pattern repeats the last search) | execute the command line (empty exits silently) | submit the annotation |
+| `ctrl+j` / `shift+enter` | - | - | - | - | insert a newline |
+| `v` / `V` | enter visual char / line mode | switch mode, or exit to normal | - | - | - |
+| `o` | - | swap the anchor and cursor ends | - | - | - |
+| `Tab` | cycle the target among stacked pending annotations | - | - | complete the command name; cycle the candidates | - |
+| `c` | edit the targeted annotation's comment (pre-filled) | comment the selection | - | - | - |
+| `x` | delete the targeted annotation (and its pill) | - | - | - | - |
+| `p` | toggle the hover preview of pending comments | - | - | - | - |
+| `Esc` | close the card | exit to normal mode | cancel; the cursor returns to where `/` started | cancel; back to normal | cancel the edit |
+| `q` | close the card | - | - | - | - |
 
 The comment box is a floating panel that opens next to the selection (below it, or above when space runs out).
 
@@ -83,8 +89,9 @@ The viewer borrows vim's grammar, not its job: it annotates instead of editing. 
 - **Keys are repurposed for annotation, not editing**: `c` comments (not change), `x` deletes the annotation at the cursor (not a character), `p` previews the annotation (not paste), `o` swaps selection endpoints in visual mode (not open-line), `q` closes the card (not macro recording), `Tab` cycles stacked annotation targets (not a vim binding).
 - `Esc` backs out one level wherever you are: comment box -> cancel the edit, search -> cancel and restore the cursor, visual -> normal, normal -> close the card.
 - Selections start **empty** at the cursor and expand/shrink per keypress; vim grows the selection from the entry cell instead.
-- `{count}` is accepted only in normal mode, only before `j` `k` `h` `l` `G` `n` `N`, and is never displayed.
-- Search uses **JavaScript regex + smartcase** (case-insensitive unless the pattern contains an uppercase letter), not vim's regex dialect; no `\c` `\v` magic, no `*` `#` `f` `t` `%` motions, no operators, no `:noh`; the highlight clears on the next search (see Roadmap).
+- `{count}` is accepted only in normal mode and only before `j` `k` `h` `l` `G` `n` `N`.
+- Search uses **JavaScript regex + smartcase** (case-insensitive unless the pattern contains an uppercase letter), not vim's regex dialect; no `\c` `\v` magic, no `*` `#` `f` `t` `%` motions, no operators.
+- The command line is a **curated subset**: `:q`, `:noh`, and line addresses, with unambiguous-prefix resolution down to each command's short form; a single trailing `!` is ignored (`:q!`); and `gg` ignores `{count}` (vim's `3gg` goes to line 3).
 
 ### Stacked annotations and the gutter
 
