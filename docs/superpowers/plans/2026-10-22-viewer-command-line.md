@@ -1,7 +1,7 @@
 ---
 title: Viewer command line (:) implementation plan
 status: in-progress
-progress: 4/6
+progress: 5/6
 spec: ../specs/2026-10-22-viewer-command-line-design.md
 ---
 
@@ -65,11 +65,11 @@ Spec: the Completion section of `docs/superpowers/specs/2026-10-22-viewer-comman
 
 Files: `src/viewer/commands.ts`, `src/viewer/state.ts`, create `src/viewer/completion-panel.ts`, `src/viewer/viewer.ts`, plus tests in `test/viewer/commands.test.ts`, `test/viewer/state.test.ts`, `test/viewer/completion-panel.test.ts`, `test/viewer/viewer.test.ts`.
 
-- [ ] `CommandSpec` gains `desc: string` (quit: "close the card", nohlsearch: "clear search highlight") and `completeFor(input: string): { name: string; desc: string }[]`: empty input -> []; input containing whitespace -> [] (no arg source yet); otherwise COMMANDS entries whose name starts with the input, table order.
-- [ ] Command draft gains cycling state (`completion?: { anchor: string; index: number }`): first Tab snapshots the anchor and writes candidates(anchor)[0] into the value; further Tabs advance and wrap, writing the selected name; any other key clears it. The panel shows the anchor list with the selection inverted while cycling, the live candidates(value) list with no selection otherwise.
-- [ ] New pure module `completion-panel.ts`: renders at most 5 rows (`name` + two spaces + dim desc, selected row inverted, colors injected, width-truncated); viewer.ts paints them over the bottom-most body rows while command mode shows candidates; badge, position, and the cmdline row are never displaced.
-- [ ] Tests: source cases (empty, bare word, command+space, no match, unique); Tab accept, cycle, wrap, anchor freeze while value changes, reset on typing; panel rows, selection styling, 5-row truncation; viewer integration (typed char shows the row, Tab completes the value, bare `:` shows nothing, mode exit kills the panel).
-- [ ] Steps: failing tests first, implement, suite green, commit `feat(viewer): complete command names through the unified panel`.
+- [x] `CommandSpec` gains `desc: string` (quit: "close the card", nohlsearch: "clear search highlight") and `completeFor(input: string): { name: string; desc: string }[]`: empty input -> []; input containing whitespace -> [] (no arg source yet); otherwise COMMANDS entries whose name starts with the input, table order.
+- [x] Command draft gains cycling state (`completion?: { anchor: string; index: number }`): first Tab snapshots the anchor and writes candidates(anchor)[0] into the value; further Tabs advance and wrap, writing the selected name; any other key clears it. The panel shows the anchor list with the selection inverted while cycling, the live candidates(value) list with no selection otherwise.
+- [x] New pure module `completion-panel.ts`: renders at most 5 rows (`name` + two spaces + dim desc, selected row inverted, colors injected, width-truncated); viewer.ts paints them over the bottom-most body rows while command mode shows candidates; badge, position, and the cmdline row are never displaced.
+- [x] Tests: source cases (empty, bare word, command+space, no match, unique); Tab accept, cycle, wrap, anchor freeze while value changes, reset on typing; panel rows, selection styling, 5-row truncation; viewer integration (typed char shows the row, Tab completes the value, bare `:` shows nothing, mode exit kills the panel).
+- [x] Steps: failing tests first, implement, suite green, commit `feat(viewer): complete command names through the unified panel` (`4ac9cb8`, 507 pass, 24 new tests; one existing test updated to drop Tab from the ignored-keys list; truncation deviation and the >5-candidate modulo-remap limitation are recorded on the module bullet).
 
 ## Task 6: manual E2E (user)
 

@@ -10,7 +10,7 @@ Do not open docs marked `done` unless the current work touches that area.
 
 - spec: `docs/superpowers/specs/2026-10-22-viewer-command-line-design.md`
   - approved: `:` command mode, minimal table (quit/nohlsearch + bare address), buffer-ready grammar
-  - plan: `docs/superpowers/plans/2026-10-22-viewer-command-line.md` (in progress, 4/5; tasks done, user E2E pending)
+  - plan: `docs/superpowers/plans/2026-10-22-viewer-command-line.md` (in progress, 5/6; user E2E round 2 pending)
 - spec: `docs/superpowers/specs/2026-10-17-ci-tui-e2e-design.md`
   - draft, on hold: low priority, do not schedule (user call 2026-10-20)
 
