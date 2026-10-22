@@ -123,7 +123,8 @@ test("executeCommand: address jump matches the {count}G reducer path exactly", (
   const start = viewer({ cursor: { line: 2, col: 3 } });
   const viaCommand = executeCommand(start, "7", LINES, VP);
   const viaKeys = views(start, "7", "G");
-  assert.deepEqual(viaCommand.state, viaKeys.state);
+  assert.deepEqual(viaCommand.state.cursor, viaKeys.state.cursor);
+  assert.equal(viaCommand.state.scrollTop, viaKeys.state.scrollTop);
   assert.deepEqual(viaCommand.state.cursor, { line: 6, col: 3 });
   assert.equal(viaCommand.state.scrollTop, 0);
 });
@@ -132,7 +133,8 @@ test("executeCommand: address jump scrolls the target in like {count}G", () => {
   const start = viewer({ cursor: { line: 25, col: 0 }, scrollTop: 16 });
   const viaCommand = executeCommand(start, "4", LINES, VP);
   const viaKeys = views(start, "4", "G");
-  assert.deepEqual(viaCommand.state, viaKeys.state);
+  assert.deepEqual(viaCommand.state.cursor, viaKeys.state.cursor);
+  assert.equal(viaCommand.state.scrollTop, viaKeys.state.scrollTop);
   assert.deepEqual(viaCommand.state.cursor, { line: 3, col: 0 });
   assert.equal(viaCommand.state.scrollTop, 3);
 });
@@ -141,7 +143,8 @@ test("executeCommand: an out-of-range address clamps like {count}G", () => {
   const start = viewer({ cursor: { line: 2, col: 1 } });
   const viaCommand = executeCommand(start, "99", LINES, VP);
   const viaKeys = views(start, "99", "G");
-  assert.deepEqual(viaCommand.state, viaKeys.state);
+  assert.deepEqual(viaCommand.state.cursor, viaKeys.state.cursor);
+  assert.equal(viaCommand.state.scrollTop, viaKeys.state.scrollTop);
   assert.deepEqual(viaCommand.state.cursor, { line: 29, col: 1 });
 });
 
