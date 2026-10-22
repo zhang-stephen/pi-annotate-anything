@@ -176,3 +176,11 @@ test("executeCommand: an ambiguous abbreviation is rejected with E464", () => {
     COMMANDS.pop();
   }
 });
+
+test("executeCommand: the address jump ends command mode like every other path", () => {
+  const state = viewer({ mode: "command", command: { value: "7" }, cursor: { line: 0, col: 3 } });
+  const res = executeCommand(state, "7", LINES, VP);
+  assert.equal(res.state.mode, "normal");
+  assert.equal(res.state.command, null);
+  assert.equal(res.state.cursor.line, 6);
+});

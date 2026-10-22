@@ -587,3 +587,18 @@ test("command: : entry resets the goal column", () => {
   const cmd = viewOn(RAILS, down.state, ":");
   assert.equal(cmd.state.wantedCol ?? null, null);
 });
+
+test("command mode: after :7 executes, a fresh : starts a clean input", () => {
+  // E2E regression: the address path used to leave mode "command" behind,
+  // so the next ":" was appended as input content ("::") and failed as E492.
+  let st = viewer({ cursor: { line: 0, col: 0 } });
+  st = reduceViewer(st, ":", RAILS, vpv(30, 20)).state;
+  st = reduceViewer(st, "7", RAILS, vpv(30, 20)).state;
+  st = reduceViewer(st, "\r", RAILS, vpv(30, 20)).state;
+  assert.equal(st.mode, "normal");
+  assert.equal(st.command, null);
+  assert.equal(st.cursor.line, 4); // RAILS has 5 lines; 7 clamps to the last
+  st = reduceViewer(st, ":", RAILS, vpv(30, 20)).state;
+  assert.equal(st.mode, "command");
+  assert.deepEqual(st.command, { value: "" });
+});

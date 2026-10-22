@@ -60,6 +60,15 @@ export const COMMANDS: CommandSpec[] = [
 ];
 
 export function executeCommand(state: ViewerState, raw: string, lines: string[], viewport: ViewerViewport): ViewerResult {
+  // Total normalization: every execution ends command mode with the draft
+  // cleared, regardless of what the caller passed in. The reducer already
+  // clears the draft on Enter; owning the normalization here too makes the
+  // function safe for any future caller.
+  const out = executeParsed(state, raw, lines, viewport);
+  return { ...out, state: { ...out.state, mode: "normal", command: null } };
+}
+
+function executeParsed(state: ViewerState, raw: string, lines: string[], viewport: ViewerViewport): ViewerResult {
   const parsed = parseCommandLine(raw);
   // Empty Enter: back to normal mode, no message, no effect.
   if (parsed.kind === "none") return { state: { ...state, mode: "normal" } };
@@ -67,6 +76,9 @@ export function executeCommand(state: ViewerState, raw: string, lines: string[],
     // {count}G parity: identical line math and moved() plumbing as the G arm
     // of the reducer (column preserved, line clamped into the file, viewport
     // follows), so ":7" and "7G" land on the same state.
+    // Every execution path ends command mode, the address jump included:
+    // mode stays "command" in the incoming state and must flip here, or the
+    // next ":" keypress is swallowed as input content (E2E regression).
     const line = Math.min(Math.max(parsed.line - 1, 0), lines.length - 1);
     return consumeCount(moved({ ...state, wantedCol: null }, { line, col: state.cursor.col }, lines, viewport));
   }
