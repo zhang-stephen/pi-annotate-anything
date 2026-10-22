@@ -1,7 +1,7 @@
 ---
 title: Viewer command line (:) implementation plan
 status: in-progress
-progress: 2/5
+progress: 3/5
 spec: ../specs/2026-10-22-viewer-command-line-design.md
 ---
 
@@ -45,10 +45,10 @@ Files: `src/viewer/state.ts`, `test/viewer/state.test.ts`
 
 Files: `src/viewer/status-line.ts`, `test/viewer/status-line.test.ts`
 
-- [ ] `CardMode` gains `"command"`; badge `-- COMMAND --`; `FOOTER_HINTS` entry is the empty string.
-- [ ] The cmdline renders through the existing `{ kind: "input", prompt: ":", value, cursorCol }` path in `renderCommandLine` (line ~159); no new renderer branch beyond the prompt character.
-- [ ] Tests: badge text, `:` prompt with typed value and cursor position, empty hints.
-- [ ] Steps: failing tests first, implement, suite green, commit `feat(viewer): render command mode badge and prompt`.
+- [x] `CardMode` gains `"command"`; badge `-- COMMAND --`; `FOOTER_HINTS` entry is the empty string (type-level half landed in Task 2 commit `07b68e5` under the totality grant).
+- [x] The cmdline renders through the existing `{ kind: "input", prompt: ":", value, cursorCol }` path in `renderCommandLine`; no new renderer branch beyond the prompt character (proven by pinning tests, no source change needed).
+- [x] Tests (4 in `test/viewer/status-line.test.ts`, tests-only commit `ad9e468`): badge text with exact 40-col geometry, `:` prompt with typed value and inverse cursor cell, empty hints row, and no `[rank/total]` segment in command mode.
+- [x] Steps: tests written as regression pinning per the dispatch brief, none red (generic path already satisfied the contract), suite green (470 pass), commit `ad9e468`.
 
 ## Task 4: shell wiring
 
