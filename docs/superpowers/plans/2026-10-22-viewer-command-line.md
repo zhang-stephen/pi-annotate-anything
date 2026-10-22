@@ -75,10 +75,10 @@ Files: `src/viewer/commands.ts`, `src/viewer/state.ts`, create `src/viewer/compl
 
 Live E2E found the open-topped drawer fused with the footer stack and noisy on every keystroke; the spec Completion section records the superseded decisions with strikethrough. The state machine already owns the cycling lifecycle -- this amendment is render-layer only.
 
-- [ ] The drawer opens only on Tab (vim wildchar): no panel while typing; first Tab snapshots the anchor, accepts candidate[0], and shows the enclosed drawer; any other key closes it, the value keeping the accepted content; Tab with an empty value or no candidates stays inert.
-- [ ] Enclosed presentation: top rule with the source label and cycling count, candidate rows, and a plain closing rule beneath; the label is dim chrome (accent reserved for the mode badge); narrow widths drop the count, then the label, degrading to plain rules; at most 7 body lines covered (top rule + 5 rows + closing rule).
-- [ ] Tests updated: live-mode panel cases become inert-typing cases; divider assertions gain the closing rule and the dim label; viewer integration re-pins the open/close lifecycle on Tab (typing shows nothing, Tab opens, typing closes keeping the value).
-- [ ] Steps: failing tests first, implement, suite green, commit `feat(viewer): enclose the completion drawer behind tab`.
+- [x] The drawer opens only on Tab (vim wildchar): no panel while typing; first Tab snapshots the anchor, accepts candidate[0], and shows the enclosed drawer; any other key closes it, the value keeping the accepted content; Tab with an empty value or no candidates stays inert.
+- [x] Enclosed presentation: top rule with the source label and cycling count, candidate rows, and a plain closing rule beneath; the label is dim chrome (accent reserved for the mode badge); narrow widths drop the count, then the label, degrading to plain rules; at most 7 body lines covered (top rule + 5 rows + closing rule).
+- [x] Tests updated: live-mode panel cases became inert-typing cases; divider assertions gained the closing rule and the dim label; viewer integration re-pins the open/close lifecycle on Tab (typing shows nothing, Tab opens, typing closes keeping the value; space-after-command and bare-colon Tab inert; Esc clears the label).
+- [x] Steps: failing tests first, implement, suite green, commit `feat(viewer): enclose the completion drawer behind tab` (`e8da61a`, 514 pass, fail 0 asserted in the raw summary).
 
 ## Task 6: manual E2E (user)
 
