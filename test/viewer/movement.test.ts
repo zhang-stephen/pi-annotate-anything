@@ -143,11 +143,13 @@ test("reduceViewer: second non-'g' key after 'g' falls through to normal handlin
   assert.equal(res.state.scrollTop, 10); // cursor still inside the viewport
 });
 
-test("reduceViewer: 'g' then Esc falls through to normal handling (close)", () => {
+test("reduceViewer: 'g' then Esc falls through to normal handling (Esc no-op)", () => {
   let res = view(viewer({ cursor: { line: 15, col: 3 }, scrollTop: 10 }), "g");
   res = view(res.state, "\x1b");
-  assert.deepEqual(res.effect, { type: "close" });
+  assert.equal(res.effect, undefined);
   assert.equal(res.state.pending, null);
+  assert.equal(res.state.cursor.line, 15);
+  assert.equal(res.state.scrollTop, 10);
 });
 
 test("reduceViewer: a digit during pending 'g' clears the stroke and arms no count", () => {

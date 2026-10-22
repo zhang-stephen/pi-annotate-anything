@@ -24,7 +24,7 @@ export interface FooterHints {
 export const FOOTER_HINTS: Record<CardMode, FooterHints> = {
   normal: {
     badge: "-- NORMAL --",
-    hints: "hjkl move  v/V select  / search  n/N next/prev  c/x comment/delete  p preview  q/Esc close",
+    hints: "hjkl move  v/V select  / search  n/N next/prev  c/x comment/delete  p preview  :q close",
   },
   // While the / input is open the cmdline row shows the input itself, so the
   // hints text is empty; the badge keeps the mode line complete.

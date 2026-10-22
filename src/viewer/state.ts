@@ -271,11 +271,12 @@ function handleMode(state: ViewerState, key: string, lines: string[], viewport: 
       // visual/comment round-trips within the card session.
       if (state.mode !== "normal") return { state };
       return { state: { ...state, previewOn: !state.previewOn } };
-    case "q":
-      return state.mode === "normal" ? { state, effect: { type: "close" } } : { state };
     case "\x1b":
+      // Esc never closes the viewer (2.0: ":q is the only close"): it exits
+      // to normal from visual and is an explicit no-op in normal mode, so a
+      // stray Esc cannot fall through to anything else.
       if (visual) return { state: { ...state, mode: "normal", anchor: null } };
-      return { state, effect: { type: "close" } };
+      return { state };
     default:
       return { state }; // unmapped key: no-op
   }

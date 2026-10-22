@@ -221,12 +221,12 @@ test("cmdline hints: message right-aligned in accent, hints truncate first", () 
 test("FOOTER_HINTS normal mode carries the NORMAL badge and the full hint line", () => {
   const { badge, hints } = FOOTER_HINTS.normal;
   assert.equal(badge, "-- NORMAL --");
-  assert.equal(hints, "hjkl move  v/V select  / search  n/N next/prev  c/x comment/delete  p preview  q/Esc close");
+  assert.equal(hints, "hjkl move  v/V select  / search  n/N next/prev  c/x comment/delete  p preview  :q close");
   assert.ok(hints.includes("/ search"), "normal hints mention / search");
   assert.ok(hints.includes("n/N next/prev"), "normal hints mention n/N next/prev");
   assert.ok(hints.includes("c/x"), "normal hints mention c/x");
   assert.ok(hints.includes("p preview"), "normal hints mention p preview");
-  assert.ok(hints.includes("q/Esc close"), "normal hints mention q/Esc close");
+  assert.ok(hints.includes(":q close"), "normal hints mention :q close");
 });
 
 test("FOOTER_HINTS visual modes carry VISUAL badges and extend hints", () => {

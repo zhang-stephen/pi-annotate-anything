@@ -257,7 +257,7 @@ test("statusline and cmdline follow the mode: badge in accent, hints in dim", ()
   assert.ok(bare[bare.length - 3].endsWith("1:1 │"));
   assert.ok(bare[bare.length - 2].startsWith("│ hjkl move  v/V select"));
   assert.ok(normal.fgCalls.some((c) => c.token === "accent" && c.text === "-- NORMAL --"));
-  assert.ok(normal.fgCalls.some((c) => c.token === "dim" && c.text === "hjkl move  v/V select  / search  n/N next/prev  c/x comment/delete  p preview  q/Esc close"));
+  assert.ok(normal.fgCalls.some((c) => c.token === "dim" && c.text === "hjkl move  v/V select  / search  n/N next/prev  c/x comment/delete  p preview  :q close"));
 
   // Visual-char: the statusline carries the selection range as L:C-L:C.
   const visual = makeCard({ lines: ["alpha", "beta"] });
@@ -928,8 +928,10 @@ test("update and delete effects still dispatch through the Task 3 seams", () => 
   // Delete: x on the same pending line removes the draft.
   h.card.handleInput("x");
   assert.deepEqual(h.calls.deleted, ["[src/a.ts:1]"]);
-  // Close still dispatches from normal mode.
+  // Close still dispatches from normal mode, via :q (the only close).
+  h.card.handleInput(":");
   h.card.handleInput("q");
+  h.card.handleInput("\r");
   assert.equal(h.calls.closed, 1);
 });
 

@@ -131,18 +131,34 @@ test("reduceViewer: Esc in visual mode exits to normal without an effect", () =>
   assert.equal(res.effect, undefined);
 });
 
-test("reduceViewer: Esc in normal mode requests close", () => {
-  const res = view(viewer(), "\x1b");
-  assert.deepEqual(res.effect, { type: "close" });
+// 2.0 amendment: the normal-mode q and Esc close mappings are gone; ":q" is
+// the only close, pinned below by "command: Enter on :q closes the card in
+// normal mode" and by executeCommand's quit test in commands.test.ts.
+
+test("reduceViewer: Esc in normal mode is an explicit no-op", () => {
+  const start = viewer({ cursor: { line: 5, col: 3 } });
+  const res = view(start, "\x1b");
+  assert.deepEqual(res.state, start);
+  assert.equal(res.effect, undefined);
 });
 
-test("reduceViewer: q closes only in normal mode", () => {
-  const closed = view(viewer(), "q");
-  assert.deepEqual(closed.effect, { type: "close" });
-  const start = viewer({ mode: "visual-char", cursor: { line: 2, col: 1 }, anchor: { line: 2, col: 1 } });
-  const inVisual = view(start, "q");
+test("reduceViewer: q is unmapped in normal and visual modes", () => {
+  const start = viewer({ cursor: { line: 5, col: 3 } });
+  const inNormal = view(start, "q");
+  assert.deepEqual(inNormal.state, start);
+  assert.equal(inNormal.effect, undefined);
+  const visual = viewer({ mode: "visual-char", cursor: { line: 2, col: 1 }, anchor: { line: 2, col: 1 } });
+  const inVisual = view(visual, "q");
+  assert.deepEqual(inVisual.state, visual);
   assert.equal(inVisual.effect, undefined);
-  assert.equal(inVisual.state.mode, "visual-char");
+});
+
+test("reduceViewer: :q still closes through the ex layer", () => {
+  let st = view(viewer(), ":").state;
+  st = view(st, "q").state;
+  const res = view(st, "\r");
+  assert.equal(res.state.mode, "normal");
+  assert.deepEqual(res.effect, { type: "close" });
 });
 
 test("reduceViewer: unknown keys are no-ops", () => {
