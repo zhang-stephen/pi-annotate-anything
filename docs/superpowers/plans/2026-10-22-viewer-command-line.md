@@ -1,7 +1,7 @@
 ---
 title: Viewer command line (:) implementation plan
-status: in-progress
-progress: 5/6
+status: done
+progress: 6/6
 spec: ../specs/2026-10-22-viewer-command-line-design.md
 ---
 
@@ -82,11 +82,13 @@ Live E2E found the open-topped drawer fused with the footer stack and noisy on e
 
 ## Task 6: manual E2E (user)
 
-- [ ] Sandbox: `PI_CODING_AGENT_DIR=/tmp/pi-sandbox-home pi -e ./index.ts` with /tmp fixtures (long lines, CJK, CRLF).
-- [ ] Round 1 regressions: `:7` then `:` re-enters a clean input (no swallowed colon); Backspace at empty exits to normal in both `:` and `/` modes; `:q!` runs quit and `:q!!` shows E492.
-- [ ] Round 2 completion: bare `:` shows nothing and Tab on empty or no-match is inert; `n` alone shows nothing, `n` then Tab opens the enclosed drawer (dim labeled top rule, candidate row with dim description, closing rule) and completes the value; typing closes the drawer keeping the value; a space after a command makes Tab inert; Enter executes the completed name.
-- [ ] Original cases: `:q` closes; `:7` jumps like `7G` (and `:999` clamps); `/foo` then `:noh` clears highlight, `n` re-lights; `:n` shows E492; `:noh extra` shows E488; Esc mid-typing restores normal mode; `3` then `:` drops the count.
-- [ ] Terminal-only feel (key repeat, paint latency) is not verifiable via unit tests or tmux.
+- [x] Sandbox: `PI_CODING_AGENT_DIR=/tmp/pi-sandbox-home pi -e ./index.ts` with /tmp fixtures (long lines, CJK, CRLF).
+- [x] Round 1 regressions: `:7` then `:` re-enters a clean input (no swallowed colon); Backspace at empty exits to normal in both `:` and `/` modes; `:q!` runs quit and `:q!!` shows E492.
+- [x] Round 2 completion: bare `:` shows nothing and Tab on empty or no-match is inert; `n` alone shows nothing, `n` then Tab opens the enclosed drawer (dim labeled top rule, candidate row with dim description, closing rule) and completes the value; typing closes the drawer keeping the value; a space after a command makes Tab inert; Enter executes the completed name.
+- [x] Original cases: `:q` closes; `:7` jumps like `7G` (and `:999` clamps); `/foo` then `:noh` clears highlight, `n` re-lights; `:n` shows E492; `:noh extra` shows E488; Esc mid-typing restores normal mode; `3` then `:` drops the count.
+- [x] Terminal-only feel (key repeat, paint latency) is not verifiable via unit tests or tmux.
+
+E2E confirmed by the user on 2026-10-22 across both rounds (the round-1 findings -- swallowed colon after `:N`, backspace exits, `!` tolerance, search backspace exit -- were fixed and re-verified, and the drawer presentation was reshaped twice from live feedback: enclosed drawer, dim label, count beside the label); branch ff-merged to master and pushed.
 
 ## Review focus
 

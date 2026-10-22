@@ -8,9 +8,6 @@ Do not open docs marked `done` unless the current work touches that area.
 
 ## Active
 
-- spec: `docs/superpowers/specs/2026-10-22-viewer-command-line-design.md`
-  - approved: `:` command mode, minimal table (quit/nohlsearch + bare address), buffer-ready grammar
-  - plan: `docs/superpowers/plans/2026-10-22-viewer-command-line.md` (in progress, 5/6; user E2E round 2 pending)
 - spec: `docs/superpowers/specs/2026-10-17-ci-tui-e2e-design.md`
   - draft, on hold: low priority, do not schedule (user call 2026-10-20)
 
@@ -32,6 +29,8 @@ Do not open docs marked `done` unless the current work touches that area.
 
 ## Done
 
+- spec: `docs/superpowers/specs/2026-10-22-viewer-command-line-design.md`
+- plan: `docs/superpowers/plans/2026-10-22-viewer-command-line.md`
 - plan: `docs/superpowers/plans/2026-10-22-vim-behavior-alignment.md`
 - plan: `docs/superpowers/plans/2026-10-20-fuzzy-completion-search-parity.md`
 - spec: `docs/superpowers/specs/2026-10-20-fuzzy-completion-search-parity-design.md`
