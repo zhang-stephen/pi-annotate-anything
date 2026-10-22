@@ -1,7 +1,7 @@
 ---
 title: Viewer command line (:) implementation plan
 status: in-progress
-progress: 1/5
+progress: 2/5
 spec: ../specs/2026-10-22-viewer-command-line-design.md
 ---
 
@@ -34,12 +34,12 @@ Files: create `src/viewer/commands.ts`, create `test/viewer/commands.test.ts`, p
 
 Files: `src/viewer/state.ts`, `test/viewer/state.test.ts`
 
-- [ ] `ViewerMode` gains `"command"`; `ViewerState.command?: { value: string } | null`.
-- [ ] Normal-mode `:` enters command mode and drops the count; `:` is inert in visual/comment/search modes.
-- [ ] Editing mirrors `searchStep` exactly: printable chunks append whole; Backspace pops one code unit and is a no-op at empty (never exits); Esc returns to normal; Enter runs `executeCommand`; control/newline-shaped keys are ignored.
-- [ ] `ViewerState.searchHL?: boolean` (undefined = true): `nohlsearch` sets false; `n`/`N` and `/` submission set it back to true.
-- [ ] Tests: entry drops count; inert elsewhere; append/backspace/Esc/Enter transitions; quit surfaces the `close` effect; `:zzz` sets the E492 message; `:noh` then `n` re-lights (`searchHL` true again).
-- [ ] Steps: failing tests first, implement, suite green, commit `feat(viewer): add command mode to the viewer reducer`.
+- [x] `ViewerMode` gains `"command"`; `ViewerState.command?: { value: string } | null`.
+- [x] Normal-mode `:` enters command mode and drops the count; `:` is inert in visual/comment/search modes.
+- [x] Editing mirrors `searchStep` exactly, through the shared `toCommentKey` classifier: printable chunks append whole; Backspace pops one code unit and is a no-op at empty (never exits); Esc returns to normal; Enter runs `executeCommand`; control/newline-shaped keys are ignored.
+- [x] `ViewerState.searchHL?: boolean` (undefined = true): `nohlsearch` sets false; `n`/`N` re-light, and the `/` path re-lights only when Enter lands a completed search (Esc-cancel and invalid-pattern keep-editing leave it untouched).
+- [x] Tests (10 in `test/viewer/state.test.ts`): entry drops count and clears the goal column; inert elsewhere; append/backspace/Esc/Enter transitions; quit surfaces the `close` effect; `:zzz` sets the E492 message; `:noh` then `n` re-lights (`searchHL` true again); empty Enter exits silently; control keys ignored.
+- [x] Steps: failing tests first, implement, suite green (466 pass), commit `07b68e5`. Mid-task type gap escalated and granted: `cardModeOf` totality forced the type-level half of Task 3 (CardMode entry, badge constant, empty hints) into this commit.
 
 ## Task 3: rendering
 
