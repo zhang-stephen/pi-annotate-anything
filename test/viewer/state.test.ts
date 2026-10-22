@@ -39,7 +39,7 @@ function commentState(text: string, visualMode: "char" | "line" = "line"): Viewe
     cursor: { line: 4, col: 3 },
     anchor: { line: 2, col: 0 },
     visualMode,
-    comment: { text },
+    comment: { text, caret: text.length },
   });
 }
 
@@ -72,7 +72,7 @@ function editingState(draft: PendingDraft, text: string): ViewerState {
     mode: "comment",
     cursor: { line: 3, col: 2 },
     visualMode: "char",
-    comment: { text },
+    comment: { text, caret: text.length },
     editingDraftId: draft.token,
   });
 }
@@ -185,7 +185,7 @@ test("reduceViewer: char-wise submit carries the normalized range; o-swap invari
     cursor: { line: 3, col: 2 },
     anchor: { line: 2, col: 1 },
     visualMode: "char",
-    comment: { text: "x" },
+    comment: { text: "x", caret: 1 },
   }), "\r");
   assert.deepEqual(forward.effect, {
     type: "annotate",
@@ -198,7 +198,7 @@ test("reduceViewer: char-wise submit carries the normalized range; o-swap invari
     cursor: { line: 2, col: 1 },
     anchor: { line: 3, col: 2 },
     visualMode: "char",
-    comment: { text: "x" },
+    comment: { text: "x", caret: 1 },
   });
   const afterSwap = view(swapped, "\r");
   assert.deepEqual(afterSwap.effect, forward.effect);
@@ -207,12 +207,12 @@ test("reduceViewer: char-wise submit carries the normalized range; o-swap invari
 test("reduceViewer: overlapping drafts resolve to the most recently added one", () => {
   const res = view(viewer({ cursor: { line: 3, col: 2 } }), "c", [DRAFT_A, DRAFT_B]);
   assert.equal(res.state.editingDraftId, DRAFT_B.token);
-  assert.deepEqual(res.state.comment, { text: "second" });
+  assert.deepEqual(res.state.comment, { text: "second", caret: 6 });
 });
 
 test("reduceViewer: submit while editing updates that draft instead of annotating", () => {
   const typed = view(editingState(DRAFT_A, "first"), "!", [DRAFT_A]);
-  assert.deepEqual(typed.state.comment, { text: "first!" });
+  assert.deepEqual(typed.state.comment, { text: "first!", caret: 6 });
   const res = view(typed.state, "\r", [DRAFT_A]);
   assert.deepEqual(res.effect, { type: "update", draftId: DRAFT_A.token, comment: "first!" });
   assert.equal(res.state.mode, "normal");
@@ -496,7 +496,7 @@ test("command: : is inert in visual, comment, and search modes", () => {
   // not entered from either.
   const comment = view(commentState(""), ":");
   assert.equal(comment.state.mode, "comment");
-  assert.deepEqual(comment.state.comment, { text: ":" });
+  assert.deepEqual(comment.state.comment, { text: ":", caret: 1 });
   const search = view(
     viewer({ mode: "search", cursor: { line: 2, col: 3 }, search: { query: "", origin: { line: 2, col: 3 } } }),
     ":",

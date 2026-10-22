@@ -103,6 +103,15 @@ export function searchStep(state: ViewerState, key: string, lines: string[], vie
   if (mapped === null) return { state };
   const search = state.search ?? { query: "", origin: state.cursor }; // invariant: non-null in search mode
   switch (mapped.kind) {
+    case "left":
+    case "right":
+    case "up":
+    case "down":
+    case "home":
+    case "end":
+      // Movement keys are comment-mode-only (v1); ignored like the
+      // control-character chunks that never reach the switch.
+      return { state };
     case "newline":
       return { state };
     case "backspace": {

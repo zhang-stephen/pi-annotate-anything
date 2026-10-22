@@ -237,10 +237,10 @@ function handleMode(state: ViewerState, key: string, lines: string[], viewport: 
         const draft = cycleTarget(state.cursor.line, state.cursor.col, ordinalOf(state), pending);
         if (draft === undefined) return { state };
         return {
-          state: { ...state, mode: "comment", comment: { text: draft.comment }, editingDraftId: draft.token },
+          state: { ...state, mode: "comment", comment: { text: draft.comment, caret: draft.comment.length }, editingDraftId: draft.token },
         };
       }
-      return { state: { ...state, mode: "comment", comment: { text: "" } } };
+      return { state: { ...state, mode: "comment", comment: { text: "", caret: 0 } } };
     case "x":
       // Delete flow: normal mode only, deleting the CURRENT cycle target.
       if (state.mode !== "normal") return { state };
@@ -327,6 +327,16 @@ function commandStep(state: ViewerState, key: string, lines: string[], viewport:
     return { state: { ...state, command: { value: command.value } } };
   }
   switch (mapped.kind) {
+    case "left":
+    case "right":
+    case "up":
+    case "down":
+    case "home":
+    case "end":
+      // Movement keys are comment-mode-only (v1): ignored exactly like the
+      // C0-rejected chunks, including the completion-snapshot drop.
+      if (completion === null) return { state };
+      return { state: { ...state, command: { value: command.value } } };
     case "newline":
       return { state };
     case "backspace":

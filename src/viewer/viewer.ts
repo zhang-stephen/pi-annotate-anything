@@ -11,12 +11,13 @@
 import { getLanguageFromPath, highlightCode } from "@earendil-works/pi-coding-agent";
 import type { Theme } from "@earendil-works/pi-coding-agent";
 import type { Component, Focusable, TUI } from "@earendil-works/pi-tui";
-import { matchesKey, visibleWidth } from "@earendil-works/pi-tui";
+import { matchesKey, parseKey, visibleWidth } from "@earendil-works/pi-tui";
 
 import { commentBoxPlacement, frameCommentBox, framePanel, PAD_X, spliceRow } from "../tui/card-chrome.ts";
 import type { ChromeColors } from "../tui/card-chrome.ts";
 import { completionCandidates, renderCompletionClosing, renderCompletionDivider, renderCompletionRows } from "./completion-panel.ts";
 import { INVERSE_OFF, INVERSE_ON, withCursorCell, wrapCommentLines } from "../tui/comment-input.ts";
+import { commentBoxWrapWidth } from "./comment-mode.ts";
 import { rawColToDisplayCol, rawColsToDisplayCols, sliceWindow, tabExpanded } from "../tui/display.ts";
 import { displayPath } from "../core/message.ts";
 import { compilePattern, findMatches } from "../core/search.ts";
@@ -69,6 +70,32 @@ export function normalizeKeyRepeat(data: string): string {
     return first === "1" && final !== "~" && final !== "u" ? `\x1b[${final}` : `\x1b[${first}${final}`;
   }
   return `\x1b[${first};${mod}${final}`;
+}
+
+// Movement-key canonicalization for comment mode: pi-tui's parseKey names
+// every spelling of the six movement keys the comment input understands
+// (legacy CSI and SS3 arrow sequences, kitty CSI-u keypad forms like
+// "\x1b[57417u", home/end tilde forms, and the modifier-carrying variants of
+// all of these). The name's modifier prefix is stripped (modifiers are
+// ignored in v1) and the key is rewritten to the one canonical legacy
+// sequence toCommentKey classifies, so every flavor moves the caret. Data
+// parseKey does not name (plain text, pastes, bracketed paste, other
+// functional keys) passes through unchanged; other modes keep their raw
+// bytes - normal mode matches the bare "\x1b[A".."\x1b[D" forms itself.
+const COMMENT_MOVEMENT_SEQUENCES: Record<string, string> = {
+  up: "\x1b[A",
+  down: "\x1b[B",
+  right: "\x1b[C",
+  left: "\x1b[D",
+  home: "\x1b[H",
+  end: "\x1b[F",
+};
+
+export function normalizeCommentMovement(data: string): string {
+  const parsed = parseKey(data);
+  if (parsed === undefined) return data;
+  const base = parsed.includes("+") ? parsed.slice(parsed.lastIndexOf("+") + 1) : parsed;
+  return COMMENT_MOVEMENT_SEQUENCES[base] ?? data;
 }
 
 export class AnnotateCard implements Component, Focusable {
@@ -381,7 +408,8 @@ export class AnnotateCard implements Component, Focusable {
 
   handleInput(data: string): void {
     // Kitty repeat sequences become presses first (held arrows must scroll);
-    // then the legacy normalization below maps escape/ctrl+j flavors.
+    // then the legacy normalization below maps escape/ctrl+j flavors, and
+    // comment mode additionally canonicalizes every movement-key flavor.
     data = normalizeKeyRepeat(data);
     // Terminals in kitty keyboard mode deliver the Escape key as a CSI-u
     // sequence (e.g. "\x1b[27u") instead of a bare "\x1b", and modifier
@@ -392,7 +420,9 @@ export class AnnotateCard implements Component, Focusable {
       : this.state.mode === "comment" &&
         (matchesKey(data, "ctrl+j") || matchesKey(data, "shift+enter"))
         ? "\n"
-        : data;
+        : this.state.mode === "comment"
+          ? normalizeCommentMovement(data)
+          : data;
     const result = reduceViewer(
       this.state,
       key,
@@ -460,10 +490,14 @@ export class AnnotateCard implements Component, Focusable {
       };
     // Fixed-width editor: the box never resizes while typing; the text
     // soft-wraps to the box's content budget (its width minus the 2 borders
-    // and the PAD_X padding) instead.
+    // and the PAD_X padding) instead. The caret (not the text end) locates
+    // the cursor row/column, and the wrap width comes from the same helper
+    // the reducer's row movement uses, so painted rows and caret placement
+    // agree.
+    const box = this.state.comment;
     const boxW = Math.min(contentW, EDITOR_BOX_MAX_WIDTH);
-    const text = this.state.comment?.text ?? "";
-    const wrapped = wrapCommentLines(text, Math.max(1, boxW - 2 - 2 * PAD_X), text.length);
+    const text = box?.text ?? "";
+    const wrapped = wrapCommentLines(text, commentBoxWrapWidth(contentW), box?.caret ?? text.length);
     // Height = wrapped rows + 2 borders, capped at 8 rows (and at what the
     // viewport can hold). The scroll window keeps the cursor's row visible.
     const maxInner = Math.min(EDITOR_MAX_INNER_ROWS, Math.max(1, Math.min(wrapped.lines.length, rows.length - 2)));

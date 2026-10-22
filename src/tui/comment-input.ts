@@ -15,12 +15,26 @@ export const INVERSE_OFF = "\x1b[27m";
 
 export interface CommentState {
   text: string;
+  // Caret position: a code-unit offset into text. Every writer keeps it on a
+  // grapheme-cluster boundary, so left/right/backspace step whole clusters.
+  caret: number;
+  // Goal display column remembered across consecutive up/down presses so
+  // vertical movement keeps aiming at the original column across soft wraps
+  // (null/absent when the last motion was not vertical; horizontal movement
+  // and edits clear it).
+  goalCol?: number | null;
 }
 
 export type CommentKey =
   | { kind: "char"; ch: string }
   | { kind: "newline" } // ctrl+j / shift+enter
   | { kind: "backspace" }
+  | { kind: "left" } // arrow keys, classified in viewer/comment-mode.ts
+  | { kind: "right" }
+  | { kind: "up" }
+  | { kind: "down" }
+  | { kind: "home" }
+  | { kind: "end" }
   | { kind: "submit" } // Enter
   | { kind: "cancel" }; // Esc
 
@@ -31,19 +45,107 @@ export interface CommentResult {
   effect?: CommentEffect;
 }
 
-export function reduceComment(state: CommentState, key: CommentKey): CommentResult {
+// Grapheme-cluster segmenter behind caret movement and row math: left/right
+// and backspace step whole user-perceived characters, and wrapping/caret
+// placement treat each cluster as one glyph (never splitting one across
+// rows, never summing the widths inside one).
+const GRAPHEMES = new Intl.Segmenter(undefined, { granularity: "grapheme" });
+
+// Display width of one grapheme cluster: its BASE code point's width (2 for
+// East Asian Wide/Fullwidth bases, most emoji bases included); combining
+// marks and ZWJ joiners contribute 0. A cluster renders as ONE glyph of at
+// most 2 columns, so its width is never the sum of its code points.
+function clusterWidth(cluster: string): number {
+  return visibleWidth(String.fromCodePoint(cluster.codePointAt(0) as number));
+}
+
+// Start offset of the grapheme cluster before offset `index` (the largest
+// cluster boundary below it); 0 at the start of text.
+function graphemeStartBefore(text: string, index: number): number {
+  let start = 0;
+  for (const seg of GRAPHEMES.segment(text)) {
+    if (seg.index >= index) break;
+    start = seg.index;
+  }
+  return start;
+}
+
+// End offset of the grapheme cluster at/around offset `index` (the next
+// cluster boundary after it); text.length past the end.
+function graphemeEndAfter(text: string, index: number): number {
+  for (const seg of GRAPHEMES.segment(text)) {
+    if (seg.index > index) return seg.index;
+  }
+  return text.length;
+}
+
+// Absolute caret offset for display column `col` within the row text.slice(rowStart,
+// rowEnd): walks the row's grapheme clusters and stops before the first one
+// that would pass the column (a 2-column cluster the column falls inside is
+// not split); the row end when the column lies past it. Mirror of the
+// caret-to-column walk in wrapCommentLines, so placement round-trips.
+function caretAtRowColumn(text: string, rowStart: number, rowEnd: number, col: number): number {
+  let width = 0;
+  let land = rowStart;
+  for (const seg of GRAPHEMES.segment(text)) {
+    if (seg.index >= rowEnd) break;
+    if (seg.index < rowStart) continue;
+    const cw = clusterWidth(seg.segment);
+    if (width + cw > col) break;
+    width += cw;
+    land = seg.index + seg.segment.length;
+  }
+  return land;
+}
+
+export function reduceComment(state: CommentState, key: CommentKey, wrapWidth: number = Infinity): CommentResult {
+  const text = state.text;
+  const at = Math.min(Math.max(state.caret, 0), text.length);
   switch (key.kind) {
     case "char":
-      return { state: { text: state.text + key.ch } };
+      return { state: { text: text.slice(0, at) + key.ch + text.slice(at), caret: at + key.ch.length } };
     case "newline":
-      return { state: { text: state.text + "\n" } };
-    case "backspace":
-      if (state.text.length === 0) return { state };
-      return { state: { text: state.text.slice(0, -1) } };
+      return { state: { text: text.slice(0, at) + "\n" + text.slice(at), caret: at + 1 } };
+    case "backspace": {
+      // Deletes the grapheme cluster before the caret (the whole emoji, the
+      // accented character), not one code unit; no-op at the caret start.
+      if (at === 0) return { state };
+      const start = graphemeStartBefore(text, at);
+      return { state: { text: text.slice(0, start) + text.slice(at), caret: start } };
+    }
+    case "left": {
+      if (at === 0) return { state };
+      return { state: { text, caret: graphemeStartBefore(text, at) } };
+    }
+    case "right": {
+      if (at >= text.length) return { state };
+      return { state: { text, caret: graphemeEndAfter(text, at) } };
+    }
+    case "home":
+    case "end": {
+      // Edges of the CURRENT wrapped row (soft or hard): home to its start,
+      // end to one past its last character. Boundary carets belong to the
+      // row that ends there (wrapCommentLines' rule), so end-of-row moves to
+      // that row's start/end, not the next row's.
+      const wrapped = wrapCommentLines(text, wrapWidth, at);
+      const target = key.kind === "home" ? wrapped.rowStarts[wrapped.cursorRow] : wrapped.rowEnds[wrapped.cursorRow];
+      if (target === at) return { state }; // already there: bit-for-bit no-op
+      return { state: { text, caret: target } };
+    }
+    case "up":
+    case "down": {
+      const wrapped = wrapCommentLines(text, wrapWidth, at);
+      const target = wrapped.cursorRow + (key.kind === "up" ? -1 : 1);
+      // First/last row: no-op (the remembered goal column survives, matching
+      // the boundary no-ops above).
+      if (target < 0 || target >= wrapped.lines.length) return { state };
+      const goal = state.goalCol ?? wrapped.cursorCol;
+      return { state: { text, caret: caretAtRowColumn(text, wrapped.rowStarts[target], wrapped.rowEnds[target], goal), goalCol: goal } };
+    }
     case "submit":
       // State is left unchanged on purpose: the effect carries the text and
       // the card owner decides whether to reset or close the editor.
-      return { state, effect: { type: "submit", text: state.text } };
+      return { state, effect: { type: "submit", text } };
     case "cancel":
       return { state, effect: { type: "cancel" } };
   }
@@ -52,6 +154,10 @@ export function reduceComment(state: CommentState, key: CommentKey): CommentResu
 export interface WrappedComment {
   // Soft-wrapped rows, each at most `width` display columns wide.
   lines: string[];
+  // Absolute code-unit offset of each row's start, and one past its end, so
+  // row-relative caret placement (home/end, up/down, row edges) is exact.
+  rowStarts: number[];
+  rowEnds: number[];
   // Row containing the text cursor, and the cursor's display column within
   // that row (equal to the row's width when the cursor sits at its end).
   cursorRow: number;
@@ -60,10 +166,11 @@ export interface WrappedComment {
 
 // Soft-wraps comment text at `width` display columns and locates the text
 // cursor (a raw code-unit offset into `text`) in the wrapped grid. Rows break
-// at newlines (hard) and just before the first character that would overflow
-// `width` (soft); a wide character that does not fit starts the next row
-// instead of being split. A cursor on a row boundary belongs to the row that
-// ends there, so it renders as an inverse cell at that row's end.
+// at newlines (hard) and just before the first grapheme cluster that would
+// overflow `width` (soft); a cluster that does not fit (a wide character, an
+// emoji sequence) starts the next row instead of being split. A cursor on a
+// row boundary belongs to the row that ends there, so it renders as an
+// inverse cell at that row's end.
 export function wrapCommentLines(text: string, width: number, cursor: number): WrappedComment {
   const w = Math.max(1, width);
   const lines: string[] = [];
@@ -73,19 +180,16 @@ export function wrapCommentLines(text: string, width: number, cursor: number): W
   for (const hard of text.split("\n")) {
     let rowBegin = 0;
     let rowWidth = 0;
-    let i = 0;
-    while (i < hard.length) {
-      const ch = String.fromCodePoint(hard.codePointAt(i) as number);
-      const cw = visibleWidth(ch);
+    for (const seg of GRAPHEMES.segment(hard)) {
+      const cw = clusterWidth(seg.segment);
       if (rowWidth > 0 && rowWidth + cw > w) {
-        lines.push(hard.slice(rowBegin, i));
+        lines.push(hard.slice(rowBegin, seg.index));
         rowStarts.push(base + rowBegin);
-        rowEnds.push(base + i);
-        rowBegin = i;
+        rowEnds.push(base + seg.index);
+        rowBegin = seg.index;
         rowWidth = 0;
       }
       rowWidth += cw;
-      i += ch.length;
     }
     lines.push(hard.slice(rowBegin));
     rowStarts.push(base + rowBegin);
@@ -93,7 +197,7 @@ export function wrapCommentLines(text: string, width: number, cursor: number): W
     base += hard.length + 1; // +1 for the "\n" the split consumed
   }
 
-  const at = Math.min(Math.max(cursor, 0), text.length);
+  const at = Math.min(Math.max(cursor, 0), text.length); // absolute caret
   let cursorRow = lines.length - 1;
   for (let k = 0; k < lines.length; k++) {
     if (rowStarts[k] <= at && at <= rowEnds[k]) {
@@ -101,33 +205,35 @@ export function wrapCommentLines(text: string, width: number, cursor: number): W
       break;
     }
   }
+  // Display column of the caret WITHIN its row (withCursorCell inverts
+  // row text at this column and reduceComment seeds its vertical goal from
+  // it, so the walk starts at the row's start, not the text's). Rows break
+  // at cluster boundaries and every caret sits on one, so skipped segments
+  // ahead of the row are whole rows, never half a cluster.
   let cursorCol = 0;
-  let i = rowStarts[cursorRow];
-  while (i < at) {
-    const ch = String.fromCodePoint(text.codePointAt(i) as number);
-    cursorCol += visibleWidth(ch);
-    i += ch.length;
+  const rowStart = rowStarts[cursorRow];
+  for (const seg of GRAPHEMES.segment(text)) {
+    if (seg.index >= at) break;
+    if (seg.index < rowStart) continue;
+    cursorCol += clusterWidth(seg.segment);
   }
-  return { lines, cursorRow, cursorCol };
+  return { lines, rowStarts, rowEnds, cursorRow, cursorCol };
 }
 
 // Wraps the cell under the cursor's display column of a wrapped row in SGR
 // inverse (the emulated text cursor); past the row's end an inverse space is
 // used instead, so the caret stays visible on empty or just-filled rows.
-// The row must be plain text (comment input filters control characters), so
-// raw code-unit walking is safe; a wide character covering the column is
-// inverted whole.
+// The row must be plain text (comment input filters control characters); the
+// walk is cluster-based, matching the wrap/caret column math: a cluster (a
+// wide character, an emoji sequence) is inverted whole, never half.
 export function withCursorCell(line: string, col: number): string {
   let width = 0;
-  let i = 0;
-  while (i < line.length) {
-    const ch = String.fromCodePoint(line.codePointAt(i) as number);
-    const cw = visibleWidth(ch);
+  for (const seg of GRAPHEMES.segment(line)) {
+    const cw = clusterWidth(seg.segment);
     if (width + cw > col) {
-      return line.slice(0, i) + INVERSE_ON + ch + INVERSE_OFF + line.slice(i + ch.length);
+      return line.slice(0, seg.index) + INVERSE_ON + seg.segment + INVERSE_OFF + line.slice(seg.index + seg.segment.length);
     }
     width += cw;
-    i += ch.length;
   }
   return line + INVERSE_ON + " " + INVERSE_OFF;
 }
