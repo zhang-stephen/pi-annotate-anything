@@ -14,6 +14,10 @@ Do not open docs marked `done` unless the current work touches that area.
   - draft, awaiting design review (spun out of user-settings 2026-10-22)
 - spec: `docs/superpowers/specs/2026-10-22-comment-cursor-design.md`
   - draft, review deferred (kept in the index because docs.test.ts requires it; user call 2026-10-22)
+- spec: `docs/superpowers/specs/2026-10-22-editor-single-install-design.md`
+  - approved (user call 2026-10-22), implementation in progress
+- plan: `docs/superpowers/plans/2026-10-22-editor-single-install-plan.md`
+  - approved (user call 2026-10-22), execution delegated to glm-5.3-flash, acceptance in this session
 - spec: `docs/superpowers/specs/2026-10-17-ci-tui-e2e-design.md`
   - draft, on hold: low priority, do not schedule (user call 2026-10-20)
 
@@ -32,15 +36,15 @@ Do not open docs marked `done` unless the current work touches that area.
 - 2026-10-19: annotate path-completion manual E2E still owed on master (plan `2026-10-18-annotate-path-completion.md` Task 2 Step 3, merge proceeded on review evidence per user direction).
   Cover: Tab completion, directory drill-down, empty-result fallback, and the resume-cwd case (launch pi in directory B, resume a session stored with cwd A, verify relative-path completion and the handler agree - the scenario fix `e0e0067` targets).
   The resume-cwd case is rare and not reproducible in the current environment, so it stays a deferred manual check.
-- 2026-10-22: transcript scroll above sent annotation payloads (needs repro): after a message with annotations is submitted, Up does not scroll the transcript back to messages above the injected comment blocks.
-  Facts: the submitted message is expanded by core/transform.ts into quote blocks (header + fence + snapshot + Comment line); the transcript itself and all its scrolling are pi-host UI the extension does not own.
-  Candidate causes to distinguish in repro: Up navigating composer input history while the editor holds focus (never reaching transcript scroll), versus a pi transcript scroll clamp that stops short of older messages; only the second could involve the injected payload's height measurement.
-  If host-side, the fix is upstream pi; if the payload format trips the scroller, the fix lands in message.ts/transform.ts.
+- 2026-10-22: composer Up history browsing breaks around annotation submits (root cause verified in pi 1.3.0 source): after a comments-bearing submit, Up cannot browse past the annotation entries.
+  Verified facts: history entries store the pre-transform compact token text (interactive-mode.js calls editor.addToHistory synchronously with the submitted editor text, before extension input transforms run), so entry size is not the cause; pi-tui Editor's navigateHistory/cursorUp dispatch has no trap; but setCustomEditorComponent swaps editor instances copying text, callbacks, appearance, and action handlers -- never history -- and Editor.history is private (addToHistory is the only public surface), so extensions cannot shuttle history across swaps.
+  Mechanism: the extension installs its token-recolor editor when a card opens with pills and restores the previous factory when idle (card close without pending pills, message_start after submit); submits during an annotation session land in the extension instance's history, which is discarded on restore, so live history browsing stops exactly at the annotation-session boundary.
+  Fix directions: extension-side (preferred) -- install the recolor wrapper once per session and never re-swap (the chained factory keeps the user's configured editor underneath; recolor is a passthrough when no tokens are live), eliminating instance churn entirely; upstream -- pi should carry history across editor swaps or expose getHistory/setHistory. Upstream feature request filed 2026-10-22 as earendil-works/pi#11285 (prior reports #8798/#5466 were auto-closed without action); extension-side fix specced in specs/2026-10-22-editor-single-install-design.md. Interplay: the pill-restyle tray direction would remove tokens from the buffer altogether and may eliminate the swap mechanism entirely.
 - 2026-10-22: pill restyle (one per line, basename, type tag): requested composer-pill changes -- each pill renders as its own line, the path shows basename-only, and a comment-type tag joins the pill.
   Agreed direction (user call 2026-10-22): the type vocabulary is a small closed set -- note (default) / question / todo -- set by a prefix in the comment box (? or todo:) or a cycling keybind (input mechanism still open); the tag renders short in the pill ([? src/a.ts:10]) and in the payload header (Comment (question): ...), and Draft gains a kind field to carry it.
   Basename-only display accepted (user call 2026-10-22): the payload keeps the full path, so the LLM context is unaffected; same-basename collisions stay rare and store.ts already disambiguates identical tokens with ~N suffixes, so no key-vs-display token split is needed for v1.
   Facts: pills are literal buffer tokens (tokenLabel in core/message.ts, e.g. [src/a.ts:10-20]) recolored inverse-video by withTokenRecolor (tui/editor.ts). The MVP spec never froze the format -- the freeze wording lives only in the message.ts header comment describing MVP-time cross-module sync; format evolution is normal feature evolution via a new spec, not an MVP amendment (user call 2026-10-22), and the implementing change rewords that comment.
-  One-pill-per-line may later move pills out of the buffer into a dedicated attachment tray; path style (basename/relative/absolute) is a natural settings key once the user-settings spec lands.
+  Tray direction recorded (user call 2026-10-22): pills become store-backed attachments rendered one row per pill above the composer input line (the permanent editor wrapper renders tray rows + inner editor, height grows accordingly); a row shows kind tag + basename + range + truncated comment; submit = prose + payload blocks appended in draft order, and the token parsing layer (tokenLabel/expandTokens) retires; v1 editing keys: alt+backspace removes the last pill, fine-grained management stays in /annotate; empty prose with pills present still submits; open: tray height cap and kind-switch keys. Path style (basename/relative/absolute) is a natural settings key once the user-settings spec lands.
 
 ## Done
 
