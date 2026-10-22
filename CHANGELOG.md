@@ -1,5 +1,30 @@
 # Changelog
 
+## [1.5.0](https://github.com/zhang-stephen/pi-annotate-anything/compare/pi-annotate-anything-v1.4.0...pi-annotate-anything-v1.5.0) (2026-10-22)
+
+
+### Features
+
+* **viewer:** add command mode to the viewer reducer ([07b68e5](https://github.com/zhang-stephen/pi-annotate-anything/commit/07b68e5ce727e64eadd7fa27eded352cce14862a))
+* **viewer:** add pure command line parser and command table ([4ba55fd](https://github.com/zhang-stephen/pi-annotate-anything/commit/4ba55fdbe54f27170a7ac927431de9f709ac61f6))
+* **viewer:** complete command names through the unified panel ([4ac9cb8](https://github.com/zhang-stephen/pi-annotate-anything/commit/4ac9cb87e23e5ccd1acc230272b8c58d4f6b70ea))
+* **viewer:** enclose the completion drawer behind tab ([e8da61a](https://github.com/zhang-stephen/pi-annotate-anything/commit/e8da61a05ff5edc7687444c26f520d23b6112bda))
+* **viewer:** exit cmdline on backspace at empty; ignore one trailing bang ([aebc48e](https://github.com/zhang-stephen/pi-annotate-anything/commit/aebc48ef13a0db3d94ebf57806af8b4b734c80cc))
+* **viewer:** exit search on backspace at the empty query ([6e75d4e](https://github.com/zhang-stephen/pi-annotate-anything/commit/6e75d4e505f36d985504b66997fc5a178b1465ea))
+* **viewer:** label the completion drawer with a divider row ([f48f223](https://github.com/zhang-stephen/pi-annotate-anything/commit/f48f2230f0c4fa0016029647c1a0f8f7d3d9b59f))
+* **viewer:** move the completion count beside the label ([5f2a387](https://github.com/zhang-stephen/pi-annotate-anything/commit/5f2a3872bfb5a72c80489d44f16de65bf6c43e34))
+* **viewer:** preserve goal column across short lines ([bbf1150](https://github.com/zhang-stephen/pi-annotate-anything/commit/bbf115043b54d71eb1862b0d257ac6b1dae4300f))
+* **viewer:** render command mode badge and prompt ([ad9e468](https://github.com/zhang-stephen/pi-annotate-anything/commit/ad9e468edf23f8a9866ce5b52a3c75daad4f8a02))
+* **viewer:** show pending keys in the cmdline row ([974a33d](https://github.com/zhang-stephen/pi-annotate-anything/commit/974a33dc52dd33944cfbae13783cfdf909595a77))
+* **viewer:** wire command mode painting and noh highlight suppression ([6244566](https://github.com/zhang-stephen/pi-annotate-anything/commit/62445661d12b09aafceb258ce49e7755b9e0bf5f))
+
+
+### Bug Fixes
+
+* **viewer:** end command mode on every execution path ([a6f2133](https://github.com/zhang-stephen/pi-annotate-anything/commit/a6f2133f9239a17729ddeff169e0273d83da0700))
+* **viewer:** finish curswant coverage for 0, dollar, and page motions ([095ac08](https://github.com/zhang-stephen/pi-annotate-anything/commit/095ac081e291362397183ea137d24eeb824a99a9))
+* **viewer:** skip the empty fill segment on zero-width dividers ([6555d87](https://github.com/zhang-stephen/pi-annotate-anything/commit/6555d87074c451a5afa15d6f2d82192b79883a5b))
+
 ## [1.4.0](https://github.com/zhang-stephen/pi-annotate-anything/compare/pi-annotate-anything-v1.3.0...pi-annotate-anything-v1.4.0) (2026-10-20)
 
 
