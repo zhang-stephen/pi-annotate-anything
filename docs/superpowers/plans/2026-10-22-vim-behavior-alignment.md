@@ -1,6 +1,6 @@
 ---
 title: Vim behavior alignment (curswant + showcmd) implementation plan
-status: in-progress
+status: done
 progress: 2/2
 spec: none
 ---
@@ -45,3 +45,5 @@ Files: `src/viewer/movement.ts`, `src/viewer/viewer.ts`, `src/viewer/status-line
 
 `npm test` and `npx tsc --noEmit` green.
 Manual E2E (user, real terminal): type `3` and watch `3` appear right-aligned then clear on `j`; `g` shows `g` then `gg` fires; goal column across short lines by feel.
+
+E2E confirmed by the user on 2026-10-22 (showcmd display, curswant goal column, kitty held-arrow repeat, regression feel); branch ff-merged to master.
