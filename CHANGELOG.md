@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.5.2](https://github.com/zhang-stephen/pi-annotate-anything/compare/pi-annotate-anything-v1.5.1...pi-annotate-anything-v1.5.2) (2026-10-22)
+
+
+### Bug Fixes
+
+* **editor:** register the composer editor once per session ([66a3683](https://github.com/zhang-stephen/pi-annotate-anything/commit/66a36836fde124fdaeaf1a53a60e3ba62cc63948))
+
 ## [1.5.1](https://github.com/zhang-stephen/pi-annotate-anything/compare/pi-annotate-anything-v1.5.0...pi-annotate-anything-v1.5.1) (2026-10-22)
 
 
