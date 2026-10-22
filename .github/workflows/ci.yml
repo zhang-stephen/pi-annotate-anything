@@ -1,16 +1,13 @@
 name: ci
 
+# CI runs only on pushes to master. Deliberately no pull_request trigger:
+# workflows that declare one materialize phantom zero-job "failure" runs on
+# the release-please branch when the PR merges while a run initializes, even
+# behind branches-ignore (verified across four releases). Local gates cover
+# pre-merge verification; the push run is the real coverage.
 on:
   push:
     branches: [master]
-  pull_request:
-    # Never trigger on release-please branches at all: their PR runs are
-    # bot-created (they sit in approval/limbo states and die as phantom
-    # "workflow file issue" failures if the PR merges while the run is
-    # still initializing), and merging to master triggers the full suite
-    # via the push event anyway.
-    branches-ignore:
-      - "release-please--**"
 
 jobs:
   test:
