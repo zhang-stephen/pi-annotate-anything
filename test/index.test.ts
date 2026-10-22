@@ -512,7 +512,7 @@ test("alt+o clamps fail-open when the annotated file shortened on disk", async (
   }
 });
 
-test("alt+o with no pill in the buffer passes through to the inner editor and opens nothing", () => {
+test("alt+o with no pill in the buffer warns and is swallowed (the inner editor never sees it)", () => {
   const received: string[] = [];
   const session = stubSession(() => ({
     render: () => ["composer"],
@@ -528,8 +528,16 @@ test("alt+o with no pill in the buffer passes through to the inner editor and op
 
   const before = session.cards.length;
   registeredEditor(session).handleInput("\x1bo");
-  assert.deepEqual(received, ["\x1bo"], "the untouched alt+o bytes reach the inner editor");
+  assert.deepEqual(received, [], "the swallowed alt+o never reaches the inner editor");
   assert.equal(session.cards.length, before, "no viewer opens without a live token");
+  const warnings = session.notifications.filter((n) => n.level === "warning");
+  assert.equal(warnings.length, 1, "exactly one warning notifies the miss");
+  assert.equal(warnings[0]!.message, "alt+o: no annotation pills in the composer");
+
+  // The swallow is scoped to the no-token alt+o miss: other keys still
+  // reach the inner editor unchanged.
+  registeredEditor(session).handleInput("x");
+  assert.deepEqual(received, ["x"], "non-alt+o keys forward unchanged");
 });
 
 test("alt+o on a pill whose file vanished notifies instead of opening the viewer", async () => {
