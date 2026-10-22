@@ -8,6 +8,8 @@ Do not open docs marked `done` unless the current work touches that area.
 
 ## Active
 
+- spec: `docs/superpowers/specs/2026-10-23-viewer-md-render-wrap-design.md`
+  - draft, awaiting design review; phase 1 = wrap + CommonMark (no images) rendering + keymap adaptation, phase 2 = optional protocol-gated image support (sketch only)
 - spec: `docs/superpowers/specs/2026-10-22-user-settings-design.md`
   - approved (user call 2026-10-22), implementation not started; rides a later train, not 2.0
 - spec: `docs/superpowers/specs/2026-10-22-settings-evolution-design.md`
