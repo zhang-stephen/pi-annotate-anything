@@ -515,11 +515,16 @@ export class AnnotateCard implements Component, Focusable {
     // and the PAD_X padding) instead. The caret (not the text end) locates
     // the cursor row/column, and the wrap width comes from the same helper
     // the reducer's row movement uses, so painted rows and caret placement
-    // agree.
+    // agree. This ONE width is also the box renderer's truncation budget
+    // (frameCommentBox truncates at boxW minus the same border and padding
+    // numbers), so focused rows never measure wider than it and never
+    // truncate - including the caret cell, which withCaret keeps inside the
+    // interior (a row-end caret occupies the last interior cell).
     const box = this.state.comment;
     const boxW = Math.min(contentW, EDITOR_BOX_MAX_WIDTH);
+    const interiorW = commentBoxWrapWidth(contentW);
     const text = box?.text ?? "";
-    const wrapped = wrapCommentLines(text, commentBoxWrapWidth(contentW), box?.caret ?? text.length);
+    const wrapped = wrapCommentLines(text, interiorW, box?.caret ?? text.length);
     // Height = wrapped rows + 2 borders, capped at 8 rows (and at what the
     // viewport can hold). The scroll window keeps the cursor's row visible.
     const maxInner = Math.min(EDITOR_MAX_INNER_ROWS, Math.max(1, Math.min(wrapped.lines.length, rows.length - 2)));
@@ -527,7 +532,7 @@ export class AnnotateCard implements Component, Focusable {
     const shown = wrapped.lines.slice(start, start + maxInner);
     const cursorRow = wrapped.cursorRow - start;
     if (cursorRow >= 0 && cursorRow < shown.length) {
-      shown[cursorRow] = this.withCaret(shown[cursorRow], wrapped.cursorCol);
+      shown[cursorRow] = this.withCaret(shown[cursorRow], wrapped.cursorCol, interiorW);
     }
     this.paintCommentBox(rows, first, contentW, shown, boxW, anchor, COMMENT_BOX_TITLE, sl);
   }
@@ -543,11 +548,14 @@ export class AnnotateCard implements Component, Focusable {
   // resolves to the same inverse cell the painted caret used when the
   // setting is off - the resolver, not this component, follows the setting.
   // The cell is the whole grapheme cluster at the caret's display column, or
-  // one space past a full/empty row's end (cursorCellAt - the same cell math
-  // the painted caret had).
-  private withCaret(row: string, col: number): string {
+  // one space past a short or empty row's end; a row that fills the interior
+  // (interiorWidth, the same wrap width the rows were wrapped and truncated
+  // at) takes the caret on its LAST cell instead, so a focused row never
+  // grows past the interior (cursorCellAt - the same cell math the painted
+  // caret had).
+  private withCaret(row: string, col: number, interiorWidth: number): string {
     if (!this.focused) return row;
-    const { before, cell, after } = cursorCellAt(row, col);
+    const { before, cell, after } = cursorCellAt(row, col, interiorWidth);
     return before + CURSOR_MARKER + renderFakeCursor(cell) + after;
   }
 

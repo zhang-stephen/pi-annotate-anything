@@ -485,3 +485,18 @@ test("cursorCellAt: parts reassemble to the row (width preserving)", () => {
     assert.equal(before + cell + after, row);
   }
 });
+
+test("cursorCellAt: a past-end caret on a row that fills the interior takes the last cluster", () => {
+  // Interior width 3, row exactly 3 wide: a space cell would land past the
+  // interior, so the caret occupies the last interior cell instead.
+  assert.deepEqual(cursorCellAt("abc", 3, 3), { before: "ab", cell: "c", after: "" });
+  // Columns past the row end clamp to the same last cell.
+  assert.deepEqual(cursorCellAt("abc", 9, 3), { before: "ab", cell: "c", after: "" });
+  // A wide final cluster is taken whole.
+  assert.deepEqual(cursorCellAt("ab\u4e2d", 3, 3), { before: "ab", cell: "\u4e2d", after: "" });
+});
+
+test("cursorCellAt: a past-end caret on a shorter-than-interior row keeps the space cell", () => {
+  assert.deepEqual(cursorCellAt("ab", 2, 3), { before: "ab", cell: " ", after: "" });
+  assert.deepEqual(cursorCellAt("", 0, 3), { before: "", cell: " ", after: "" });
+});

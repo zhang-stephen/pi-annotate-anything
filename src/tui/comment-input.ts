@@ -226,7 +226,12 @@ export function wrapCommentLines(text: string, width: number, cursor: number): W
 
 // Splits a wrapped row at the caret's display column into the text before
 // it, the caret CELL, and the text after it; past the row's end the cell is
-// a single space, so the caret stays placeable on empty or just-filled rows.
+// a single space, so the caret stays placeable on empty or shorter-than-
+// interior rows. A row that already fills `interiorWidth` (the box's wrap
+// width) has no off-row column, so there the caret occupies the LAST
+// interior cell - the row's final grapheme - instead: appending a cell past
+// a full row would overflow the interior and the box renderer would
+// truncate the row, dropping the caret cell and its marker with it.
 // The row must be plain text (comment input filters control characters); the
 // walk is cluster-based, matching the wrap/caret column math: a cluster (a
 // wide character, an emoji sequence) is taken whole, never half. The viewer
@@ -235,14 +240,23 @@ export function wrapCommentLines(text: string, width: number, cursor: number): W
 // which the TUI drops when it draws the hardware cursor there and resolves
 // to the inverse cell otherwise (pi's showHardwareCursor setting, a TUI-side
 // flag - the component always emits the marker).
-export function cursorCellAt(line: string, col: number): { before: string; cell: string; after: string } {
+export function cursorCellAt(
+  line: string,
+  col: number,
+  interiorWidth: number = Infinity,
+): { before: string; cell: string; after: string } {
   let width = 0;
+  let last: { index: number; cluster: string } | null = null;
   for (const seg of GRAPHEMES.segment(line)) {
     const cw = clusterWidth(seg.segment);
     if (width + cw > col) {
       return { before: line.slice(0, seg.index), cell: seg.segment, after: line.slice(seg.index + seg.segment.length) };
     }
     width += cw;
+    last = { index: seg.index, cluster: seg.segment };
+  }
+  if (last !== null && width >= interiorWidth) {
+    return { before: line.slice(0, last.index), cell: last.cluster, after: "" };
   }
   return { before: line, cell: " ", after: "" };
 }

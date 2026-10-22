@@ -554,6 +554,27 @@ test("comment box caret: the caret sequences add no visible width", () => {
   assert.equal(focusedRow, unfocusedRow);
 });
 
+test("comment box caret: a caret at a full wrapped row's end stays on the last interior cell", () => {
+  // Regression: the caret cell used to be APPENDED past a row that filled
+  // the interior, so the box renderer truncated the row ("..." artifact)
+  // and dropped the caret cell with its marker - the caret went invisible
+  // exactly when up/down landed on a full row's end.
+  const h = makeCard({ lines: ["abc", "def", "ghi", "jkl", "mno"] });
+  h.card.handleInput("v");
+  h.card.handleInput("c");
+  h.card.handleInput("b".repeat(120)); // two full rows (wrap width 60); caret on row 2's end
+  h.card.render(80); // steady state: the reducer wraps at the rendered width
+  h.card.handleInput("\x1b[A"); // up: goal col 60 lands on row 1's end, a FULL row
+  h.card.focused = true;
+  const raw = h.card.render(80);
+  const bare = raw.map(strip);
+  assert.ok(!bare.some((r) => r.includes("...")), "no truncation artifact on any wrapped row");
+  const { col, tail } = caretOf(raw[3]);
+  assert.ok(tail.startsWith(renderFakeCursor("b")), "the caret cell is the full row's last grapheme");
+  assert.equal(col, bare[3].lastIndexOf("b"), "the marker sits on the last interior cell");
+  for (const row of raw) assert.equal(visibleWidth(row), 80);
+});
+
 test("comment text soft-wraps at the box's inner content width", () => {
   const lines = ["abc", "def", "ghi", "jkl", "mno"];
   const h = makeCard({ lines });
