@@ -28,6 +28,7 @@ Discipline for the spec/plan documents in this directory. Auto-loaded by pi-subd
 - Spec: `draft` -> (user approves) `approved` -> (plan executing) `in-progress` -> `done`.
 - Plan: created as `in-progress` with `progress: 0/m`; checkboxes (`- [ ]` / `- [x]`) tick as tasks land; `done` at `m/m`.
 - When finishing a task or step, update the plan checkboxes AND the front-matter AND `STATUS.md` in the same commit as the work.
+- `STATUS.md` `Done` entries are path-only, never detail sub-bullets; completion details live in the plan document and git history.
 
 ## Amendments
 

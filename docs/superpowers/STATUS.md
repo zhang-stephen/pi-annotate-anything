@@ -46,15 +46,11 @@ Do not open docs marked `done` unless the current work touches that area.
 
 - spec: `docs/superpowers/specs/2026-10-22-comment-cursor-design.md`
 - plan: `docs/superpowers/plans/2026-10-22-comment-cursor.md`
-  - done 2026-10-23 on the 2.0 train: caret model + movement keys (b3e0c1c), hardware cursor incl. cmdline/search (ced4475, bd73a4f), wrap-width render fix (20acb09), one-press soft-wrap transitions (46bb671); user E2E passed (arrows under kitty and legacy protocols, mid-text edits, cursor visibility and fallback)
 - spec: `docs/superpowers/specs/2026-10-23-composer-jump-back-design.md`
 - plan: `docs/superpowers/plans/2026-10-23-composer-jump-back.md`
-  - done 2026-10-23 on the 2.0 train: alt+o single-owner interception with no-pill warning (3729979, ff81295, e1624c0, 2c8357e); the `:e` command is deferred by user call (design recorded in the spec); user E2E passed
 - plan: `docs/superpowers/plans/2026-10-23-q-only-close.md`
-  - done 2026-10-23 on the 2.0 train: :q is the only close (3ecb5a9, BREAKING CHANGE footer keys the 2.0 major); user E2E passed (q/Esc inert in normal mode, :q closes)
 - spec: `docs/superpowers/specs/2026-10-22-editor-single-install-design.md`
 - plan: `docs/superpowers/plans/2026-10-22-editor-single-install-plan.md`
-  - done 2026-10-22: fix 66a3683 + behavioral tests f708be6, executed by delegated glm-5.3-flash worker and accepted in-session (521/521, tsc clean); user waived the sandbox E2E (the factory-composer boundary scenario only exists in the real environment) and validation rides daily use
 - spec: `docs/superpowers/specs/2026-10-22-viewer-command-line-design.md`
 - plan: `docs/superpowers/plans/2026-10-22-viewer-command-line.md`
 - plan: `docs/superpowers/plans/2026-10-22-vim-behavior-alignment.md`
