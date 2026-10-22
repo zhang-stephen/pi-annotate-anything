@@ -19,7 +19,15 @@ const INVERSE_OFF = "\x1b[27m";
 // Panel cap: at most five candidate rows render above the footer.
 export const MAX_COMPLETION_ROWS = 5;
 
+// The drawer label names what is being completed; today the single source
+// ships the constant, and future sources (paths for :e, buffers for :b)
+// carry their own.
+const COMPLETION_LABEL = "completions";
+
 export interface CompletionPanel {
+  // The drawer label painted on the divider ("completions"; a future
+  // source names itself, e.g. "paths").
+  label: string;
   // Candidate rows in source order, capped at MAX_COMPLETION_ROWS.
   rows: { name: string; desc: string }[];
   // Index into rows of the Tab-cycling selection, or null in live mode: the
@@ -35,7 +43,7 @@ export interface CompletionPanel {
 // (bare ":", no match) both mean no panel.
 export function completionCandidates(state: ViewerState): CompletionPanel {
   const command = state.command ?? null;
-  if (command === null) return { rows: [], selected: null };
+  if (command === null) return { rows: [], selected: null, label: COMPLETION_LABEL };
   const completion = command.completion ?? null;
   const rows = (completion !== null ? completeFor(completion.anchor) : completeFor(command.value))
     .slice(0, MAX_COMPLETION_ROWS);
@@ -44,7 +52,26 @@ export function completionCandidates(state: ViewerState): CompletionPanel {
   // selection stays visible, and degrade to no selection for a hand-built
   // state whose anchor has no candidates.
   const selected = completion === null || rows.length === 0 ? null : completion.index % rows.length;
-  return { rows, selected };
+  return { rows, selected, label: COMPLETION_LABEL };
+}
+
+// The labeled divider that opens the drawer: a dim rule broken by the
+// accent label and, only while Tab-cycling, the dim position count at the
+// right end ("2/4" of the capped window). Narrow widths drop the count
+// first, then degrade to a plain rule, so the drawer always opens with a
+// visible separator row exactly as wide as the content.
+export function renderCompletionDivider(panel: CompletionPanel, innerWidth: number, colors: ChromeColors): string {
+  const rule = (n: number) => colors.border("─".repeat(Math.max(0, n)));
+  if (innerWidth < 2) return rule(innerWidth);
+  const label = colors.accent(" " + panel.label + " ");
+  let count = panel.selected === null || panel.rows.length === 0 ? "" : colors.dim(` ${panel.selected + 1}/${panel.rows.length} `);
+  let fill = innerWidth - 1 - visibleWidth(label) - visibleWidth(count);
+  if (fill < 0 && count !== "") {
+    count = "";
+    fill = innerWidth - 1 - visibleWidth(label);
+  }
+  if (fill < 0) return rule(innerWidth);
+  return rule(1) + label + rule(fill) + count;
 }
 
 // First n display columns of s, dropping whole characters at the cut edge.

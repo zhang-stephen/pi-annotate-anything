@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 
 import { COMMANDS } from "../../src/viewer/commands.ts";
 import type { CommandSpec } from "../../src/viewer/commands.ts";
-import { completionCandidates, MAX_COMPLETION_ROWS, renderCompletionRows } from "../../src/viewer/completion-panel.ts";
+import { completionCandidates, MAX_COMPLETION_ROWS, renderCompletionDivider, renderCompletionRows } from "../../src/viewer/completion-panel.ts";
 import type { ViewerState } from "../../src/viewer/state.ts";
 
 // Command-mode state carrying just the draft under test: the panel derives
@@ -46,15 +46,16 @@ const INVERSE_OFF = "\x1b[27m";
 // completionCandidates --------------------------------------------------------
 
 test("completionCandidates: no draft, empty input, and no match mean no panel", () => {
-  assert.deepEqual(completionCandidates(commandState(null)), { rows: [], selected: null });
-  assert.deepEqual(completionCandidates(commandState({ value: "" })), { rows: [], selected: null });
-  assert.deepEqual(completionCandidates(commandState({ value: "zzz" })), { rows: [], selected: null });
+  assert.deepEqual(completionCandidates(commandState(null)), { rows: [], selected: null, label: "completions" });
+  assert.deepEqual(completionCandidates(commandState({ value: "" })), { rows: [], selected: null, label: "completions" });
+  assert.deepEqual(completionCandidates(commandState({ value: "zzz" })), { rows: [], selected: null, label: "completions" });
 });
 
 test("completionCandidates: live mode lists the value's candidates with no selection", () => {
   assert.deepEqual(completionCandidates(commandState({ value: "n" })), {
     rows: [{ name: "nohlsearch", desc: "clear search highlight" }],
     selected: null,
+    label: "completions",
   });
 });
 
@@ -69,6 +70,7 @@ test("completionCandidates: cycling shows the frozen anchor list with the select
           { name: "nohextra", desc: "extra" },
         ],
         selected: 1,
+        label: "completions",
       },
     );
   } finally {
@@ -132,4 +134,42 @@ test("render: narrow rows truncate the description first, then drop it and the s
   // The name alone fills the row: the separator drops with the description,
   // so the row never exceeds the width.
   assert.equal(renderCompletionRows(panel, 10, colors)[0], "nohlsearch");
+});
+
+// renderCompletionDivider -----------------------------------------------------
+
+test("divider: dim rule broken by the accent label; live mode shows no count", () => {
+  const panel = completionCandidates(commandState({ value: "n" }));
+  const d = renderCompletionDivider(panel, 40, colors);
+  // Marker colors are visible-width text: "accent( completions )" is 21
+  // columns here, so the fill is 40 - 1 - 21 (production ANSI is
+  // zero-width and yields 26; composition order is what this pins).
+  assert.equal(d, "border(─)" + "accent( completions )" + "border(" + "─".repeat(18) + ")");
+  assert.ok(!d.includes("dim("), "live mode paints no count");
+});
+
+test("divider: cycling paints the dim position count at the right end", () => {
+  COMMANDS.push(crafted("nohextra"));
+  try {
+    const panel = completionCandidates(commandState({ value: "nohextra", completion: { anchor: "n", index: 1 } }));
+    const d = renderCompletionDivider(panel, 40, colors);
+    assert.equal(d, "border(─)" + "accent( completions )" + "border(" + "─".repeat(8) + ")" + "dim( 2/2 )");
+  } finally {
+    COMMANDS.pop();
+  }
+});
+
+test("divider: narrow widths drop the count first, then degrade to a plain rule", () => {
+  const panel = completionCandidates(commandState({ value: "nohextra", completion: { anchor: "n", index: 1 } }));
+  COMMANDS.push(crafted("nohextra"));
+  try {
+    // Marker widths: lead + label = 22, count = 10. At 31 the count
+    // drops (fill 9); at 22 the label fits with zero fill; at 21 the label
+    // cannot fit and the divider degrades to a plain rule.
+    assert.equal(renderCompletionDivider(panel, 31, colors), "border(─)" + "accent( completions )" + "border(" + "─".repeat(9) + ")");
+    assert.equal(renderCompletionDivider(panel, 22, colors), "border(─)" + "accent( completions )");
+    assert.equal(renderCompletionDivider(panel, 21, colors), "border(" + "─".repeat(21) + ")");
+  } finally {
+    COMMANDS.pop();
+  }
 });

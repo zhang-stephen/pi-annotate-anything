@@ -1341,15 +1341,15 @@ test("highlight: searchHL undefined renders byte-identical to explicit true (def
 // while Tab cycles, over the bottom-most body rows above the footers. The
 // reducer owns every key; nothing here feeds the panel back into input.
 
-test("wiring: a typed prefix paints the candidate row over the last body row", () => {
+test("wiring: a typed prefix paints the divider and the candidate row over the last body rows", () => {
   const h = makeCard({ lines: ["foo", "bar"] });
   for (const key of [":", "n"]) h.card.handleInput(key);
   const rows = h.card.render(80);
   const bare = rows.map(strip);
-  // One candidate: exactly the bottom-most body row is covered; the body
-  // row above keeps the file line.
+  // One candidate: the divider opens the drawer one row above it; both sit
+  // above the footers, and the file lines they cover are replaced.
+  assert.ok(bare[1].includes("completions"), `divider painted, got: ${JSON.stringify(bare[1])}`);
   assert.ok(bare[2].includes("nohlsearch  clear search highlight"), `panel row painted, got: ${JSON.stringify(bare[2])}`);
-  assert.ok(bare[1].includes("foo"), `body row above untouched, got: ${bare[1]}`);
   // Live mode: the suggestion is shown, never selected.
   assert.ok(!rows[2].includes("\x1b[7m"), `no inverted selection while typing, got: ${JSON.stringify(rows[2])}`);
   // Badge, position, and the cmdline row are never displaced.
@@ -1373,9 +1373,11 @@ test("wiring: Tab completes the cmdline value and the panel selection inverts", 
   const rows = h.card.render(80);
   const bare = rows.map(strip);
   assert.ok(bare[4].startsWith("\u2502 :nohlsearch"), `completed value painted, got: ${bare[4]}`);
-  // The panel still shows the frozen anchor list, selection inverted.
+  // The panel still shows the frozen anchor list, selection inverted, and
+  // the divider gains the cycling count.
   assert.ok(bare[2].includes("nohlsearch"), `panel still up, got: ${bare[2]}`);
   assert.ok(rows[2].includes("\x1b[7m"), `selected row inverted, got: ${JSON.stringify(rows[2])}`);
+  assert.ok(bare[1].includes("completions") && bare[1].includes("1/1"), `cycling count on the divider, got: ${bare[1]}`);
 });
 
 test("wiring: Esc leaves command mode and the panel disappears with it", () => {
