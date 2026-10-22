@@ -71,11 +71,20 @@ Files: `src/viewer/commands.ts`, `src/viewer/state.ts`, create `src/viewer/compl
 - [x] Tests: source cases (empty, bare word, command+space, no match, unique); Tab accept, cycle, wrap, anchor freeze while value changes, reset on typing; panel rows, selection styling, 5-row truncation; viewer integration (typed char shows the row, Tab completes the value, bare `:` shows nothing, mode exit kills the panel).
 - [x] Steps: failing tests first, implement, suite green, commit `feat(viewer): complete command names through the unified panel` (`4ac9cb8`, 507 pass, 24 new tests; one existing test updated to drop Tab from the ignored-keys list; truncation deviation and the >5-candidate modulo-remap limitation are recorded on the module bullet).
 
+### Amendment (2026-10-22, post-review): enclosed Tab-triggered drawer
+
+Live E2E found the open-topped drawer fused with the footer stack and noisy on every keystroke; the spec Completion section records the superseded decisions with strikethrough. The state machine already owns the cycling lifecycle -- this amendment is render-layer only.
+
+- [ ] The drawer opens only on Tab (vim wildchar): no panel while typing; first Tab snapshots the anchor, accepts candidate[0], and shows the enclosed drawer; any other key closes it, the value keeping the accepted content; Tab with an empty value or no candidates stays inert.
+- [ ] Enclosed presentation: top rule with the source label and cycling count, candidate rows, and a plain closing rule beneath; the label is dim chrome (accent reserved for the mode badge); narrow widths drop the count, then the label, degrading to plain rules; at most 7 body lines covered (top rule + 5 rows + closing rule).
+- [ ] Tests updated: live-mode panel cases become inert-typing cases; divider assertions gain the closing rule and the dim label; viewer integration re-pins the open/close lifecycle on Tab (typing shows nothing, Tab opens, typing closes keeping the value).
+- [ ] Steps: failing tests first, implement, suite green, commit `feat(viewer): enclose the completion drawer behind tab`.
+
 ## Task 6: manual E2E (user)
 
 - [ ] Sandbox: `PI_CODING_AGENT_DIR=/tmp/pi-sandbox-home pi -e ./index.ts` with /tmp fixtures (long lines, CJK, CRLF).
 - [ ] Round 1 regressions: `:7` then `:` re-enters a clean input (no swallowed colon); Backspace at empty exits to normal in both `:` and `/` modes; `:q!` runs quit and `:q!!` shows E492.
-- [ ] Round 2 completion: bare `:` shows no panel; `n` shows the nohlsearch row with dim description; Tab completes the value; a space after a command hides the panel; Enter executes the completed name.
+- [ ] Round 2 completion: bare `:` shows nothing and Tab on empty or no-match is inert; `n` alone shows nothing, `n` then Tab opens the enclosed drawer (dim labeled top rule, candidate row with dim description, closing rule) and completes the value; typing closes the drawer keeping the value; a space after a command makes Tab inert; Enter executes the completed name.
 - [ ] Original cases: `:q` closes; `:7` jumps like `7G` (and `:999` clamps); `/foo` then `:noh` clears highlight, `n` re-lights; `:n` shows E492; `:noh extra` shows E488; Esc mid-typing restores normal mode; `3` then `:` drops the count.
 - [ ] Terminal-only feel (key repeat, paint latency) is not verifiable via unit tests or tmux.
 
