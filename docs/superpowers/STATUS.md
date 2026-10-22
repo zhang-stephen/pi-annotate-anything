@@ -8,14 +8,24 @@ Do not open docs marked `done` unless the current work touches that area.
 
 ## Active
 
+2.0 train (user call 2026-10-23): comment-cursor + composer jump-back + q/Esc removal (plans below); the tray/payload format break moves to a later major.
+
 - spec: `docs/superpowers/specs/2026-10-22-user-settings-design.md`
-  - approved (user call 2026-10-22), implementation not started
+  - approved (user call 2026-10-22), implementation not started; rides a later train, not 2.0
 - spec: `docs/superpowers/specs/2026-10-22-settings-evolution-design.md`
   - draft, awaiting design review (spun out of user-settings 2026-10-22)
 - spec: `docs/superpowers/specs/2026-10-22-comment-cursor-design.md`
-  - draft, review deferred (kept in the index because docs.test.ts requires it; user call 2026-10-22)
+  - approved (user call 2026-10-23), executing `plans/2026-10-22-comment-cursor.md` on the 2.0 train
+- spec: `docs/superpowers/specs/2026-10-23-composer-jump-back-design.md`
+  - approved (user call 2026-10-23), executing `plans/2026-10-23-composer-jump-back.md` on the 2.0 train
 - spec: `docs/superpowers/specs/2026-10-17-ci-tui-e2e-design.md`
   - draft, on hold: low priority, do not schedule (user call 2026-10-20)
+- plan: `docs/superpowers/plans/2026-10-23-q-only-close.md`
+  - in-progress 0/1, executes the Amendment (post-merge) of plans/2026-10-22-vim-behavior-alignment.md; its commit carries the BREAKING CHANGE footer that bumps 2.0
+- plan: `docs/superpowers/plans/2026-10-22-comment-cursor.md`
+  - in-progress 0/2, 2.0 train
+- plan: `docs/superpowers/plans/2026-10-23-composer-jump-back.md`
+  - in-progress 0/1, 2.0 train; the `:e` command is deferred by user call (design recorded in the spec)
 
 ## Known issues (deferred, no spec yet)
 
@@ -40,7 +50,7 @@ Do not open docs marked `done` unless the current work touches that area.
   Agreed direction (user call 2026-10-22): the type vocabulary is a small closed set -- note (default) / question / todo -- set by a prefix in the comment box (? or todo:) or a cycling keybind (input mechanism still open); the tag renders short in the pill ([? src/a.ts:10]) and in the payload header (Comment (question): ...), and Draft gains a kind field to carry it.
   Basename-only display accepted (user call 2026-10-22): the payload keeps the full path, so the LLM context is unaffected; same-basename collisions stay rare and store.ts already disambiguates identical tokens with ~N suffixes, so no key-vs-display token split is needed for v1.
   Facts: pills are literal buffer tokens (tokenLabel in core/message.ts, e.g. [src/a.ts:10-20]) recolored inverse-video by withTokenRecolor (tui/editor.ts). The MVP spec never froze the format -- the freeze wording lives only in the message.ts header comment describing MVP-time cross-module sync; format evolution is normal feature evolution via a new spec, not an MVP amendment (user call 2026-10-22), and the implementing change rewords that comment.
-  Tray direction recorded (user call 2026-10-22): pills become store-backed attachments rendered one row per pill above the composer input line (the permanent editor wrapper renders tray rows + inner editor, height grows accordingly); a row shows kind tag + basename + range + truncated comment; submit = prose + payload blocks appended in draft order, and the token parsing layer (tokenLabel/expandTokens) retires; v1 editing keys: alt+backspace removes the last pill, fine-grained management stays in /annotate; empty prose with pills present still submits; open: tray height cap and kind-switch keys. Path style (basename/relative/absolute) is a natural settings key once the user-settings spec lands.
+  Tray direction recorded (user call 2026-10-22): pills become store-backed attachments rendered one row per pill above the composer input line (the permanent editor wrapper renders tray rows + inner editor, height grows accordingly); a row shows kind tag + basename + range + truncated comment; submit = prose + payload blocks appended in draft order, and the token parsing layer (tokenLabel/expandTokens) retires; v1 editing keys: alt+backspace removes the last pill, fine-grained management stays in /annotate; empty prose with pills present still submits; open: tray height cap and kind-switch keys. Jump-back (alt+o, specs/2026-10-23-composer-jump-back-design.md; `:e` deferred) ships on 2.0 in the token era; the tray itself and its payload format break move to a later major. Path style (basename/relative/absolute) is a natural settings key once the user-settings spec lands.
 
 ## Done
 

@@ -1,6 +1,8 @@
 ---
 title: Comment Input Cursor Movement - Design
-status: draft
+status: in-progress
+plan:
+  - ../plans/2026-10-22-comment-cursor.md
 ---
 
 # Comment Input Cursor Movement - Design
