@@ -71,7 +71,7 @@ export function renderCompletionDivider(panel: CompletionPanel, innerWidth: numb
     fill = innerWidth - 1 - visibleWidth(label);
   }
   if (fill < 0) return rule(innerWidth);
-  return rule(1) + label + rule(fill) + count;
+  return rule(1) + label + (fill > 0 ? rule(fill) : "") + count;
 }
 
 // First n display columns of s, dropping whole characters at the cut edge.
