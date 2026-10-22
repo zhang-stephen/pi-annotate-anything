@@ -24,7 +24,9 @@ Done in b3e0c1c (accepted: 561/561, tsc clean; two delegated workers, one superv
 
 ## Task 2: hardware cursor rendering
 
-- [ ] Replace the painted fake cursor cell (`withCursorCell`, `src/viewer/viewer.ts`) with the terminal's hardware cursor positioned at the caret cell, shown while the comment box has focus and hidden while unfocused.
-- [ ] Honor pi's `showHardwareCursor` setting via the exported SettingsManager when readable (default on).
-- [ ] Update viewer render tests for the cursor change; `npm test` and `npx tsc --noEmit` green.
+Implementation done in ced4475 (accepted: 565/565, tsc clean; the SettingsManager read the original bullet demanded was a design error and is gone -- the marker contract carries both render modes). User E2E below stays open until the train close-out pass.
+
+- [x] Replace the painted fake cursor cell (`withCursorCell`, `src/viewer/viewer.ts`) with the terminal's hardware cursor positioned at the caret cell, shown while the comment box has focus and hidden while unfocused.
+- [x] Emit CURSOR_MARKER at the caret cell while focused (Focusable contract); the TUI owns the `showHardwareCursor` on/off branch, so the extension never reads the setting.
+- [x] Update viewer render tests for the cursor change; `npm test` and `npx tsc --noEmit` green.
 - [ ] User E2E (terminal-dependent, flagged): arrow keys under the kitty keyboard protocol (key repeat included) and under legacy sequences; insert and backspace mid-text.

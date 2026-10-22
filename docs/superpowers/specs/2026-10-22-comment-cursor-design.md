@@ -32,7 +32,7 @@ Give `CommentState` an explicit caret (a code-unit offset into `text`) and class
 - `char` inserts at the caret; `newline` inserts at the caret; `backspace` deletes the grapheme before the caret.
 - left/right move one grapheme (CJK- and emoji-safe), not one code unit; home/end move to the current wrapped row's edges; up/down move between wrapped rows preserving a goal display column across soft wraps.
 - `wrapCommentLines` already computes row starts/ends internally (`src/tui/comment-input.ts`); expose them so row movement and caret placement are exact.
-- Caret rendering switches to the terminal's hardware cursor: position it at the caret cell and show it while the comment box has focus, so blink style and rate follow the user's terminal defaults, exactly like pi's composer. Honor pi's `showHardwareCursor` setting when readable via the exported SettingsManager (default on), and keep the cursor hidden while the box is unfocused.
+- Caret rendering switches to the terminal's hardware cursor: emit the TUI's CURSOR_MARKER at the caret cell while the comment box has focus (the Focusable contract), so blink style and rate follow the user's terminal defaults, exactly like pi's composer. The TUI owns the `showHardwareCursor` branch (hardware positioning versus the inverse painted cell, live-updated by the settings selector), so the extension never reads the setting: the marker alone carries both behaviors.
 
 Out of scope for v1: word-wise motion (ctrl+left/right), kill-line, delete-forward, and in-comment selection.
 
