@@ -47,3 +47,10 @@ Files: `src/viewer/movement.ts`, `src/viewer/viewer.ts`, `src/viewer/status-line
 Manual E2E (user, real terminal): type `3` and watch `3` appear right-aligned then clear on `j`; `g` shows `g` then `gg` fires; goal column across short lines by feel.
 
 E2E confirmed by the user on 2026-10-22 (showcmd display, curswant goal column, kitty held-arrow repeat, regression feel); branch ff-merged to master.
+
+## Amendment (post-merge)
+
+2026-10-23 (user call, while reviewing the comment-cursor spec): the viewer's normal-mode `q` and Esc close mappings are removed on the 2.0 train; `:q` becomes the only close.
+Reason: single-key closes are accidental-loss hazards (a second Esc after cancelling a comment closes the whole viewer), and `q`-close is not vim-faithful (vim's `q` records macros; vim closes via `:q`).
+Esc keeps its remaining roles (visual->normal; cancel in comment/search/command modes) and becomes a no-op in normal mode; status-line hints and viewer state tests update with the change.
+Ships in 2.0 together with the comment-cursor and composer-jump-back specs.
