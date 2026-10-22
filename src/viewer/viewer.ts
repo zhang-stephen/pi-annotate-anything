@@ -369,27 +369,33 @@ export class AnnotateCard implements Component, Focusable {
       contentW,
       this.colors,
     );
-    // Cmdline: search mode shows the / input itself (the emulated cursor
-    // cell rides at the end of the query) and command mode mirrors it with
-    // the : prompt and the typed line (the reducer owns every keystroke;
-    // the shell only paints); every other mode shows the
-    // per-mode hints, carrying the reducer's transient message (it survives
-    // exactly one render, right-aligned) and the showcmd string derived
-    // from the same state, which the renderer drops while a message owns
-    // the corner (and never shows on the input row).
+    // Cmdline: search mode shows the / input itself (the caret cell rides at
+    // the end of the query) and command mode mirrors it with the : prompt and
+    // the typed line (the reducer owns every keystroke; the shell only
+    // paints); every other mode shows the per-mode hints, carrying the
+    // reducer's transient message (it survives exactly one render,
+    // right-aligned) and the showcmd string derived from the same state,
+    // which the renderer drops while a message owns the corner (and never
+    // shows on the input row). Focused input rows carry the comment box's
+    // hardware-cursor caret (withCmdlineCaret); unfocused ones keep the
+    // emulated inverse cell.
     const searchInput = this.state.mode === "search" ? this.state.search ?? null : null;
     const commandInput = this.state.mode === "command" ? this.state.command ?? null : null;
     const cmdline = searchInput !== null
-      ? renderCommandLine(
-        { kind: "input", prompt: "/", value: searchInput.query, cursorCol: searchInput.query.length, message: this.state.message ?? null },
-        contentW,
-        this.colors,
-      )
-      : commandInput !== null
-        ? renderCommandLine(
-          { kind: "input", prompt: ":", value: commandInput.value, cursorCol: commandInput.value.length, message: this.state.message ?? null },
+      ? this.withCmdlineCaret(
+        renderCommandLine(
+          { kind: "input", prompt: "/", value: searchInput.query, cursorCol: searchInput.query.length, message: this.state.message ?? null },
           contentW,
           this.colors,
+        ),
+      )
+      : commandInput !== null
+        ? this.withCmdlineCaret(
+          renderCommandLine(
+            { kind: "input", prompt: ":", value: commandInput.value, cursorCol: commandInput.value.length, message: this.state.message ?? null },
+            contentW,
+            this.colors,
+          ),
         )
       : renderCommandLine(
         { kind: "hints", mode: cardModeOf(this.state.mode), message: this.state.message ?? null, pendingKeys: pendingKeysOf(this.state) },
@@ -557,6 +563,26 @@ export class AnnotateCard implements Component, Focusable {
     if (!this.focused) return row;
     const { before, cell, after } = cursorCellAt(row, col, interiorWidth);
     return before + CURSOR_MARKER + renderFakeCursor(cell) + after;
+  }
+
+  // The cmdline input rows (the ":" command line and the "/" search input -
+  // both render through renderCommandLine's "input" variant) paint an
+  // emulated inverse caret cell after the value. While the card has focus
+  // that cell is swapped for pi-tui's CURSOR_MARKER + fake-cursor-wrapped
+  // cell - the same hardware-cursor contract as the comment box: the TUI
+  // owns positioning and its showHardwareCursor branch (marker on: the cell
+  // rides under the positioned hardware cursor; off: the fake markers
+  // resolve to the same inverse cell painted before). No settings are read
+  // here, and the swap is width-neutral: the emulated cell and the fake
+  // cell are both one space. The input values never contain escape bytes
+  // (their reducers route through toCommentKey's control-character filter),
+  // so the emulated cell byte sequence occurs exactly once per row.
+  private withCmdlineCaret(row: string): string {
+    if (!this.focused) return row;
+    const emulated = INVERSE_ON + " " + INVERSE_OFF;
+    const at = row.indexOf(emulated);
+    if (at === -1) return row;
+    return row.slice(0, at) + CURSOR_MARKER + renderFakeCursor(" ") + row.slice(at + emulated.length);
   }
 
   // Tab-triggered completion drawer: it exists only while the Tab-cycling

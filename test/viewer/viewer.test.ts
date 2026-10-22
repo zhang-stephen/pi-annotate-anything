@@ -6,6 +6,7 @@ import { stripTerminalSequences, visibleWidth, CURSOR_MARKER, renderFakeCursor }
 import type { TUI } from "@earendil-works/pi-tui";
 
 import { rawColToDisplayCol, rawColsToDisplayCols, sliceWindow, tabExpanded } from "../../src/tui/display.ts";
+import { INVERSE_OFF, INVERSE_ON } from "../../src/tui/comment-input.ts";
 import type { Range, VisualMode } from "../../src/core/selection.ts";
 import type { PendingDraft } from "../../src/viewer/state.ts";
 import { gutterWidth } from "../../src/viewer/layout.ts";
@@ -1371,6 +1372,54 @@ test("wiring: command mode renders the : input with the emulated cursor cell", (
   assert.ok(bare[4].startsWith("\u2502 :q!"), `typed value painted, got: ${bare[4]}`);
   assert.ok(rows[4].includes("\x1b[7m \x1b[27m"), "inverse cmdline cursor cell");
   assert.ok(!bare[4].includes("hjkl move"), `hints hidden on the input row, got: ${bare[4]}`);
+});
+
+// Cmdline hardware cursor (the comment box's Focusable contract on the two
+// input rows) --------------------------------------------------------------
+//
+// While the card has focus the ":" and "/" input rows swap their emulated
+// inverse caret cell for pi-tui's CURSOR_MARKER + fake-cursor-wrapped cell;
+// the TUI extracts the marker, positions the hardware cursor there, and
+// drops the fake cell when its showHardwareCursor flag is on (else resolves
+// it to the same inverse cell). Unfocused rows keep the emulated cell and
+// emit no marker bytes, so the TUI hides the cursor.
+
+test("cmdline caret: focused command input carries the marker at the caret cell", () => {
+  const h = makeCard({ lines: ["foo", "bar"] });
+  h.card.handleInput(":");
+  h.card.handleInput("q");
+  h.card.focused = true;
+  const rows = h.card.render(80);
+  const row = rows[rows.length - 2]; // cmdline footer above the bottom border
+  const { col, tail } = caretOf(row);
+  assert.ok(tail.startsWith(renderFakeCursor(" ")), "fake-wrapped space cell rides the marker");
+  // Marker column: border + padding (2) + prompt ":" (1) + value "q" (1).
+  assert.equal(col, 4);
+  assert.ok(!row.includes(INVERSE_ON + " " + INVERSE_OFF), "the emulated cell is swapped away");
+  for (const r of rows) assert.equal(visibleWidth(r), 80, "the swap adds no visible width");
+});
+
+test("cmdline caret: unfocused command input keeps the emulated cell and emits no marker", () => {
+  const h = makeCard({ lines: ["foo", "bar"] });
+  h.card.handleInput(":");
+  h.card.handleInput("q");
+  const rows = h.card.render(80);
+  const row = rows[rows.length - 2];
+  assert.ok(!row.includes("\x1b_pi:"), "no marker, no fake-cursor bytes");
+  assert.ok(row.includes(INVERSE_ON + " " + INVERSE_OFF), "emulated inverse cell stays");
+});
+
+test("cmdline caret: the / search input shares the same marker path", () => {
+  const h = makeCard({ lines: ["foo", "bar foo"] });
+  for (const key of ["/", "f", "o", "o"]) h.card.handleInput(key);
+  h.card.focused = true;
+  const rows = h.card.render(80);
+  const row = rows[rows.length - 2];
+  const { col, tail } = caretOf(row);
+  assert.ok(tail.startsWith(renderFakeCursor(" ")), "fake-wrapped space cell rides the marker");
+  // Marker column: border + padding (2) + prompt "/" (1) + query "foo" (3).
+  assert.equal(col, 6);
+  assert.ok(!row.includes(INVERSE_ON + " " + INVERSE_OFF), "the emulated cell is swapped away");
 });
 
 test("wiring: Esc leaves command mode and the normal cmdline row returns", () => {
