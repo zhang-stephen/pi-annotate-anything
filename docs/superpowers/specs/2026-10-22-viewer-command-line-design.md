@@ -67,14 +67,17 @@ The pattern stays available for repeats, exactly like vim's `:noh`.
 
 ## Completion
 
-One presentation surface for every completion source: an incremental candidate panel rendered above the footer, at the bottom of the file view (max 5 rows, transiently overlaying body lines), with the interaction model the composer's path completion already uses.
+One presentation surface for every completion source: a candidate drawer rendered above the footer, at the bottom of the file view, transiently overlaying body lines.
+~~An incremental panel that appears from the first typed character and filters live while typing, with the interaction model the composer's path completion already uses.~~ Amended 2026-10-22 after live E2E: the drawer follows vim's wildchar instead -- it exists only while Tab-cycling and typing never pops anything, which ends the per-keystroke open/filter churn and keeps the card's vim muscle memory in one piece.
 
-- Bare `:` shows nothing; the panel appears from the first typed character and filters live while typing; the cmdline value stays literal -- the panel is a suggestion list, never a second input.
-- Source switching follows the grammar state: a bare word completes against the command table (prefix match; completing inserts the full name, so an accepted candidate is always executable under the short-bound rule); a command name plus whitespace asks that command's `complete` hook for candidates -- no v1 command has one, so the panel hides; empty input and no-match hide it too.
-- Tab enters cycling: the candidate list is snapshotted from the value at first Tab (the anchor), Tab advances the selection (wrapping) and writes the selected name into the value, and any other key -- typing, Backspace, Enter, Esc -- drops back to live mode.
-- Enter always executes the literal cmdline value; Esc exits command mode (the panel dies with it; there is no two-stage Esc); Backspace pops with the panel following.
-- Matching strategy belongs to the source, not the panel: prefix for command names, fuzzy for the future `:e` file source.
-- Command rows render `name` plus a dim one-line `desc` (`CommandSpec.desc`: quit -- close the card, nohlsearch -- clear search highlight); the selected row renders inverted like the cmdline cursor cell; colors stay injected.
+- Bare `:` shows nothing, and Tab with an empty value or no candidates is inert; the drawer opens as a whole on the first Tab with candidates.
+- First Tab snapshots the candidate list from the current value (the anchor) and accepts the first candidate into the value; further Tabs advance the selection (wrapping) and write the selected name; any other key -- typing, Backspace, Enter, Esc -- closes the drawer, the value keeping whatever was accepted.
+- The cmdline value stays literal -- the drawer is a suggestion display, never a second input.
+- Source switching follows the grammar state: a bare word completes against the command table (prefix match; completing inserts the full name, so an accepted candidate is always executable under the short-bound rule); a command name plus whitespace asks that command's `complete` hook for candidates -- no v1 command has one, so there is nothing to cycle; empty input and no-match make Tab inert.
+- Enter always executes the literal cmdline value; Esc exits command mode (the drawer dies with it; there is no two-stage Esc); Backspace pops and closes the drawer.
+- Matching strategy belongs to the source, not the drawer: prefix for command names, fuzzy for the future `:e` file source.
+- Presentation: the drawer is fully enclosed -- a top rule broken by the source's label (` completions ` today; future sources name themselves, e.g. ` paths `), the candidate rows, and a plain closing rule beneath; narrow widths drop the count first, then the label, degrading to plain rules, and the enclosed drawer covers at most 7 body lines (top rule + 5 rows + closing rule).
+- Colors, four tiers only: rules, label, descriptions, and the cycling count (`2/4` of the capped window, top rule right end) are dim chrome -- ~~the label renders accent, echoing the badge~~ amended 2026-10-22 after live E2E: the accent tier is reserved for the mode badge alone, since a label-plus-badge stack read as two competing mode markers -- candidate names default, and the selected row inverted like the cmdline cursor cell; colors stay injected.
 
 ## Out of scope (with reasons)
 
