@@ -1,6 +1,6 @@
 ---
 title: ":q-Only Close - Plan"
-status: in-progress
+status: done
 progress: 1/1
 spec: none
 ---

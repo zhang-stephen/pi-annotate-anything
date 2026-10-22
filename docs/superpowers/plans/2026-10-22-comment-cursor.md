@@ -1,7 +1,7 @@
 ---
 title: Comment Input Cursor Movement - Plan
-status: in-progress
-progress: 1/2
+status: done
+progress: 2/2
 spec: ../specs/2026-10-22-comment-cursor-design.md
 ---
 
@@ -29,4 +29,5 @@ Implementation done in ced4475 (accepted: 565/565, tsc clean; the SettingsManage
 - [x] Replace the painted fake cursor cell (`withCursorCell`, `src/viewer/viewer.ts`) with the terminal's hardware cursor positioned at the caret cell, shown while the comment box has focus and hidden while unfocused.
 - [x] Emit CURSOR_MARKER at the caret cell while focused (Focusable contract); the TUI owns the `showHardwareCursor` on/off branch, so the extension never reads the setting.
 - [x] Update viewer render tests for the cursor change; `npm test` and `npx tsc --noEmit` green.
-- [ ] User E2E (terminal-dependent, flagged): arrow keys under the kitty keyboard protocol (key repeat included) and under legacy sequences; insert and backspace mid-text.
+- [x] User E2E (terminal-dependent, flagged): arrow keys under the kitty keyboard protocol (key repeat included) and under legacy sequences; insert and backspace mid-text.
+  Passed 2026-10-23 (user E2E round two: wrap-width row-end caret and one-press transitions re-verified after fixes).

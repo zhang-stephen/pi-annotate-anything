@@ -1,6 +1,6 @@
 ---
 title: Composer Jump Back - Design
-status: in-progress
+status: done
 plan:
   - ../plans/2026-10-23-composer-jump-back.md
 ---

@@ -1,7 +1,7 @@
 ---
 title: Composer Jump Back - Plan
-status: in-progress
-progress: 0/1
+status: done
+progress: 1/1
 spec: ../specs/2026-10-23-composer-jump-back-design.md
 ---
 
@@ -20,6 +20,7 @@ Implementation done in 3729979 (accepted: 582/582, tsc clean). Amended after use
 - [x] Clamp the range on files shortened or changed on disk; fail-open like the viewer does today.
 - [x] Unit tests: last-token selection from mixed buffers; no-token pass-through; open payload carries file + focus range; clamp on short files; alt+o intercepted before the inner editor with everything else forwarded.
 - [x] `npm test` and `npx tsc --noEmit` green.
-- [ ] User E2E (terminal-dependent, flagged): real `alt+o` key encoding (ESC-o sequence) and its disambiguation against a lone Esc in the composer.
+- [x] User E2E (terminal-dependent, flagged): real `alt+o` key encoding (ESC-o sequence) and its disambiguation against a lone Esc in the composer.
+  Passed 2026-10-23 (user E2E round two, with the no-pill warning text confirmed).
 
 Deferred (user call 2026-10-23): the `:e`/`:edit` command is not implemented on this train; the spec records the design and it ships when cross-file or multi-buffer demand materializes.
