@@ -133,6 +133,25 @@ test("statusline: visual and comment modes hide the search segment", () => {
   assert.ok(row.includes("3:1-4:2"));
 });
 
+test("statusline: command mode shows the COMMAND badge between nothing and the position", () => {
+  const input = { mode: "command" as const, cursor: { line: 12, col: 5 } };
+  const row = renderStatusLine(input, 40, colors);
+  // Badge in accent on the left, "12:5" dim on the right, no middle segment.
+  assert.equal(row, "a(-- COMMAND --)" + " ".repeat(23) + "d(12:5)");
+  assert.equal(visibleWidth(renderStatusLine(input, 40, plain)), 40);
+});
+
+test("statusline: command mode hides the search segment (guard covers normal and search only)", () => {
+  const row = renderStatusLine(
+    { mode: "command", cursor: { line: 12, col: 5 }, search: { pattern: "foo", rank: 2, total: 7 } },
+    40,
+    plain,
+  );
+  assert.ok(!row.includes("/foo"), "no search query while command mode is active");
+  assert.ok(!row.includes("[2/7]"), "no [rank/total] while command mode is active");
+  assert.equal(row, "-- COMMAND --" + " ".repeat(23) + "12:5");
+});
+
 // cardModeOf ---------------------------------------------------------------
 
 test("cardModeOf maps kebab ViewerMode keys to the camel FOOTER_HINTS keys", () => {
@@ -172,6 +191,15 @@ test("renderCommandLine input variant colors the prompt accent and pads to the i
 test("cmdline input: prompt, value, and inverse cursor cell; padded to width", () => {
   const row = renderCommandLine({ kind: "input", prompt: "/", value: "foo", cursorCol: 3 }, 10, plain);
   assert.equal(row, "/foo\x1b[7m \x1b[27m     ");
+});
+
+test("cmdline input: : prompt with typed value and inverse cursor cell, like search", () => {
+  const row = renderCommandLine({ kind: "input", prompt: ":", value: "noh", cursorCol: 3 }, 10, plain);
+  assert.equal(row, ":noh\x1b[7m \x1b[27m     ");
+  // While command mode is active the hints variant renders nothing (the
+  // input owns the row): empty hints mean an all-blank cmdline row.
+  const hintsRow = renderCommandLine({ kind: "hints", mode: "command" }, 10, plain);
+  assert.equal(hintsRow, " ".repeat(10));
 });
 
 test("cmdline input: overflow windows tail-biased, prompt and cursor stay visible", () => {
@@ -218,8 +246,13 @@ test("FOOTER_HINTS search mode carries the SEARCH badge and empty hints", () => 
   assert.equal(FOOTER_HINTS.search.hints, "");
 });
 
+test("FOOTER_HINTS command mode carries the COMMAND badge and empty hints", () => {
+  assert.equal(FOOTER_HINTS.command.badge, "-- COMMAND --");
+  assert.equal(FOOTER_HINTS.command.hints, "");
+});
+
 test("FOOTER_HINTS exposes badge and hints as separate fields per mode", () => {
-  for (const mode of ["normal", "visualChar", "visualLine", "comment", "search"] as const) {
+  for (const mode of ["normal", "visualChar", "visualLine", "comment", "search", "command"] as const) {
     const entry = FOOTER_HINTS[mode];
     assert.equal(typeof entry.hints, "string");
     assert.equal(typeof entry.badge, "string");
