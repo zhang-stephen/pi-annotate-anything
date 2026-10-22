@@ -1255,3 +1255,81 @@ test("wiring: zero matches hide the segment and surface the not-found message", 
   const after = h.card.render(80).map(strip);
   assert.ok(!after[4].includes("Pattern not found"), `message cleared by keypress, got: ${after[4]}`);
 });
+
+// Command-line input and :nohlsearch suppression ------------------------------
+//
+// The shell only paints command mode (the reducer owns every keystroke):
+// the : input mirrors the / input row (prompt, typed value, emulated cursor
+// cell), and searchHL false (:nohlsearch) suppresses both the match spans
+// and the [rank/total] segment until a re-lighting search runs.
+
+test("wiring: command mode renders the : input with the emulated cursor cell", () => {
+  const h = makeCard({ lines: ["foo", "bar"] });
+  h.card.handleInput(":");
+  let rows = h.card.render(80);
+  let bare = rows.map(strip);
+  assert.ok(bare[3].includes("-- COMMAND --"), `command badge, got: ${bare[3]}`);
+  assert.ok(bare[4].startsWith("\u2502 :"), `empty input painted, got: ${bare[4]}`);
+  for (const key of ["q", "!"]) h.card.handleInput(key); // typing appends whole
+  rows = h.card.render(80);
+  bare = rows.map(strip);
+  assert.ok(bare[4].startsWith("\u2502 :q!"), `typed value painted, got: ${bare[4]}`);
+  assert.ok(rows[4].includes("\x1b[7m \x1b[27m"), "inverse cmdline cursor cell");
+  assert.ok(!bare[4].includes("hjkl move"), `hints hidden on the input row, got: ${bare[4]}`);
+});
+
+test("wiring: Esc leaves command mode and the normal cmdline row returns", () => {
+  const h = makeCard({ lines: ["foo", "bar"] });
+  for (const key of [":", "q"]) h.card.handleInput(key);
+  const typing = h.card.render(80).map(strip);
+  assert.ok(typing[4].startsWith("\u2502 :q"), `input painted while typing, got: ${typing[4]}`);
+  h.card.handleInput("\x1b");
+  const bare = h.card.render(80).map(strip);
+  assert.ok(bare[3].includes("-- NORMAL --"), `normal badge, got: ${bare[3]}`);
+  assert.ok(bare[4].startsWith("\u2502 hjkl move"), `hints restored, got: ${bare[4]}`);
+  // Pending keys paint on the hints row again (the input row never shows them).
+  h.card.handleInput("3");
+  assert.ok(h.card.render(80).map(strip)[4].endsWith(" 3 \u2502"), "pending keys visible again");
+});
+
+test("wiring: :noh clears match spans and the rank segment; n re-lights both", () => {
+  const h = searchFoo(makeCard({ lines: ["foo", "bar foo"] })); // cursor on match 1
+  let rows = h.card.render(80);
+  assert.ok(rows[1].includes(BG_ON + FG_ON), `baseline: current match styled, got: ${JSON.stringify(strip(rows[1]))}`);
+  assert.ok(rows[2].includes(MATCH_FOO), `baseline: plain match styled, got: ${JSON.stringify(strip(rows[2]))}`);
+  assert.ok(strip(rows[3]).includes("/foo [1/2]"), `baseline: rank segment, got: ${strip(rows[3])}`);
+  for (const key of [":", "n", "o", "h", "\r"]) h.card.handleInput(key); // :nohlsearch
+  rows = h.card.render(80);
+  assert.ok(!rows[1].includes(BG_ON) && !rows[2].includes(BG_ON), `no match spans after :noh, got: ${JSON.stringify(strip(rows[1]) + strip(rows[2]))}`);
+  assert.ok(!strip(rows[3]).includes("[1/2]"), `rank segment gone, got: ${strip(rows[3])}`);
+  h.card.handleInput("n"); // the jump re-lights the highlight (reducer rule)
+  rows = h.card.render(80);
+  assert.ok(rows[1].includes(MATCH_FOO), `n re-lights the plain match, got: ${JSON.stringify(strip(rows[1]))}`);
+  assert.ok(rows[2].includes(BG_ON + FG_ON), `n re-lights the jumped-to match, got: ${JSON.stringify(strip(rows[2]))}`);
+  assert.ok(strip(rows[3]).includes("/foo [2/2]"), `segment restored, got: ${strip(rows[3])}`);
+});
+
+test("wiring: :noh then a resubmitted search re-lights highlight and segment", () => {
+  const h = searchFoo(makeCard({ lines: ["foo", "bar foo"] })); // cursor on match 1
+  for (const key of [":", "n", "o", "h", "\r"]) h.card.handleInput(key); // :nohlsearch
+  let rows = h.card.render(80);
+  assert.ok(!rows[1].includes(BG_ON) && !rows[2].includes(BG_ON), `suppressed before the resubmit, got: ${JSON.stringify(strip(rows[1]) + strip(rows[2]))}`);
+  assert.ok(!strip(rows[3]).includes("[1/2]"), `segment gone, got: ${strip(rows[3])}`);
+  for (const key of ["/", "f", "o", "o", "\r"]) h.card.handleInput(key); // new search
+  rows = h.card.render(80);
+  assert.ok(rows[1].includes(BG_ON + FG_ON), `resubmitted search re-lights the match, got: ${JSON.stringify(strip(rows[1]))}`);
+  assert.ok(rows[2].includes(MATCH_FOO), `resubmitted search re-lights the other match, got: ${JSON.stringify(strip(rows[2]))}`);
+  assert.ok(strip(rows[3]).includes("/foo [1/2]"), `segment restored, got: ${strip(rows[3])}`);
+});
+
+test("highlight: searchHL undefined renders byte-identical to explicit true (default on)", () => {
+  // The reducer re-lights searchHL on every lit path (Enter, n, N), so the
+  // never-touched default (undefined) cannot be observed next to a stored
+  // lastSearch through keys alone; reset the field on the card's live state
+  // to pin the shell's default directly.
+  const h = searchFoo(makeCard({ lines: ["foo", "bar foo"] }));
+  const lit = h.card.render(80);
+  const state = (h.card as unknown as { state: { searchHL?: boolean } }).state;
+  state.searchHL = undefined;
+  assert.deepEqual(h.card.render(80), lit);
+});

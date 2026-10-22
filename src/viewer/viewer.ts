@@ -209,14 +209,18 @@ export class AnnotateCard implements Component, Focusable {
     // follows the live query (empty skips), every other mode repeats the
     // last submitted pattern (null skips). One compile + one scan per
     // render; an invalid pattern renders no highlight (its error already
-    // shows as the cmdline message). Spans are built only for viewport rows
+    // shows as the cmdline message). :nohlsearch (searchHL false) suppresses
+    // the whole pass: the query resolves to null, so no spans compile and
+    // searchStatus is never supplied; undefined means true, so the default
+    // path is byte-identical. Spans are built only for viewport rows
     // [first, last): off-screen spans are never read. Zero-width matches
     // render nothing (applyStyleSpans' end > start filter), so they are
     // skipped here - that keeps pathological patterns like a* cheap. Per
     // line the sorted match columns map in ONE left-to-right walk
     // (rawColsToDisplayCols), so a frame costs O(file) for the scan plus
     // O(viewport lines) for mapping instead of O(matches x line length).
-    const query = this.state.mode === "search" ? this.state.search?.query ?? "" : this.state.lastSearch ?? null;
+    const hlOn = this.state.searchHL !== false;
+    const query = hlOn ? (this.state.mode === "search" ? this.state.search?.query ?? "" : this.state.lastSearch ?? null) : null;
     const matchSpans = new Map<number, StyleSpan[]>();
     let searchStatus: StatusLineInput["search"] = null;
     if (query !== null && query !== "") {
@@ -315,18 +319,27 @@ export class AnnotateCard implements Component, Focusable {
       this.colors,
     );
     // Cmdline: search mode shows the / input itself (the emulated cursor
-    // cell rides at the end of the query); every other mode shows the
+    // cell rides at the end of the query) and command mode mirrors it with
+    // the : prompt and the typed line (the reducer owns every keystroke;
+    // the shell only paints); every other mode shows the
     // per-mode hints, carrying the reducer's transient message (it survives
     // exactly one render, right-aligned) and the showcmd string derived
     // from the same state, which the renderer drops while a message owns
     // the corner (and never shows on the input row).
     const searchInput = this.state.mode === "search" ? this.state.search ?? null : null;
+    const commandInput = this.state.mode === "command" ? this.state.command ?? null : null;
     const cmdline = searchInput !== null
       ? renderCommandLine(
         { kind: "input", prompt: "/", value: searchInput.query, cursorCol: searchInput.query.length, message: this.state.message ?? null },
         contentW,
         this.colors,
       )
+      : commandInput !== null
+        ? renderCommandLine(
+          { kind: "input", prompt: ":", value: commandInput.value, cursorCol: commandInput.value.length, message: this.state.message ?? null },
+          contentW,
+          this.colors,
+        )
       : renderCommandLine(
         { kind: "hints", mode: cardModeOf(this.state.mode), message: this.state.message ?? null, pendingKeys: pendingKeysOf(this.state) },
         contentW,
