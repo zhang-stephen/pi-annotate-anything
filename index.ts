@@ -1,10 +1,13 @@
 // Extension entry point: wires the annotate flow together.
 //
-// - The AnnotateEditor composer (pill recoloring) is installed lazily by
-//   /annotate, saving any previously configured editor factory (e.g. another
-//   extension's custom composer), and restored once no pill tokens remain in
-//   the composer (card closed with no pending annotations, or after submit).
-//   session_shutdown restores the saved factory as well.
+// - The composer editor is registered exactly once per session in
+//   session_start: the previously configured editor factory (e.g. another
+//   extension's custom composer) is captured and decorated with pill
+//   recoloring, falling back to AnnotateEditor when nothing was configured.
+//   The editor instance is never swapped again: the host copies text and
+//   appearance across editor swaps but not prompt history, so swapping per
+//   annotation cycle would split the composer's history. session_shutdown
+//   restores the captured factory.
 // - /annotate <path> opens AnnotateCard in an overlay; annotations land in
 //   the store and their token pill is pasted into the composer.
 // - The "input" event expands tokens into full payload blocks. Pi clears the
@@ -36,15 +39,14 @@ export default function (pi: ExtensionAPI) {
 // with stubbed pi/ctx; production always passes the runtime probe result
 // from path-completion.ts.
 export function annotateExtension(pi: ExtensionAPI, fuzzy: boolean): void {
-  // The composer override is installed on demand by /annotate and removed
-  // once no pill tokens remain pending (card closed with nothing pending,
-  // or after submit), so the user's configured editor is untouched in
-  // ordinary sessions. While installed it is PREDECESSOR-PRESERVING: the
-  // factory decorates whatever editor the previous factory (e.g. zentui's)
-  // produces instead of replacing it, so other extensions' composer styling
-  // keeps working underneath the pill recoloring.
+  // The composer editor is registered once per session in session_start and
+  // is PREDECESSOR-PRESERVING: the wrapper decorates whatever editor the
+  // captured predecessor factory (e.g. zentui's) produces instead of
+  // replacing it, so other extensions' composer styling keeps working
+  // underneath the pill recoloring. The wrapper is stateless: the token
+  // list is read live from the store, and with no pending tokens recolor is
+  // a pure passthrough, so the registration never needs to change again.
   let store: AnnotationStore;
-  let composerInstalled = false;
   // The completion callback receives no ctx, so it cannot read ctx.cwd
   // directly; session_start keeps this in sync with the session cwd, which
   // differs from the process cwd when a stored session is resumed from
@@ -53,35 +55,36 @@ export function annotateExtension(pi: ExtensionAPI, fuzzy: boolean): void {
   // EditorFactory is not re-exported from the package root; derive it.
   type EditorFactory = NonNullable<ReturnType<ExtensionContext["ui"]["getEditorComponent"]>>;
 
+  // Captured at the FIRST editor registration (see session_start): the
+  // factory configured before ours, or undefined when nothing was
+  // configured. A repeated session_start (/reload shape) rebuilds the
+  // wrapper from this first capture instead of from getEditorComponent(),
+  // which by then returns our own wrapper; wrapping that again would stack
+  // recolor decorators and lose the true predecessor.
   let savedFactory: EditorFactory | undefined;
+  // True from the first session_start registration until session_shutdown.
+  let editorRegistered = false;
 
   const getTokens = () => store.list().map((d) => d.token);
 
-  const installComposer = (ctx: ExtensionContext) => {
-    if (composerInstalled) return;
-    savedFactory = ctx.ui.getEditorComponent();
+  pi.on("session_start", (_event, ctx) => {
+    store = new AnnotationStore();
+    sessionCwd = ctx.cwd;
+    // Register the pill-recoloring editor once per session, before the
+    // first user input: capture the predecessor factory only at this first
+    // registration and register the same wrapper body every time, so a
+    // repeated session_start (/reload shape) re-registers the same wrapper
+    // instead of wrapping our own already-registered factory.
+    if (!editorRegistered) {
+      savedFactory = ctx.ui.getEditorComponent();
+      editorRegistered = true;
+    }
     const predecessor = savedFactory;
     ctx.ui.setEditorComponent((tui, theme, keybindings) =>
       predecessor
         ? withTokenRecolor(predecessor(tui, theme, keybindings), getTokens)
         : new AnnotateEditor(tui, theme, keybindings, getTokens),
     );
-    composerInstalled = true;
-  };
-
-  // Restore the saved editor once the composer holds no pill tokens. Call
-  // only when the store mirrors composer truth (right after pruneFromText,
-  // or at card close where add/delete keep them in sync).
-  const restoreComposerIfIdle = (ctx: ExtensionContext) => {
-    if (!composerInstalled || store.list().length > 0) return;
-    ctx.ui.setEditorComponent(savedFactory);
-    savedFactory = undefined;
-    composerInstalled = false;
-  };
-
-  pi.on("session_start", (_event, ctx) => {
-    store = new AnnotationStore();
-    sessionCwd = ctx.cwd;
     // Explicit-failure gate (spec 2026-10-20 "Host version floor and
     // explicit failure"): without the fuzzy helpers the user gets the
     // reason and the version floor, never a silent prefix-matching
@@ -95,7 +98,11 @@ export function annotateExtension(pi: ExtensionAPI, fuzzy: boolean): void {
   });
 
   pi.on("session_shutdown", (_event, ctx) => {
-    if (composerInstalled) ctx.ui.setEditorComponent(savedFactory);
+    // Restore the factory configured before ours. Idempotent: a repeated
+    // shutdown finds editorRegistered false and leaves the editor alone.
+    if (!editorRegistered) return;
+    ctx.ui.setEditorComponent(savedFactory);
+    editorRegistered = false;
   });
 
   pi.registerCommand("annotate", {
@@ -126,8 +133,6 @@ export function annotateExtension(pi: ExtensionAPI, fuzzy: boolean): void {
       // getter, re-read on every render, so annotations created while the
       // card stays open show their marker immediately.
       store.pruneFromText(ctx.ui.getEditorText());
-      // Take over the composer for pill recoloring while annotations exist.
-      installComposer(ctx);
       // Live getters, re-read on every render: pending drives the gutter/
       // underline markers; pendingDrafts carries token/range/comment for the
       // card's edit (c) and delete (x) targeting. Both list this file's
@@ -184,9 +189,6 @@ export function annotateExtension(pi: ExtensionAPI, fuzzy: boolean): void {
           ),
         { overlay: true, overlayOptions: { width: "80%", maxHeight: "80%", anchor: "center" } },
       );
-      // Card closed: if the composer holds no pill tokens (no annotations
-      // pending), hand the composer back to the previously configured editor.
-      restoreComposerIfIdle(ctx);
     },
   });
 
@@ -203,8 +205,5 @@ export function annotateExtension(pi: ExtensionAPI, fuzzy: boolean): void {
 
   pi.on("message_start", (_event, ctx) => {
     store.pruneFromText(ctx.ui.getEditorText());
-    // After a submitted message the composer is empty: pills are gone, so
-    // the user's configured editor can take over again.
-    restoreComposerIfIdle(ctx);
   });
 }

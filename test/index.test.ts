@@ -33,6 +33,10 @@ function stubSession() {
       notify: (message: string, level?: string) => {
         notifications.push({ message, level: level ?? "info" });
       },
+      // session_start registers the composer editor (capturing any
+      // predecessor first); the stub reports no configured predecessor.
+      getEditorComponent: () => undefined,
+      setEditorComponent: () => {},
     },
   } as unknown as ExtensionContext;
   return { pi, ctx, handlers, commands, notifications };
