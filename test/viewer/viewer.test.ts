@@ -1334,30 +1334,30 @@ test("highlight: searchHL undefined renders byte-identical to explicit true (def
   assert.deepEqual(h.card.render(80), lit);
 });
 
-// Command-name completion panel ------------------------------------------------
+// Command-name completion drawer ------------------------------------------------
 //
-// The shell only paints the unified panel: the live candidate list while
-// typing (no selection), the frozen anchor list with the inverted selection
-// while Tab cycles, over the bottom-most body rows above the footers. The
-// reducer owns every key; nothing here feeds the panel back into input.
+// The shell only paints the enclosed drawer while the Tab-cycling state is
+// active: typing alone paints nothing, the first Tab opens the drawer (the
+// labeled top rule with the cycling count, the inverted candidate row, the
+// plain closing rule) over the bottom-most body rows above the footers, and
+// any other key closes it keeping the accepted value. The reducer owns
+// every key; nothing here feeds the drawer back into input.
 
-test("wiring: a typed prefix paints the divider and the candidate row over the last body rows", () => {
-  const h = makeCard({ lines: ["foo", "bar"] });
+test("wiring: typing paints no drawer; the file lines stay intact", () => {
+  const h = makeCard({ lines: ["l0", "l1", "l2", "l3", "l4", "l5"] });
   for (const key of [":", "n"]) h.card.handleInput(key);
   const rows = h.card.render(80);
   const bare = rows.map(strip);
-  // One candidate: the divider opens the drawer one row above it; both sit
-  // above the footers, and the file lines they cover are replaced.
-  assert.ok(bare[1].includes("completions"), `divider painted, got: ${JSON.stringify(bare[1])}`);
-  assert.ok(bare[2].includes("nohlsearch  clear search highlight"), `panel row painted, got: ${JSON.stringify(bare[2])}`);
-  // Live mode: the suggestion is shown, never selected.
-  assert.ok(!rows[2].includes("\x1b[7m"), `no inverted selection while typing, got: ${JSON.stringify(rows[2])}`);
-  // Badge, position, and the cmdline row are never displaced.
-  assert.ok(bare[3].includes("-- COMMAND --") && bare[3].endsWith("1:1 \u2502"), `statusline intact, got: ${bare[3]}`);
-  assert.ok(bare[4].startsWith("\u2502 :n"), `cmdline intact, got: ${bare[4]}`);
+  for (const row of bare) {
+    assert.ok(!row.includes("completions") && !row.includes("nohlsearch"), `no drawer while typing, got: ${row}`);
+  }
+  // The rows the drawer would cover still show the file.
+  assert.ok(bare[4].includes("l3") && bare[5].includes("l4") && bare[6].includes("l5"), `body rows intact, got: ${bare[4]} / ${bare[5]} / ${bare[6]}`);
+  assert.ok(bare[7].includes("-- COMMAND --") && bare[7].endsWith("1:1 \u2502"), `statusline intact, got: ${bare[7]}`);
+  assert.ok(bare[8].startsWith("\u2502 :n"), `cmdline intact, got: ${bare[8]}`);
 });
 
-test("wiring: bare : paints no panel", () => {
+test("wiring: bare : paints no panel and Tab stays inert", () => {
   const h = makeCard({ lines: ["foo", "bar"] });
   h.card.handleInput(":");
   const bare = h.card.render(80).map(strip);
@@ -1365,28 +1365,63 @@ test("wiring: bare : paints no panel", () => {
   for (const row of bare) {
     assert.ok(!row.includes("nohlsearch") && !row.includes("close the card"), `no panel, got: ${row}`);
   }
+  h.card.handleInput("\t"); // Tab on the empty value: still nothing
+  const after = h.card.render(80).map(strip);
+  for (const row of after) {
+    assert.ok(!row.includes("nohlsearch") && !row.includes("completions"), `Tab inert on empty, got: ${row}`);
+  }
 });
 
-test("wiring: Tab completes the cmdline value and the panel selection inverts", () => {
-  const h = makeCard({ lines: ["foo", "bar"] });
+test("wiring: Tab opens the enclosed drawer and completes the cmdline value", () => {
+  const h = makeCard({ lines: ["l0", "l1", "l2", "l3", "l4", "l5"] });
   for (const key of [":", "n", "\t"]) h.card.handleInput(key);
   const rows = h.card.render(80);
   const bare = rows.map(strip);
-  assert.ok(bare[4].startsWith("\u2502 :nohlsearch"), `completed value painted, got: ${bare[4]}`);
-  // The panel still shows the frozen anchor list, selection inverted, and
-  // the divider gains the cycling count.
-  assert.ok(bare[2].includes("nohlsearch"), `panel still up, got: ${bare[2]}`);
-  assert.ok(rows[2].includes("\x1b[7m"), `selected row inverted, got: ${JSON.stringify(rows[2])}`);
-  assert.ok(bare[1].includes("completions") && bare[1].includes("1/1"), `cycling count on the divider, got: ${bare[1]}`);
+  assert.ok(bare[8].startsWith("\u2502 :nohlsearch"), `completed value painted, got: ${bare[8]}`);
+  // The enclosed block replaces the bottom-most body rows: the labeled
+  // divider with the cycling count, the inverted candidate row, then the
+  // plain closing rule.
+  assert.ok(bare[4].includes("completions") && bare[4].includes("1/1"), `labeled divider with count, got: ${JSON.stringify(bare[4])}`);
+  assert.ok(bare[5].includes("nohlsearch"), `candidate row painted, got: ${JSON.stringify(bare[5])}`);
+  assert.ok(rows[5].includes("\x1b[7m"), `selected row inverted, got: ${JSON.stringify(rows[5])}`);
+  assert.ok(/^\u2502 \u2500+ \u2502$/.test(bare[6]), `closing rule painted, got: ${JSON.stringify(bare[6])}`);
+  // Badge, position, and the cmdline row are never displaced.
+  assert.ok(bare[7].includes("-- COMMAND --") && bare[7].endsWith("1:1 \u2502"), `statusline intact, got: ${bare[7]}`);
 });
 
-test("wiring: Esc leaves command mode and the panel disappears with it", () => {
+test("wiring: typing after Tab closes the drawer keeping the completed value", () => {
+  const h = makeCard({ lines: ["l0", "l1", "l2", "l3", "l4", "l5"] });
+  for (const key of [":", "n", "\t"]) h.card.handleInput(key);
+  h.card.handleInput("x");
+  const bare = h.card.render(80).map(strip);
+  for (const row of bare) {
+    // The divider label and the candidate description are drawer-only
+    // markers: the completed value itself rides the cmdline row.
+    assert.ok(!row.includes("completions") && !row.includes("clear search highlight"), `drawer closed by typing, got: ${row}`);
+  }
+  // The covered file lines reappear; the accepted completion stays typed.
+  assert.ok(bare[5].includes("l4"), `covered file line restored, got: ${bare[5]}`);
+  assert.ok(bare[8].startsWith("\u2502 :nohlsearchx"), `completed value kept, got: ${bare[8]}`);
+});
+
+test("wiring: a space after a command makes Tab inert (no drawer)", () => {
+  const h = makeCard({ lines: ["l0", "l1", "l2", "l3", "l4", "l5"] });
+  for (const key of [":", "n", "o", "h", " "]) h.card.handleInput(key);
+  h.card.handleInput("\t");
+  const bare = h.card.render(80).map(strip);
+  for (const row of bare) {
+    assert.ok(!row.includes("completions") && !row.includes("nohlsearch"), `Tab inert after a space, got: ${row}`);
+  }
+  assert.ok(bare[8].startsWith("\u2502 :noh "), `typed value kept, got: ${bare[8]}`);
+});
+
+test("wiring: Esc leaves command mode and the drawer disappears with it", () => {
   const h = makeCard({ lines: ["foo", "bar"] });
   for (const key of [":", "n", "\t", "\x1b"]) h.card.handleInput(key);
   const bare = h.card.render(80).map(strip);
   assert.ok(bare[3].includes("-- NORMAL --"), `normal badge, got: ${bare[3]}`);
   assert.ok(bare[4].startsWith("\u2502 hjkl move"), `hints restored, got: ${bare[4]}`);
   for (const row of bare) {
-    assert.ok(!row.includes("nohlsearch"), `panel gone, got: ${row}`);
+    assert.ok(!row.includes("nohlsearch") && !row.includes("completions"), `drawer gone, got: ${row}`);
   }
 });

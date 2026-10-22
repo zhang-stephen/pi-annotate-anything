@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 
 import { COMMANDS } from "../../src/viewer/commands.ts";
 import type { CommandSpec } from "../../src/viewer/commands.ts";
-import { completionCandidates, MAX_COMPLETION_ROWS, renderCompletionDivider, renderCompletionRows } from "../../src/viewer/completion-panel.ts";
+import { completionCandidates, MAX_COMPLETION_ROWS, renderCompletionClosing, renderCompletionDivider, renderCompletionRows } from "../../src/viewer/completion-panel.ts";
 import type { ViewerState } from "../../src/viewer/state.ts";
 
 // Command-mode state carrying just the draft under test: the panel derives
@@ -138,14 +138,16 @@ test("render: narrow rows truncate the description first, then drop it and the s
 
 // renderCompletionDivider -----------------------------------------------------
 
-test("divider: dim rule broken by the accent label; live mode shows no count", () => {
-  const panel = completionCandidates(commandState({ value: "n" }));
+test("divider: dim rule broken by the dim label with the cycling count", () => {
+  // The drawer only exists while Tab-cycling, so a painted divider always
+  // carries the position count beside the label (accent stays reserved for
+  // the mode badge).
+  const panel = completionCandidates(commandState({ value: "nohlsearch", completion: { anchor: "n", index: 0 } }));
   const d = renderCompletionDivider(panel, 40, colors);
-  // Marker colors are visible-width text: "accent( completions )" is 21
-  // columns here, so the fill is 40 - 1 - 21 (production ANSI is
-  // zero-width and yields 26; composition order is what this pins).
-  assert.equal(d, "border(─)" + "accent( completions )" + "border(" + "─".repeat(18) + ")");
-  assert.ok(!d.includes("dim("), "live mode paints no count");
+  // Marker colors are visible-width text: "dim( completions )" is 18
+  // columns and "dim( 1/1 )" 10 here, so the fill is 40 - 1 - 18 - 10
+  // (production ANSI is zero-width; composition order is what this pins).
+  assert.equal(d, "border(─)" + "dim( completions )" + "border(" + "─".repeat(11) + ")" + "dim( 1/1 )");
 });
 
 test("divider: cycling paints the dim position count at the right end", () => {
@@ -153,7 +155,7 @@ test("divider: cycling paints the dim position count at the right end", () => {
   try {
     const panel = completionCandidates(commandState({ value: "nohextra", completion: { anchor: "n", index: 1 } }));
     const d = renderCompletionDivider(panel, 40, colors);
-    assert.equal(d, "border(─)" + "accent( completions )" + "border(" + "─".repeat(8) + ")" + "dim( 2/2 )");
+    assert.equal(d, "border(─)" + "dim( completions )" + "border(" + "─".repeat(11) + ")" + "dim( 2/2 )");
   } finally {
     COMMANDS.pop();
   }
@@ -163,13 +165,25 @@ test("divider: narrow widths drop the count first, then degrade to a plain rule"
   const panel = completionCandidates(commandState({ value: "nohextra", completion: { anchor: "n", index: 1 } }));
   COMMANDS.push(crafted("nohextra"));
   try {
-    // Marker widths: lead + label = 22, count = 10. At 31 the count
-    // drops (fill 9); at 22 the label fits with zero fill; at 21 the label
+    // Marker widths: lead + label = 19, count = 10. At 28 the count
+    // drops (fill 9); at 19 the label fits with zero fill; at 18 the label
     // cannot fit and the divider degrades to a plain rule.
-    assert.equal(renderCompletionDivider(panel, 31, colors), "border(─)" + "accent( completions )" + "border(" + "─".repeat(9) + ")");
-    assert.equal(renderCompletionDivider(panel, 22, colors), "border(─)" + "accent( completions )");
-    assert.equal(renderCompletionDivider(panel, 21, colors), "border(" + "─".repeat(21) + ")");
+    assert.equal(renderCompletionDivider(panel, 28, colors), "border(─)" + "dim( completions )" + "border(" + "─".repeat(9) + ")");
+    assert.equal(renderCompletionDivider(panel, 19, colors), "border(─)" + "dim( completions )");
+    assert.equal(renderCompletionDivider(panel, 18, colors), "border(" + "─".repeat(18) + ")");
   } finally {
     COMMANDS.pop();
   }
+});
+
+// renderCompletionClosing ------------------------------------------------------
+
+test("closing: a plain rule exactly as wide as the content", () => {
+  assert.equal(renderCompletionClosing(40, colors), "border(" + "─".repeat(40) + ")");
+  assert.equal(renderCompletionClosing(1, colors), "border(─)");
+});
+
+test("closing: below one column the rule is the empty string", () => {
+  assert.equal(renderCompletionClosing(0, colors), "border()");
+  assert.equal(renderCompletionClosing(-3, colors), "border()");
 });

@@ -1,9 +1,11 @@
-// Pure rendering of the command-name completion panel: the candidate list
+// Pure rendering of the command-name completion drawer: the candidate list
 // derived from the viewer state (the live candidates of the typed value
 // while editing, the frozen anchor list with a selection while Tab cycles)
-// and the styled panel rows painted over the bottom-most body rows. Like
-// status-line.ts, all colors are injected as (text) => string functions;
-// the only host imports are the width helpers the chrome already uses.
+// and the enclosed block painted over the bottom-most body rows while the
+// Tab-cycling state is active -- labeled divider, candidate rows, closing
+// rule. Like status-line.ts, all colors are injected as (text) => string
+// functions; the only host imports are the width helpers the chrome already
+// uses.
 
 import { visibleWidth } from "@earendil-works/pi-tui";
 
@@ -55,15 +57,17 @@ export function completionCandidates(state: ViewerState): CompletionPanel {
   return { rows, selected, label: COMPLETION_LABEL };
 }
 
-// The labeled divider that opens the drawer: a dim rule broken by the
-// accent label and, only while Tab-cycling, the dim position count at the
-// right end ("2/4" of the capped window). Narrow widths drop the count
-// first, then degrade to a plain rule, so the drawer always opens with a
-// visible separator row exactly as wide as the content.
+// The labeled divider that opens the drawer: a dim rule broken by the dim
+// label (accent stays reserved for the mode badge) and the dim position
+// count at the right end ("2/4" of the capped window; the drawer only
+// exists while Tab-cycling, so the count is always present when the divider
+// is painted). Narrow widths drop the count first, then degrade to a plain
+// rule, so the drawer always opens with a visible separator row exactly as
+// wide as the content.
 export function renderCompletionDivider(panel: CompletionPanel, innerWidth: number, colors: ChromeColors): string {
   const rule = (n: number) => colors.border("─".repeat(Math.max(0, n)));
   if (innerWidth < 2) return rule(innerWidth);
-  const label = colors.accent(" " + panel.label + " ");
+  const label = colors.dim(" " + panel.label + " ");
   let count = panel.selected === null || panel.rows.length === 0 ? "" : colors.dim(` ${panel.selected + 1}/${panel.rows.length} `);
   let fill = innerWidth - 1 - visibleWidth(label) - visibleWidth(count);
   if (fill < 0 && count !== "") {
@@ -72,6 +76,13 @@ export function renderCompletionDivider(panel: CompletionPanel, innerWidth: numb
   }
   if (fill < 0) return rule(innerWidth);
   return rule(1) + label + (fill > 0 ? rule(fill) : "") + count;
+}
+
+// The plain rule that seals the drawer beneath the candidate rows: exactly
+// as wide as the content, no label or count to break it. Degeneration is
+// trivial: below one column the rule is the empty string.
+export function renderCompletionClosing(innerWidth: number, colors: ChromeColors): string {
+  return colors.border("─".repeat(Math.max(0, innerWidth)));
 }
 
 // First n display columns of s, dropping whole characters at the cut edge.
