@@ -145,17 +145,17 @@ test("divider: dim rule broken by the dim label with the cycling count", () => {
   const panel = completionCandidates(commandState({ value: "nohlsearch", completion: { anchor: "n", index: 0 } }));
   const d = renderCompletionDivider(panel, 40, colors);
   // Marker colors are visible-width text: "dim( completions )" is 18
-  // columns and "dim( 1/1 )" 10 here, so the fill is 40 - 1 - 18 - 10
+  // columns and "dim(1/1 )" 9 here, so the fill is 40 - 1 - 18 - 9
   // (production ANSI is zero-width; composition order is what this pins).
-  assert.equal(d, "border(─)" + "dim( completions )" + "border(" + "─".repeat(11) + ")" + "dim( 1/1 )");
+  assert.equal(d, "border(─)" + "dim( completions )" + "dim(1/1 )" + "border(" + "─".repeat(12) + ")");
 });
 
-test("divider: cycling paints the dim position count at the right end", () => {
+test("divider: cycling paints the dim count beside the label", () => {
   COMMANDS.push(crafted("nohextra"));
   try {
     const panel = completionCandidates(commandState({ value: "nohextra", completion: { anchor: "n", index: 1 } }));
     const d = renderCompletionDivider(panel, 40, colors);
-    assert.equal(d, "border(─)" + "dim( completions )" + "border(" + "─".repeat(11) + ")" + "dim( 2/2 )");
+    assert.equal(d, "border(─)" + "dim( completions )" + "dim(2/2 )" + "border(" + "─".repeat(12) + ")");
   } finally {
     COMMANDS.pop();
   }
@@ -165,10 +165,10 @@ test("divider: narrow widths drop the count first, then degrade to a plain rule"
   const panel = completionCandidates(commandState({ value: "nohextra", completion: { anchor: "n", index: 1 } }));
   COMMANDS.push(crafted("nohextra"));
   try {
-    // Marker widths: lead + label = 19, count = 10. At 28 the count
-    // drops (fill 9); at 19 the label fits with zero fill; at 18 the label
+    // Marker widths: lead + label = 19, count = 9. At 27 the count
+    // drops (fill 8); at 19 the label fits with zero fill; at 18 the label
     // cannot fit and the divider degrades to a plain rule.
-    assert.equal(renderCompletionDivider(panel, 28, colors), "border(─)" + "dim( completions )" + "border(" + "─".repeat(9) + ")");
+    assert.equal(renderCompletionDivider(panel, 27, colors), "border(─)" + "dim( completions )" + "border(" + "─".repeat(8) + ")");
     assert.equal(renderCompletionDivider(panel, 19, colors), "border(─)" + "dim( completions )");
     assert.equal(renderCompletionDivider(panel, 18, colors), "border(" + "─".repeat(18) + ")");
   } finally {

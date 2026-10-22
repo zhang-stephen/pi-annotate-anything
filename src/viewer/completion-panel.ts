@@ -68,14 +68,17 @@ export function renderCompletionDivider(panel: CompletionPanel, innerWidth: numb
   const rule = (n: number) => colors.border("─".repeat(Math.max(0, n)));
   if (innerWidth < 2) return rule(innerWidth);
   const label = colors.dim(" " + panel.label + " ");
-  let count = panel.selected === null || panel.rows.length === 0 ? "" : colors.dim(` ${panel.selected + 1}/${panel.rows.length} `);
+  // The count sits directly after the label -- one compact unit like the
+  // mode badge -- not at the rule's far end, where a wide card detached it
+  // from the drawer it belongs to (E2E amendment 2026-10-22).
+  let count = panel.selected === null || panel.rows.length === 0 ? "" : colors.dim(`${panel.selected + 1}/${panel.rows.length} `);
   let fill = innerWidth - 1 - visibleWidth(label) - visibleWidth(count);
   if (fill < 0 && count !== "") {
     count = "";
     fill = innerWidth - 1 - visibleWidth(label);
   }
   if (fill < 0) return rule(innerWidth);
-  return rule(1) + label + (fill > 0 ? rule(fill) : "") + count;
+  return rule(1) + label + count + (fill > 0 ? rule(fill) : "");
 }
 
 // The plain rule that seals the drawer beneath the candidate rows: exactly
