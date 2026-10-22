@@ -1,7 +1,7 @@
 ---
 title: Viewer command line (:) implementation plan
 status: in-progress
-progress: 3/5
+progress: 4/5
 spec: ../specs/2026-10-22-viewer-command-line-design.md
 ---
 
@@ -54,10 +54,10 @@ Files: `src/viewer/status-line.ts`, `test/viewer/status-line.test.ts`
 
 Files: `src/viewer/viewer.ts`, `test/viewer/viewer.test.ts`
 
-- [ ] Render `state.command` as the cmdline input while command mode is active (the reducer handles keys; the shell only paints).
-- [ ] Highlight suppression: when `searchHL === false`, the per-frame query resolution block (viewer.ts ~line 219) skips match spans and the `[rank/total]` statusline segment; `true`/undefined behavior unchanged.
-- [ ] Tests: command input painted with `:` prompt; `searchHL: false` renders no highlight spans and no segment over a fixture with matches; toggling back restores both.
-- [ ] Steps: failing tests first, implement, suite green, commit `feat(viewer): wire command mode painting and noh highlight suppression`.
+- [x] Render `state.command` as the cmdline input while command mode is active (the reducer handles keys; the shell only paints); the command branch mirrors the search input construction exactly, prompt and value source differing only.
+- [x] Highlight suppression: when `searchHL === false`, the query resolves to null so the existing guard skips match spans and leaves searchStatus unsupplied (no `[rank/total]` segment); `true`/undefined behavior is byte-identical, pinned by a default test.
+- [x] Tests (5 in `test/viewer/viewer.test.ts`): `:` input painted with typed value and inverse cursor cell; Esc restores the normal hints row and pending keys; `:noh` clears all highlight spans and the segment with `n` re-lighting both; a resubmitted `/` re-lights both; the undefined-default pin.
+- [x] Steps: failing tests first (4 confirmed red for the right reason), implement, suite green (475 pass), tsc clean, commit `6244566`.
 
 ## Task 5: manual E2E (user)
 
