@@ -1,7 +1,7 @@
 ---
 title: Viewer command line (:) implementation plan
-status: draft
-progress: 0/5
+status: in-progress
+progress: 1/5
 spec: ../specs/2026-10-22-viewer-command-line-design.md
 ---
 
@@ -20,15 +20,15 @@ Companion: `docs/superpowers/plans/2026-10-22-vim-behavior-alignment.md` (indepe
 
 ## Task 1: command module
 
-Files: create `src/viewer/commands.ts`, create `test/viewer/commands.test.ts`
+Files: create `src/viewer/commands.ts`, create `test/viewer/commands.test.ts`, plus the granted two-line `searchHL?: boolean` field in `src/viewer/state.ts` (no logic)
 
-- [ ] Types: `type Parsed = { kind: "none" } | { kind: "address"; line: number } | { kind: "command"; name: string; args: string[] }`.
-- [ ] `parseCommandLine(raw: string): Parsed`: trim; empty = none; `^\d+$` = address (1-based); otherwise whitespace-split into name + args (`:5q` parses as name `5q` and fails resolution, per spec).
+- [x] Types: `type Parsed = { kind: "none" } | { kind: "address"; line: number } | { kind: "command"; name: string; args: string[] }`.
+- [x] `parseCommandLine(raw: string): Parsed`: trim; empty = none; `^\d+$` = address (1-based); otherwise whitespace-split into name + args (`:5q` parses as name `5q` and fails resolution, per spec).
 - [ ] `resolveAgainst(table: CommandSpec[], name: string): CommandSpec | "not-found" | "ambiguous"`: match iff `spec.name.startsWith(name) && name.startsWith(spec.short)`; exactly one match wins.
-- [ ] `CommandSpec { name: string; short: string; args: "none"; run(state, lines, viewport): ViewerResult }`; table: `quit` (short `q`), `nohlsearch` (short `noh`).
-- [ ] `executeCommand(state, raw, lines, viewport)`: none returns to normal silently; address jumps with exactly `{count}G` semantics via `moved()`; command runs its spec; resolution errors return to normal mode with the exact E-code message.
-- [ ] Tests: parser (empty, whitespace-only, `5`, `123`, `q`, `noh ls` arg split, `5q`); resolver (exact, prefix within short bounds, `n` too short = not-found, `noh` hits, crafted third entry makes `E464`); executors (quit emits `close` and normal mode; nohlsearch sets `searchHL: false`; address parity: same state through `:7` and `7G` produces identical cursor/scroll).
-- [ ] Steps: failing tests first, implement, suite green, commit `feat(viewer): add pure command line parser and command table`.
+- [x] `CommandSpec { name: string; short: string; args: "none"; run(state, lines, viewport): ViewerResult }`; table: `quit` (short `q`), `nohlsearch` (short `noh`).
+- [x] `executeCommand(state, raw, lines, viewport)`: none returns to normal silently; address jumps with exactly `{count}G` semantics via `moved()`; command runs its spec; resolution errors return to normal mode with the exact E-code message.
+- [x] Tests (18 in `test/viewer/commands.test.ts`): parser; resolver including `no` on the not-found side (spec short-bound rule; the dispatch examples said hit, the spec wins) and crafted ambiguity; executors including three full-state `:7` vs `7G` parity cases through `reduceViewer` and exact E-code texts (E464 via a temporarily pushed crafted entry, restored in `finally`).
+- [x] Steps: failing tests first (ERR_MODULE_NOT_FOUND confirmed), implement, suite green (456 pass), commit `4ba55fd`. The address path also resets `wantedCol` exactly like the G arm.
 
 ## Task 2: command mode in the reducer
 
