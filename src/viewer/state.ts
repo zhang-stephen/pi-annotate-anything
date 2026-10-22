@@ -69,6 +69,8 @@ export interface ViewerState {
   // state without the field (pre-search callers) stay valid; the reducer
   // treats undefined like null.
   lastSearch?: string | null;
+  // Search highlight toggle (:nohlsearch sets false; undefined means true).
+  searchHL?: boolean;
   // Pending count prefix ({count}j / {count}G / {count}n), normal mode only:
   // digits start/extend it in reduceViewer, exactly one motion consumes it
   // (read as count ?? 1), and any other non-digit key clears it. Optional so
