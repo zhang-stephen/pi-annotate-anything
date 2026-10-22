@@ -65,6 +65,17 @@ v1 table:
 `:nohlsearch` semantics (vim-faithful): highlight and the `[rank/total]` statusline segment are currently driven at render time by `lastSearch`; the command sets a new `state.searchHL = false` flag that suppresses both, while `n`/`N` repeats and a new `/` submission set it back to true.
 The pattern stays available for repeats, exactly like vim's `:noh`.
 
+## Completion
+
+One presentation surface for every completion source: an incremental candidate panel rendered above the footer, at the bottom of the file view (max 5 rows, transiently overlaying body lines), with the interaction model the composer's path completion already uses.
+
+- Bare `:` shows nothing; the panel appears from the first typed character and filters live while typing; the cmdline value stays literal -- the panel is a suggestion list, never a second input.
+- Source switching follows the grammar state: a bare word completes against the command table (prefix match; completing inserts the full name, so an accepted candidate is always executable under the short-bound rule); a command name plus whitespace asks that command's `complete` hook for candidates -- no v1 command has one, so the panel hides; empty input and no-match hide it too.
+- Tab enters cycling: the candidate list is snapshotted from the value at first Tab (the anchor), Tab advances the selection (wrapping) and writes the selected name into the value, and any other key -- typing, Backspace, Enter, Esc -- drops back to live mode.
+- Enter always executes the literal cmdline value; Esc exits command mode (the panel dies with it; there is no two-stage Esc); Backspace pops with the panel following.
+- Matching strategy belongs to the source, not the panel: prefix for command names, fuzzy for the future `:e` file source.
+- Command rows render `name` plus a dim one-line `desc` (`CommandSpec.desc`: quit -- close the card, nohlsearch -- clear search highlight); the selected row renders inverted like the cmdline cursor cell; colors stay injected.
+
 ## Out of scope (with reasons)
 
 - `:w` / `:wq` -- the card writes nothing; submission is comment mode's Enter, and aliasing "write" onto it would be a lie.
@@ -76,7 +87,7 @@ The pattern stays available for repeats, exactly like vim's `:noh`.
 
 ## Extension notes (non-normative)
 
-- Buffer roadmap: `:ls`, `:b {n}` (`args: "number"`), and `:e {file}` (`args: "restOfLine"`, reusing the fuzzy path-completion widget inside the cmdline) land as table entries plus new effect kinds for the shell to interpret; the framework does not change.
+- Buffer roadmap: `:ls`, `:b {n}` (`args: "number"`), and `:e {file}` (`args: "restOfLine"`) land as table entries plus new effect kinds for the shell to interpret; `:e` attaches the fuzzy path source (`completePath`) through the `complete` hook and renders in the same unified panel; the framework does not change.
 - Argument policies diverge by design (`:b` takes a token, `:e` takes the rest of the line including spaces), which is why the policy hangs off the CommandSpec.
 - Prefix bounds are part of each command's contract (`nohlsearch` accepts `noh` and longer, never `:n`), so new commands pick their shortest form deliberately; full names always work.
 

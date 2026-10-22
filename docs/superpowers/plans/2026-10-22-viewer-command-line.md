@@ -1,7 +1,7 @@
 ---
 title: Viewer command line (:) implementation plan
 status: in-progress
-progress: 4/5
+progress: 4/6
 spec: ../specs/2026-10-22-viewer-command-line-design.md
 ---
 
@@ -59,10 +59,24 @@ Files: `src/viewer/viewer.ts`, `test/viewer/viewer.test.ts`
 - [x] Tests (5 in `test/viewer/viewer.test.ts`): `:` input painted with typed value and inverse cursor cell; Esc restores the normal hints row and pending keys; `:noh` clears all highlight spans and the segment with `n` re-lighting both; a resubmitted `/` re-lights both; the undefined-default pin.
 - [x] Steps: failing tests first (4 confirmed red for the right reason), implement, suite green (475 pass), tsc clean, commit `6244566`.
 
-## Task 5: manual E2E (user)
+## Task 5: command name completion (unified panel)
+
+Spec: the Completion section of `docs/superpowers/specs/2026-10-22-viewer-command-line-design.md`.
+
+Files: `src/viewer/commands.ts`, `src/viewer/state.ts`, create `src/viewer/completion-panel.ts`, `src/viewer/viewer.ts`, plus tests in `test/viewer/commands.test.ts`, `test/viewer/state.test.ts`, `test/viewer/completion-panel.test.ts`, `test/viewer/viewer.test.ts`.
+
+- [ ] `CommandSpec` gains `desc: string` (quit: "close the card", nohlsearch: "clear search highlight") and `completeFor(input: string): { name: string; desc: string }[]`: empty input -> []; input containing whitespace -> [] (no arg source yet); otherwise COMMANDS entries whose name starts with the input, table order.
+- [ ] Command draft gains cycling state (`completion?: { anchor: string; index: number }`): first Tab snapshots the anchor and writes candidates(anchor)[0] into the value; further Tabs advance and wrap, writing the selected name; any other key clears it. The panel shows the anchor list with the selection inverted while cycling, the live candidates(value) list with no selection otherwise.
+- [ ] New pure module `completion-panel.ts`: renders at most 5 rows (`name` + two spaces + dim desc, selected row inverted, colors injected, width-truncated); viewer.ts paints them over the bottom-most body rows while command mode shows candidates; badge, position, and the cmdline row are never displaced.
+- [ ] Tests: source cases (empty, bare word, command+space, no match, unique); Tab accept, cycle, wrap, anchor freeze while value changes, reset on typing; panel rows, selection styling, 5-row truncation; viewer integration (typed char shows the row, Tab completes the value, bare `:` shows nothing, mode exit kills the panel).
+- [ ] Steps: failing tests first, implement, suite green, commit `feat(viewer): complete command names through the unified panel`.
+
+## Task 6: manual E2E (user)
 
 - [ ] Sandbox: `PI_CODING_AGENT_DIR=/tmp/pi-sandbox-home pi -e ./index.ts` with /tmp fixtures (long lines, CJK, CRLF).
-- [ ] Cases: `:q` closes; `:7` jumps like `7G`; `/foo` then `:noh` clears highlight, `n` re-lights; `:n` shows E492; `:noh extra` shows E488; Backspace at empty stays put; Esc mid-typing restores normal mode; `3` then `:` drops the count.
+- [ ] Round 1 regressions: `:7` then `:` re-enters a clean input (no swallowed colon); Backspace at empty exits to normal in both `:` and `/` modes; `:q!` runs quit and `:q!!` shows E492.
+- [ ] Round 2 completion: bare `:` shows no panel; `n` shows the nohlsearch row with dim description; Tab completes the value; a space after a command hides the panel; Enter executes the completed name.
+- [ ] Original cases: `:q` closes; `:7` jumps like `7G` (and `:999` clamps); `/foo` then `:noh` clears highlight, `n` re-lights; `:n` shows E492; `:noh extra` shows E488; Esc mid-typing restores normal mode; `3` then `:` drops the count.
 - [ ] Terminal-only feel (key repeat, paint latency) is not verifiable via unit tests or tmux.
 
 ## Review focus
