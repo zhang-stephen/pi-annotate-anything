@@ -532,7 +532,7 @@ test("alt+o with no pill in the buffer warns and is swallowed (the inner editor 
   assert.equal(session.cards.length, before, "no viewer opens without a live token");
   const warnings = session.notifications.filter((n) => n.level === "warning");
   assert.equal(warnings.length, 1, "exactly one warning notifies the miss");
-  assert.equal(warnings[0]!.message, "alt+o: no annotation pills in the composer");
+  assert.equal(warnings[0]!.message, "alt+o: nothing to jump back to yet -- add an annotation first");
 
   // The swallow is scoped to the no-token alt+o miss: other keys still
   // reach the inner editor unchanged.

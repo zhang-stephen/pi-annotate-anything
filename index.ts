@@ -183,7 +183,7 @@ export function annotateExtension(pi: ExtensionAPI, fuzzy: boolean): void {
       const baseHandleInput = editor.handleInput.bind(editor);
       editor.handleInput = (data: string): void => {
         if (parseKey(data) === "alt+o" && lastTokenIn(editor.getText(), getTokens()) === null) {
-          ctx.ui.notify("alt+o: no annotation pills in the composer", "warning");
+          ctx.ui.notify("alt+o: nothing to jump back to yet -- add an annotation first", "warning");
           return;
         }
         baseHandleInput(data);
