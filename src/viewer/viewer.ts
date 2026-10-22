@@ -524,8 +524,8 @@ export class AnnotateCard implements Component, Focusable {
     // agree. This ONE width is also the box renderer's truncation budget
     // (frameCommentBox truncates at boxW minus the same border and padding
     // numbers), so focused rows never measure wider than it and never
-    // truncate - including the caret cell, which withCaret keeps inside the
-    // interior (a row-end caret occupies the last interior cell).
+    // truncate - the caret cell is always an existing row cell (see
+    // withCaret), so nothing is ever appended past the interior.
     const box = this.state.comment;
     const boxW = Math.min(contentW, EDITOR_BOX_MAX_WIDTH);
     const interiorW = commentBoxWrapWidth(contentW);
@@ -538,7 +538,7 @@ export class AnnotateCard implements Component, Focusable {
     const shown = wrapped.lines.slice(start, start + maxInner);
     const cursorRow = wrapped.cursorRow - start;
     if (cursorRow >= 0 && cursorRow < shown.length) {
-      shown[cursorRow] = this.withCaret(shown[cursorRow], wrapped.cursorCol, interiorW);
+      shown[cursorRow] = this.withCaret(shown[cursorRow], wrapped.cursorCol);
     }
     this.paintCommentBox(rows, first, contentW, shown, boxW, anchor, COMMENT_BOX_TITLE, sl);
   }
@@ -553,15 +553,15 @@ export class AnnotateCard implements Component, Focusable {
   // cursor there (pi's showHardwareCursor setting on, its own flag) and
   // resolves to the same inverse cell the painted caret used when the
   // setting is off - the resolver, not this component, follows the setting.
-  // The cell is the whole grapheme cluster at the caret's display column, or
-  // one space past a short or empty row's end; a row that fills the interior
-  // (interiorWidth, the same wrap width the rows were wrapped and truncated
-  // at) takes the caret on its LAST cell instead, so a focused row never
-  // grows past the interior (cursorCellAt - the same cell math the painted
-  // caret had).
-  private withCaret(row: string, col: number, interiorWidth: number): string {
+  // The cell is the whole grapheme cluster the caret offset ENDS: the cell
+  // left of the caret's insertion column (cursorCellAt). A wrap boundary
+  // offset paints the ending row's last cell and one cluster step further
+  // the next row's first cell, so one Right/Left press always visibly moves
+  // the caret across a soft wrap; the cell always exists inside the row, so
+  // a focused row never grows past the interior.
+  private withCaret(row: string, col: number): string {
     if (!this.focused) return row;
-    const { before, cell, after } = cursorCellAt(row, col, interiorWidth);
+    const { before, cell, after } = cursorCellAt(row, col);
     return before + CURSOR_MARKER + renderFakeCursor(cell) + after;
   }
 

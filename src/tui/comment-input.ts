@@ -84,22 +84,24 @@ function graphemeEndAfter(text: string, index: number): number {
 }
 
 // Absolute caret offset for display column `col` within the row text.slice(rowStart,
-// rowEnd): walks the row's grapheme clusters and stops before the first one
-// that would pass the column (a 2-column cluster the column falls inside is
-// not split); the row end when the column lies past it. Mirror of the
-// caret-to-column walk in wrapCommentLines, so placement round-trips.
+// rowEnd): the END offset of the cluster covering that column. A caret offset
+// paints the cluster it ENDS (cursorCellAt), so targeting the end puts the
+// caret ON the aimed-at cell - a bare row start would paint the PREVIOUS
+// row's last cell instead, visually absorbing a movement step. A column
+// inside a 2-column cluster aims at that whole cluster (never split); a
+// column at or past the row's width aims at the row end (the last cluster's
+// end). Mirror of the caret-to-column walk in wrapCommentLines, so placement
+// round-trips.
 function caretAtRowColumn(text: string, rowStart: number, rowEnd: number, col: number): number {
   let width = 0;
-  let land = rowStart;
   for (const seg of GRAPHEMES.segment(text)) {
     if (seg.index >= rowEnd) break;
     if (seg.index < rowStart) continue;
     const cw = clusterWidth(seg.segment);
-    if (width + cw > col) break;
+    if (width + cw > col) return seg.index + seg.segment.length;
     width += cw;
-    land = seg.index + seg.segment.length;
   }
-  return land;
+  return rowEnd;
 }
 
 export function reduceComment(state: CommentState, key: CommentKey, wrapWidth: number = Infinity): CommentResult {
@@ -117,22 +119,32 @@ export function reduceComment(state: CommentState, key: CommentKey, wrapWidth: n
       const start = graphemeStartBefore(text, at);
       return { state: { text: text.slice(0, start) + text.slice(at), caret: start } };
     }
+    // Left/right are PURE cluster stepping in offset space - no (row, cell)
+    // round-trip. Soft-wrap crossing falls out of the caret model (see
+    // cursorCellAt): the wrap boundary offset paints the previous row's last
+    // cell and one cluster step further paints the next row's first cell, so
+    // every press visibly moves the caret with no boundary special case.
     case "left": {
       if (at === 0) return { state };
       return { state: { text, caret: graphemeStartBefore(text, at) } };
     }
     case "right": {
-      if (at >= text.length) return { state };
+      if (at >= text.length) return { state }; // absolute end: a visible no-op
       return { state: { text, caret: graphemeEndAfter(text, at) } };
     }
     case "home":
     case "end": {
-      // Edges of the CURRENT wrapped row (soft or hard): home to its start,
-      // end to one past its last character. Boundary carets belong to the
-      // row that ends there (wrapCommentLines' rule), so end-of-row moves to
-      // that row's start/end, not the next row's.
+      // Edges of the CURRENT wrapped row (soft or hard): home to the row's
+      // first cell, end to its last. Boundary carets belong to the row that
+      // ends there (wrapCommentLines' rule), so end-of-row addresses that
+      // row, not the next one. The targets are END offsets of the edge
+      // clusters - the offsets that PAINT on those cells (caretAtRowColumn;
+      // a bare row start would paint the previous row's last cell) - so
+      // sitting on a row's first cell makes home a no-op.
       const wrapped = wrapCommentLines(text, wrapWidth, at);
-      const target = key.kind === "home" ? wrapped.rowStarts[wrapped.cursorRow] : wrapped.rowEnds[wrapped.cursorRow];
+      const target = key.kind === "home"
+        ? caretAtRowColumn(text, wrapped.rowStarts[wrapped.cursorRow], wrapped.rowEnds[wrapped.cursorRow], 0)
+        : wrapped.rowEnds[wrapped.cursorRow];
       if (target === at) return { state }; // already there: bit-for-bit no-op
       return { state: { text, caret: target } };
     }
@@ -173,8 +185,8 @@ export interface WrappedComment {
 // at newlines (hard) and just before the first grapheme cluster that would
 // overflow `width` (soft); a cluster that does not fit (a wide character, an
 // emoji sequence) starts the next row instead of being split. A cursor on a
-// row boundary belongs to the row that ends there, so the caret renders at
-// that row's end.
+// row boundary belongs to the row that ends there, so the caret paints that
+// row's LAST cell - the cluster the boundary offset ends (cursorCellAt).
 export function wrapCommentLines(text: string, width: number, cursor: number): WrappedComment {
   const w = Math.max(1, width);
   const lines: string[] = [];
@@ -209,29 +221,34 @@ export function wrapCommentLines(text: string, width: number, cursor: number): W
       break;
     }
   }
-  // Display column of the caret WITHIN its row (the viewer paints the caret
-  // cell at this column and reduceComment seeds its vertical goal from
-  // it, so the walk starts at the row's start, not the text's). Rows break
-  // at cluster boundaries and every caret sits on one, so skipped segments
-  // ahead of the row are whole rows, never half a cluster.
+  // Display column of the caret cell WITHIN its row: the END column of the
+  // cluster the caret paints (the cluster ending at the caret offset; the
+  // viewer paints the caret cell at this column via cursorCellAt, and
+  // reduceComment seeds its vertical goal from it). Rows break at cluster
+  // boundaries and every caret sits on one, so skipped segments ahead of
+  // the row are whole rows, never half a cluster.
   let cursorCol = 0;
   const rowStart = rowStarts[cursorRow];
   for (const seg of GRAPHEMES.segment(text)) {
-    if (seg.index >= at) break;
     if (seg.index < rowStart) continue;
+    if (seg.index + seg.segment.length > at) break; // counts only clusters the caret offset ENDS
     cursorCol += clusterWidth(seg.segment);
   }
   return { lines, rowStarts, rowEnds, cursorRow, cursorCol };
 }
 
 // Splits a wrapped row at the caret's display column into the text before
-// it, the caret CELL, and the text after it; past the row's end the cell is
-// a single space, so the caret stays placeable on empty or shorter-than-
-// interior rows. A row that already fills `interiorWidth` (the box's wrap
-// width) has no off-row column, so there the caret occupies the LAST
-// interior cell - the row's final grapheme - instead: appending a cell past
-// a full row would overflow the interior and the box renderer would
-// truncate the row, dropping the caret cell and its marker with it.
+// the caret CELL, the cell itself, and the text after it. The caret model is
+// "an offset paints the cluster it ENDS": the cell is the cluster occupying
+// the column left of `col` (`col` is the insertion column, so the painted
+// cell always exists inside the row - there is no past-the-end caret cell to
+// overflow the box renderer). By construction then: a wrap boundary offset
+// (a row end equal to the next row's start) paints the ENDING row's last
+// cell, and one cluster step further paints the next row's first cell, so
+// pure cluster stepping visibly crosses a soft wrap in one press. Column 0
+// (the text start, where no cluster ends) paints the FIRST cluster; an empty
+// row paints a single space; a column past the row's width clamps to the
+// LAST cluster.
 // The row must be plain text (comment input filters control characters); the
 // walk is cluster-based, matching the wrap/caret column math: a cluster (a
 // wide character, an emoji sequence) is taken whole, never half. The viewer
@@ -243,19 +260,20 @@ export function wrapCommentLines(text: string, width: number, cursor: number): W
 export function cursorCellAt(
   line: string,
   col: number,
-  interiorWidth: number = Infinity,
 ): { before: string; cell: string; after: string } {
   let width = 0;
   let last: { index: number; cluster: string } | null = null;
   for (const seg of GRAPHEMES.segment(line)) {
     const cw = clusterWidth(seg.segment);
-    if (width + cw > col) {
+    // The cluster covering column col - 1 is the caret cell; col - 1 < 0
+    // (the text start) takes the first cluster.
+    if (col - 1 < width + cw) {
       return { before: line.slice(0, seg.index), cell: seg.segment, after: line.slice(seg.index + seg.segment.length) };
     }
     width += cw;
     last = { index: seg.index, cluster: seg.segment };
   }
-  if (last !== null && width >= interiorWidth) {
+  if (last !== null) {
     return { before: line.slice(0, last.index), cell: last.cluster, after: "" };
   }
   return { before: line, cell: " ", after: "" };

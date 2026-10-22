@@ -480,13 +480,13 @@ test("comment editor box keeps its fixed width while typing", () => {
   const after = h.card.render(80).map(strip);
   assert.equal(after[2], before[2]); // identical top border: same fixed width
   assert.equal(after[3], "│ 3     │ hi " + " ".repeat(57) + " │" + " ".repeat(6) + " │");
-  // The caret rides the cell right after the just-typed text (pi-tui's
-  // CURSOR_MARKER followed by the fake-cursor-wrapped space cell; the TUI
-  // resolves the pair into the positioned hardware cursor, or the old
-  // inverse cell when its showHardwareCursor flag is off).
+  // The caret sits ON the last typed grapheme - the cluster the caret
+  // offset ENDS (pi-tui's CURSOR_MARKER followed by the fake-cursor-wrapped
+  // cell; the TUI resolves the pair into the positioned hardware cursor, or
+  // the old inverse cell when its showHardwareCursor flag is off).
   h.card.focused = true;
   const raw = h.card.render(80);
-  assert.ok(raw[3].includes(CURSOR_MARKER + renderFakeCursor(" ")), "caret cell after the typed text");
+  assert.ok(raw[3].includes(CURSOR_MARKER + renderFakeCursor("i")), "caret cell on the last typed grapheme");
 });
 
 // Comment box caret (pi-tui's Focusable contract) --------------------------------
@@ -506,7 +506,7 @@ const caretOf = (row: string) => {
   return { col: visibleWidth(row.slice(0, at)), tail: row.slice(at + CURSOR_MARKER.length) };
 };
 
-test("comment box caret: focused card puts the marker on the caret cell after the text", () => {
+test("comment box caret: focused card puts the marker on the painted caret cell", () => {
   const h = makeCard({ lines: ["abc", "def", "ghi", "jkl", "mno"] });
   h.card.handleInput("v");
   h.card.handleInput("c");
@@ -514,11 +514,11 @@ test("comment box caret: focused card puts the marker on the caret cell after th
   h.card.focused = true;
   const raw = h.card.render(80);
   const { col, tail } = caretOf(raw[3]);
-  assert.ok(tail.startsWith(renderFakeCursor(" ")), "fake-wrapped space cell rides the marker");
+  assert.ok(tail.startsWith(renderFakeCursor("i")), "fake-wrapped last-typed grapheme rides the marker");
   // The marker's display column is the caret cell in the plain row: the
-  // first column after the typed "hi" (the strip is marker-safe).
+  // last typed grapheme 'i' itself (the strip is marker-safe).
   const plain = strip(raw[3]);
-  assert.equal(col, plain.indexOf("hi") + 2);
+  assert.equal(col, plain.indexOf("hi") + 1);
 });
 
 test("comment box caret: the marker wraps the whole grapheme the caret sits on", () => {
@@ -526,11 +526,11 @@ test("comment box caret: the marker wraps the whole grapheme the caret sits on",
   h.card.handleInput("v");
   h.card.handleInput("c");
   h.card.handleInput("\u4e2d\u6587");
-  h.card.handleInput("\x1b[D"); // left onto \u6587
+  h.card.handleInput("\x1b[D"); // left: the caret offset now ENDS \u4e2d, so it paints that cell
   h.card.focused = true;
   const raw = h.card.render(80);
   const { tail } = caretOf(raw[3]);
-  assert.ok(tail.startsWith(renderFakeCursor("\u6587")), "wide char taken whole as the caret cell");
+  assert.ok(tail.startsWith(renderFakeCursor("\u4e2d")), "wide char taken whole as the caret cell");
 });
 
 test("comment box caret: unfocused card emits no caret bytes at all", () => {

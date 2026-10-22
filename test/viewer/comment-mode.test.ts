@@ -168,8 +168,8 @@ test("reduceViewer: home and end move to the wrapped row's edges", () => {
   const text = "aaaa bbbb cccc dddd eeee ffff gggg";
   const rows = wrapRows(text, commentBoxWrapWidth(VP.contentWidth));
   assert.ok(rows.count >= 3, `fixture must soft-wrap, got ${rows.count} rows`);
-  let res = view(commentState(text), "\x1b[H"); // home: start of the last row
-  assert.equal(res.state.comment?.caret, rows.lastRowStart);
+  let res = view(commentState(text), "\x1b[H"); // home: the last row's first CELL
+  assert.equal(res.state.comment?.caret, rows.lastRowStart + 1); // the caret that paints its first cluster, never the bare row start
   res = view(res.state, "\x1b[C"); // right onto the last row proper
   res = view(res.state, "\x1b[F"); // end: past its last character
   assert.equal(res.state.comment?.caret, text.length);
@@ -179,10 +179,10 @@ test("reduceViewer: up and down move across the soft wrap with goal memory", () 
   const text = "aaaa bbbb cccc dddd eeee ffff gggg";
   const rows = wrapRows(text, commentBoxWrapWidth(VP.contentWidth));
   assert.ok(rows.count >= 3);
-  let res = view(commentState(text), "\x1b[A"); // up from the end (col 2): previous row, col 2
-  assert.equal(res.state.comment?.caret, rows.midRowStart + 2);
+  let res = view(commentState(text), "\x1b[A"); // up from the end (goal col 2): the cluster covering column 2 of the previous row
+  assert.equal(res.state.comment?.caret, rows.midRowStart + 3); // its END offset paints that cell
   res = view(res.state, "\x1b[A"); // goal column kept across the wrap
-  assert.equal(res.state.comment?.caret, rows.firstRowStart + (text.length - rows.lastRowStart));
+  assert.equal(res.state.comment?.caret, rows.firstRowStart + 3);
   res = view(res.state, "\x1b[B");
   res = view(res.state, "\x1b[B");
   assert.equal(res.state.comment?.caret, text.length);
