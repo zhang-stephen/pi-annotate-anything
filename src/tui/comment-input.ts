@@ -7,9 +7,13 @@
 
 import { visibleWidth } from "@earendil-works/pi-tui";
 
-// Raw SGR pairs shared with the viewer's renderer: inverse emulates the text
-// cursor (theme-neutral), and the viewer uses the same pair for the file
-// cursor cell and selection highlight.
+// Raw SGR pairs shared with the viewer's renderer: the viewer paints the
+// file cursor cell and selection highlight with inverse (theme-neutral).
+// The comment box caret does not use them anymore: it is the terminal's
+// hardware cursor positioned via pi-tui's CURSOR_MARKER, with a
+// fake-cursor-wrapped cell that the TUI resolves to the inverse cell when
+// its showHardwareCursor flag is off (see cursorCellAt and the viewer's
+// withCaret).
 export const INVERSE_ON = "\x1b[7m";
 export const INVERSE_OFF = "\x1b[27m";
 
@@ -169,8 +173,8 @@ export interface WrappedComment {
 // at newlines (hard) and just before the first grapheme cluster that would
 // overflow `width` (soft); a cluster that does not fit (a wide character, an
 // emoji sequence) starts the next row instead of being split. A cursor on a
-// row boundary belongs to the row that ends there, so it renders as an
-// inverse cell at that row's end.
+// row boundary belongs to the row that ends there, so the caret renders at
+// that row's end.
 export function wrapCommentLines(text: string, width: number, cursor: number): WrappedComment {
   const w = Math.max(1, width);
   const lines: string[] = [];
@@ -205,8 +209,8 @@ export function wrapCommentLines(text: string, width: number, cursor: number): W
       break;
     }
   }
-  // Display column of the caret WITHIN its row (withCursorCell inverts
-  // row text at this column and reduceComment seeds its vertical goal from
+  // Display column of the caret WITHIN its row (the viewer paints the caret
+  // cell at this column and reduceComment seeds its vertical goal from
   // it, so the walk starts at the row's start, not the text's). Rows break
   // at cluster boundaries and every caret sits on one, so skipped segments
   // ahead of the row are whole rows, never half a cluster.
@@ -220,20 +224,25 @@ export function wrapCommentLines(text: string, width: number, cursor: number): W
   return { lines, rowStarts, rowEnds, cursorRow, cursorCol };
 }
 
-// Wraps the cell under the cursor's display column of a wrapped row in SGR
-// inverse (the emulated text cursor); past the row's end an inverse space is
-// used instead, so the caret stays visible on empty or just-filled rows.
+// Splits a wrapped row at the caret's display column into the text before
+// it, the caret CELL, and the text after it; past the row's end the cell is
+// a single space, so the caret stays placeable on empty or just-filled rows.
 // The row must be plain text (comment input filters control characters); the
 // walk is cluster-based, matching the wrap/caret column math: a cluster (a
-// wide character, an emoji sequence) is inverted whole, never half.
-export function withCursorCell(line: string, col: number): string {
+// wide character, an emoji sequence) is taken whole, never half. The viewer
+// composes the caret cell from the parts: pi-tui's CURSOR_MARKER (while the
+// box has focus) followed by the cell wrapped in pi-tui fake-cursor markers,
+// which the TUI drops when it draws the hardware cursor there and resolves
+// to the inverse cell otherwise (pi's showHardwareCursor setting, a TUI-side
+// flag - the component always emits the marker).
+export function cursorCellAt(line: string, col: number): { before: string; cell: string; after: string } {
   let width = 0;
   for (const seg of GRAPHEMES.segment(line)) {
     const cw = clusterWidth(seg.segment);
     if (width + cw > col) {
-      return line.slice(0, seg.index) + INVERSE_ON + seg.segment + INVERSE_OFF + line.slice(seg.index + seg.segment.length);
+      return { before: line.slice(0, seg.index), cell: seg.segment, after: line.slice(seg.index + seg.segment.length) };
     }
     width += cw;
   }
-  return line + INVERSE_ON + " " + INVERSE_OFF;
+  return { before: line, cell: " ", after: "" };
 }

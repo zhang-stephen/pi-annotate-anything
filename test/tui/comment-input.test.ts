@@ -2,7 +2,7 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import { visibleWidth as tuiVisibleWidth } from "@earendil-works/pi-tui";
 
-import { reduceComment, withCursorCell, wrapCommentLines } from "../../src/tui/comment-input.ts";
+import { cursorCellAt, reduceComment, wrapCommentLines } from "../../src/tui/comment-input.ts";
 import type { CommentState } from "../../src/tui/comment-input.ts";
 
 // ANSI inverse-video wrapper, same shape the plan uses for width-preservation
@@ -308,8 +308,6 @@ test("reduceComment: a multi-key session at the end builds the same text as appe
 
 // wrapCommentLines -------------------------------------------------------------
 
-const stripped = (s: string) => s.replace(/\x1b\[[0-9;]*m/g, "");
-
 test("wrapCommentLines: empty text is one empty row with the cursor at 0,0", () => {
   assert.deepEqual(wrapCommentLines("", 10, 0), {
     lines: [""],
@@ -447,39 +445,43 @@ test("reduceComment: up and down aim across emoji clusters without splitting the
   assert.equal(st.caret, 9);
 });
 
-// withCursorCell ---------------------------------------------------------------
+// cursorCellAt ----------------------------------------------------------------
 
-const ON = "\x1b[7m";
-const OFF = "\x1b[27m";
-
-test("withCursorCell: inverts the character under the cursor column", () => {
-  assert.equal(withCursorCell("abc", 1), "a" + ON + "b" + OFF + "c");
-  assert.equal(stripped(withCursorCell("abc", 1)), "abc"); // width preserving
+test("cursorCellAt: splits at the grapheme under the cursor column", () => {
+  assert.deepEqual(cursorCellAt("abc", 1), { before: "a", cell: "b", after: "c" });
+  assert.deepEqual(cursorCellAt("abc", 0), { before: "", cell: "a", after: "bc" });
+  assert.deepEqual(cursorCellAt("abc", 2), { before: "ab", cell: "c", after: "" });
 });
 
-test("withCursorCell: at end of line renders an inverse space", () => {
-  assert.equal(withCursorCell("ab", 2), "ab" + ON + " " + OFF);
-  assert.equal(withCursorCell("", 0), ON + " " + OFF);
+test("cursorCellAt: empty row or column past the row end falls back to a space cell", () => {
+  assert.deepEqual(cursorCellAt("", 0), { before: "", cell: " ", after: "" });
+  assert.deepEqual(cursorCellAt("ab", 2), { before: "ab", cell: " ", after: "" });
+  assert.deepEqual(cursorCellAt("ab", 9), { before: "ab", cell: " ", after: "" });
 });
 
-test("withCursorCell: inverts the whole wide char covering the cursor column", () => {
-  assert.equal(withCursorCell("\u4e2dx", 1), ON + "\u4e2d" + OFF + "x");
-  assert.equal(withCursorCell("\u4e2dx", 0), ON + "\u4e2d" + OFF + "x");
+test("cursorCellAt: takes the whole wide char covering the cursor column", () => {
+  assert.deepEqual(cursorCellAt("\u4e2dx", 1), { before: "", cell: "\u4e2d", after: "x" });
+  assert.deepEqual(cursorCellAt("\u4e2dx", 0), { before: "", cell: "\u4e2d", after: "x" });
 });
 
-test("withCursorCell: a column past the row end falls back to the inverse space", () => {
-  assert.equal(withCursorCell("ab", 9), "ab" + ON + " " + OFF);
-});
-
-test("withCursorCell: inverts an emoji ZWJ sequence whole", () => {
+test("cursorCellAt: takes an emoji ZWJ sequence whole", () => {
   const family = "\u{1F468}\u200D\u{1F469}\u200D\u{1F467}";
-  assert.equal(withCursorCell(family + "x", 0), ON + family + OFF + "x");
-  assert.equal(withCursorCell(family + "x", 1), ON + family + OFF + "x"); // inside the 2-column glyph
-  assert.equal(stripped(withCursorCell(family + "x", 1)), family + "x"); // width preserving
+  assert.deepEqual(cursorCellAt(family + "x", 0), { before: "", cell: family, after: "x" });
+  assert.deepEqual(cursorCellAt(family + "x", 1), { before: "", cell: family, after: "x" }); // inside the 2-column glyph
 });
 
-test("withCursorCell: inverts a combining-mark cluster whole", () => {
+test("cursorCellAt: takes a combining-mark cluster whole", () => {
   const e = "e\u0301x";
-  assert.equal(withCursorCell(e, 0), ON + "e\u0301" + OFF + "x");
-  assert.equal(stripped(withCursorCell(e, 0)), e); // width preserving
+  assert.deepEqual(cursorCellAt(e, 0), { before: "", cell: "e\u0301", after: "x" });
+});
+
+test("cursorCellAt: parts reassemble to the row (width preserving)", () => {
+  const family = "\u{1F468}\u200D\u{1F469}\u200D\u{1F467}";
+  // (Empty and past-the-end rows are the space-cell fallback, covered above:
+  // their parts reassemble to the row PLUS the cell.)
+  const rows: [string, number][] = [["abc", 1], [family + "x", 1], ["e\u0301x", 0]];
+  for (const [row, col] of rows) {
+    const { before, cell, after } = cursorCellAt(row, col);
+    assert.equal(before + cell + after, row);
+  }
 });

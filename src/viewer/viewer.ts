@@ -11,12 +11,12 @@
 import { getLanguageFromPath, highlightCode } from "@earendil-works/pi-coding-agent";
 import type { Theme } from "@earendil-works/pi-coding-agent";
 import type { Component, Focusable, TUI } from "@earendil-works/pi-tui";
-import { matchesKey, parseKey, visibleWidth } from "@earendil-works/pi-tui";
+import { CURSOR_MARKER, matchesKey, parseKey, renderFakeCursor, visibleWidth } from "@earendil-works/pi-tui";
 
 import { commentBoxPlacement, frameCommentBox, framePanel, PAD_X, spliceRow } from "../tui/card-chrome.ts";
 import type { ChromeColors } from "../tui/card-chrome.ts";
 import { completionCandidates, renderCompletionClosing, renderCompletionDivider, renderCompletionRows } from "./completion-panel.ts";
-import { INVERSE_OFF, INVERSE_ON, withCursorCell, wrapCommentLines } from "../tui/comment-input.ts";
+import { INVERSE_OFF, INVERSE_ON, cursorCellAt, wrapCommentLines } from "../tui/comment-input.ts";
 import { commentBoxWrapWidth } from "./comment-mode.ts";
 import { rawColToDisplayCol, rawColsToDisplayCols, sliceWindow, tabExpanded } from "../tui/display.ts";
 import { displayPath } from "../core/message.ts";
@@ -476,7 +476,7 @@ export class AnnotateCard implements Component, Focusable {
   // are replaced in place, not pushed down. Anchor: the active selection in
   // annotate flow; the cursor line when editing a pending draft (no
   // selection). The editor box is fixed-width with soft-wrapped content and
-  // an emulated inverse cursor; painting and placement are shared with the
+  // the caret painted by withCaret; placement is shared with the
   // normal-mode preview via paintCommentBox.
   private overlayCommentBox(rows: string[], first: number, contentW: number, sl: number): void {
     const sel = this.activeSelection();
@@ -505,9 +505,28 @@ export class AnnotateCard implements Component, Focusable {
     const shown = wrapped.lines.slice(start, start + maxInner);
     const cursorRow = wrapped.cursorRow - start;
     if (cursorRow >= 0 && cursorRow < shown.length) {
-      shown[cursorRow] = withCursorCell(shown[cursorRow], wrapped.cursorCol);
+      shown[cursorRow] = this.withCaret(shown[cursorRow], wrapped.cursorCol);
     }
     this.paintCommentBox(rows, first, contentW, shown, boxW, anchor, COMMENT_BOX_TITLE, sl);
+  }
+
+  // The comment box caret (pi-tui's Focusable contract): while the card has
+  // focus the caret row always carries CURSOR_MARKER at the caret cell, which
+  // the TUI extracts and replaces with the positioned hardware cursor - blink
+  // style and rate follow the terminal defaults, exactly like pi's composer.
+  // No marker anywhere on screen makes the TUI hide the cursor, so an
+  // unfocused box paints no caret at all. The cell itself is wrapped in
+  // fake-cursor markers, which the TUI drops when it draws the hardware
+  // cursor there (pi's showHardwareCursor setting on, its own flag) and
+  // resolves to the same inverse cell the painted caret used when the
+  // setting is off - the resolver, not this component, follows the setting.
+  // The cell is the whole grapheme cluster at the caret's display column, or
+  // one space past a full/empty row's end (cursorCellAt - the same cell math
+  // the painted caret had).
+  private withCaret(row: string, col: number): string {
+    if (!this.focused) return row;
+    const { before, cell, after } = cursorCellAt(row, col);
+    return before + CURSOR_MARKER + renderFakeCursor(cell) + after;
   }
 
   // Tab-triggered completion drawer: it exists only while the Tab-cycling

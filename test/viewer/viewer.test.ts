@@ -2,7 +2,7 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 
 import type { Theme } from "@earendil-works/pi-coding-agent";
-import { stripTerminalSequences, visibleWidth } from "@earendil-works/pi-tui";
+import { stripTerminalSequences, visibleWidth, CURSOR_MARKER, renderFakeCursor } from "@earendil-works/pi-tui";
 import type { TUI } from "@earendil-works/pi-tui";
 
 import { rawColToDisplayCol, rawColsToDisplayCols, sliceWindow, tabExpanded } from "../../src/tui/display.ts";
@@ -459,7 +459,8 @@ test("comment editor box has a fixed 64-column width (empty, no growing while ty
   // Box floats below the selection (content row 1), left edge at the gutter:
   // the first gutter columns of the occluded row (its gutter) stay visible.
   assert.equal(bare[2], "│ 2     " + EDITOR_TOP + " ".repeat(6) + " │");
-  // Inner row: emulated cursor renders as an inverse space on the empty box.
+  // Inner row: plain box interior on the unfocused card (no caret bytes; the
+  // padding fills the caret's cell).
   assert.equal(bare[3], "│ 3     │" + " ".repeat(62) + "│" + " ".repeat(6) + " │");
   assert.equal(bare[4], "│ 4     " + EDITOR_BOTTOM + " ".repeat(6) + " │");
   // No push-down: 5 content rows + 4 chrome rows, unchanged by the box.
@@ -477,9 +478,79 @@ test("comment editor box keeps its fixed width while typing", () => {
   const after = h.card.render(80).map(strip);
   assert.equal(after[2], before[2]); // identical top border: same fixed width
   assert.equal(after[3], "│ 3     │ hi " + " ".repeat(57) + " │" + " ".repeat(6) + " │");
-  // The cursor cell under the just-typed text is the inverse space after it.
+  // The caret rides the cell right after the just-typed text (pi-tui's
+  // CURSOR_MARKER followed by the fake-cursor-wrapped space cell; the TUI
+  // resolves the pair into the positioned hardware cursor, or the old
+  // inverse cell when its showHardwareCursor flag is off).
+  h.card.focused = true;
   const raw = h.card.render(80);
-  assert.ok(raw[3].includes("\x1b[7m \x1b[27m"), "emulated inverse cursor at end of text");
+  assert.ok(raw[3].includes(CURSOR_MARKER + renderFakeCursor(" ")), "caret cell after the typed text");
+});
+
+// Comment box caret (pi-tui's Focusable contract) --------------------------------
+//
+// While the card has focus, the caret row carries pi-tui's CURSOR_MARKER at
+// the caret cell followed by the fake-cursor-wrapped cell: the TUI extracts
+// the marker, positions the hardware cursor there, and drops the fake cell
+// when its showHardwareCursor flag is on (else resolves it to the old
+// inverse cell). An unfocused card emits neither sequence, so the TUI hides
+// the cursor.
+
+// Locates the caret in a rendered row: the marker's display column and the
+// tail that must start with the fake-cursor-wrapped cell.
+const caretOf = (row: string) => {
+  const at = row.indexOf(CURSOR_MARKER);
+  assert.ok(at !== -1, "caret row carries CURSOR_MARKER");
+  return { col: visibleWidth(row.slice(0, at)), tail: row.slice(at + CURSOR_MARKER.length) };
+};
+
+test("comment box caret: focused card puts the marker on the caret cell after the text", () => {
+  const h = makeCard({ lines: ["abc", "def", "ghi", "jkl", "mno"] });
+  h.card.handleInput("v");
+  h.card.handleInput("c");
+  h.card.handleInput("hi");
+  h.card.focused = true;
+  const raw = h.card.render(80);
+  const { col, tail } = caretOf(raw[3]);
+  assert.ok(tail.startsWith(renderFakeCursor(" ")), "fake-wrapped space cell rides the marker");
+  // The marker's display column is the caret cell in the plain row: the
+  // first column after the typed "hi" (the strip is marker-safe).
+  const plain = strip(raw[3]);
+  assert.equal(col, plain.indexOf("hi") + 2);
+});
+
+test("comment box caret: the marker wraps the whole grapheme the caret sits on", () => {
+  const h = makeCard({ lines: ["abc", "def", "ghi", "jkl", "mno"] });
+  h.card.handleInput("v");
+  h.card.handleInput("c");
+  h.card.handleInput("\u4e2d\u6587");
+  h.card.handleInput("\x1b[D"); // left onto \u6587
+  h.card.focused = true;
+  const raw = h.card.render(80);
+  const { tail } = caretOf(raw[3]);
+  assert.ok(tail.startsWith(renderFakeCursor("\u6587")), "wide char taken whole as the caret cell");
+});
+
+test("comment box caret: unfocused card emits no caret bytes at all", () => {
+  const h = makeCard({ lines: ["abc", "def", "ghi", "jkl", "mno"] });
+  h.card.handleInput("v");
+  h.card.handleInput("c");
+  h.card.handleInput("hi");
+  const raw = h.card.render(80);
+  assert.ok(!raw.some((r) => r.includes("\x1b_pi:")), "no marker, no fake-cursor cells anywhere");
+  assert.equal(strip(raw[3]), "│ 3     │ hi " + " ".repeat(57) + " │" + " ".repeat(6) + " │");
+});
+
+test("comment box caret: the caret sequences add no visible width", () => {
+  const h = makeCard({ lines: ["abc", "def", "ghi", "jkl", "mno"] });
+  h.card.handleInput("v");
+  h.card.handleInput("c");
+  h.card.handleInput("hi");
+  h.card.focused = true;
+  const focusedRow = strip(h.card.render(80)[3]);
+  h.card.focused = false;
+  const unfocusedRow = strip(h.card.render(80)[3]);
+  assert.equal(focusedRow, unfocusedRow);
 });
 
 test("comment text soft-wraps at the box's inner content width", () => {
