@@ -3,7 +3,8 @@
 // - The composer editor is registered exactly once per session in
 //   session_start: the previously configured editor factory (e.g. another
 //   extension's custom composer) is captured and decorated with pill
-//   recoloring, falling back to AnnotateEditor when nothing was configured.
+//   recoloring and the alt+o jump-back key proxy, falling back to
+//   AnnotateEditor when nothing was configured.
 //   The editor instance is never swapped again: the host copies text and
 //   appearance across editor swaps but not prompt history, so swapping per
 //   annotation cycle would split the composer's history. session_shutdown
@@ -22,12 +23,13 @@
 
 import type { ExtensionAPI, ExtensionContext } from "@earendil-works/pi-coding-agent";
 
-import { AnnotateEditor, withTokenRecolor } from "./src/tui/editor.ts";
+import { AnnotateEditor, withComposerJumpBack, withTokenRecolor } from "./src/tui/editor.ts";
 import { extractRange, loadFile, resolvePath } from "./src/core/file-range.ts";
 import { tokenLabel } from "./src/core/message.ts";
 import { completePath, fuzzyAvailable } from "./src/tui/path-completion.ts";
 import { AnnotationStore } from "./src/core/store.ts";
 import { expandTokens } from "./src/core/transform.ts";
+import type { Range } from "./src/core/selection.ts";
 import { AnnotateCard } from "./src/viewer/viewer.ts";
 
 export default function (pi: ExtensionAPI) {
@@ -67,6 +69,83 @@ export function annotateExtension(pi: ExtensionAPI, fuzzy: boolean): void {
 
   const getTokens = () => store.list().map((d) => d.token);
 
+  // Opens the annotation viewer for an existing file through the same
+  // ctx.ui.custom overlay the /annotate command uses, so both entry points
+  // share one reconcile + pending-replay + card lifecycle. focus (optional,
+  // the alt+o jump-back) centers the viewport on that range with the cursor
+  // at its start; the card clamps it fail-open against the file as it is
+  // on disk now. The on-disk state is re-read here: a pill's file may have
+  // been shortened, changed, or deleted since the draft was added.
+  async function openAnnotateCard(ctx: ExtensionContext, filePath: string, focus?: Range): Promise<void> {
+    const loaded = loadFile(filePath);
+    if (!loaded.ok) {
+      ctx.ui.notify(`annotate: ${loaded.reason}: ${filePath}`, "error");
+      return;
+    }
+    // Reconcile before building the card: pending markers must only show
+    // ranges whose pills are still in the composer. The card keeps a live
+    // getter, re-read on every render, so annotations created while the
+    // card stays open show their marker immediately.
+    store.pruneFromText(ctx.ui.getEditorText());
+    // Live getters, re-read on every render: pending drives the gutter/
+    // underline markers; pendingDrafts carries token/range/comment for the
+    // card's edit (c) and delete (x) targeting. Both list this file's
+    // drafts oldest first, so overlapping ranges resolve to the most
+    // recently added one.
+    const pendingDrafts = () =>
+      store
+        .list()
+        .filter((d) => d.absPath === loaded.path)
+        // range objects are shared by reference (never copied); the
+        // viewer's emphasis map keys on their identity, so keep it that way.
+        .map((d) => ({ token: d.token, range: d.range, comment: d.comment }));
+    const pending = () => pendingDrafts().map((d) => d.range);
+    await ctx.ui.custom<void>(
+      (tui, theme, _keybindings, done) =>
+        new AnnotateCard(
+          tui,
+          { path: loaded.path, lines: loaded.lines },
+          pending,
+          (range, mode, comment) => {
+            const snapshot = extractRange(loaded.lines, range);
+            const draft = store.add(
+              { absPath: loaded.path, range, mode, snapshot, comment },
+              tokenLabel(loaded.path, ctx.cwd, range, mode),
+            );
+            ctx.ui.pasteToEditor(draft.token);
+            ctx.ui.notify(`Annotation added: ${draft.token}`);
+          },
+          // AnnotateCard closes without a result; done's T is fixed to void.
+          () => done(),
+          (draftId, comment) => {
+            // Edit submit: update the draft in place. The token is
+            // unchanged, so the pill already in the composer stays valid:
+            // no new pill is pasted.
+            store.updateComment(draftId, comment);
+            ctx.ui.notify(`Comment updated: ${draftId}`);
+          },
+          (draftId) => {
+            // Delete: drop the draft and strip its pill (first occurrence)
+            // from the composer. Pill already deleted by the user: remove
+            // the draft silently (the card render is the feedback).
+            // store.remove (not prune: prune KEEPS only the listed tokens).
+            store.remove(draftId);
+            const text = ctx.ui.getEditorText();
+            if (!text.includes(draftId)) return;
+            ctx.ui.setEditorText(text.replace(draftId, ""));
+            ctx.ui.notify(`Annotation deleted: ${draftId}`);
+          },
+          pendingDrafts,
+          // Chrome colors and the title's relative path come from the
+          // factory's active theme and the command's cwd.
+          theme,
+          ctx.cwd,
+          focus ?? null,
+        ),
+      { overlay: true, overlayOptions: { width: "80%", maxHeight: "80%", anchor: "center" } },
+    );
+  }
+
   pi.on("session_start", (_event, ctx) => {
     store = new AnnotationStore();
     sessionCwd = ctx.cwd;
@@ -80,11 +159,22 @@ export function annotateExtension(pi: ExtensionAPI, fuzzy: boolean): void {
       editorRegistered = true;
     }
     const predecessor = savedFactory;
-    ctx.ui.setEditorComponent((tui, theme, keybindings) =>
-      predecessor
+    ctx.ui.setEditorComponent((tui, theme, keybindings) => {
+      const inner = predecessor
         ? withTokenRecolor(predecessor(tui, theme, keybindings), getTokens)
-        : new AnnotateEditor(tui, theme, keybindings, getTokens),
-    );
+        : new AnnotateEditor(tui, theme, keybindings, getTokens);
+      // alt+o jump-back (spec 2026-10-23 "Composer Jump Back"): intercepted
+      // by the wrapper before the inner editor, which never sees the key
+      // when a live pill is in the buffer. The wrapper picks the LAST token
+      // in the buffer; with none the key passes through and lands here as
+      // an inert no-op (pi binds no alt+o).
+      return withComposerJumpBack(inner, getTokens, (token) => {
+        // The token came from getTokens(), so its draft is live; the guard
+        // is store.get's undefined branch, not a reachable path.
+        const draft = store.get(token);
+        if (draft) void openAnnotateCard(ctx, draft.absPath, draft.range);
+      });
+    });
     // Explicit-failure gate (spec 2026-10-20 "Host version floor and
     // explicit failure"): without the fuzzy helpers the user gets the
     // reason and the version floor, never a silent prefix-matching
@@ -122,73 +212,7 @@ export function annotateExtension(pi: ExtensionAPI, fuzzy: boolean): void {
         ctx.ui.notify("Usage: /annotate <path>", "error");
         return;
       }
-      const filePath = resolvePath(arg, ctx.cwd);
-      const loaded = loadFile(filePath);
-      if (!loaded.ok) {
-        ctx.ui.notify(`annotate: ${loaded.reason}: ${filePath}`, "error");
-        return;
-      }
-      // Reconcile before building the card: pending markers must only show
-      // ranges whose pills are still in the composer. The card keeps a live
-      // getter, re-read on every render, so annotations created while the
-      // card stays open show their marker immediately.
-      store.pruneFromText(ctx.ui.getEditorText());
-      // Live getters, re-read on every render: pending drives the gutter/
-      // underline markers; pendingDrafts carries token/range/comment for the
-      // card's edit (c) and delete (x) targeting. Both list this file's
-      // drafts oldest first, so overlapping ranges resolve to the most
-      // recently added one.
-      const pendingDrafts = () =>
-        store
-          .list()
-          .filter((d) => d.absPath === loaded.path)
-          // range objects are shared by reference (never copied); the
-          // viewer's emphasis map keys on their identity, so keep it that way.
-          .map((d) => ({ token: d.token, range: d.range, comment: d.comment }));
-      const pending = () => pendingDrafts().map((d) => d.range);
-      await ctx.ui.custom<void>(
-        (tui, theme, _keybindings, done) =>
-          new AnnotateCard(
-            tui,
-            { path: loaded.path, lines: loaded.lines },
-            pending,
-            (range, mode, comment) => {
-              const snapshot = extractRange(loaded.lines, range);
-              const draft = store.add(
-                { absPath: loaded.path, range, mode, snapshot, comment },
-                tokenLabel(loaded.path, ctx.cwd, range, mode),
-              );
-              ctx.ui.pasteToEditor(draft.token);
-              ctx.ui.notify(`Annotation added: ${draft.token}`);
-            },
-            // AnnotateCard closes without a result; done's T is fixed to void.
-            () => done(),
-            (draftId, comment) => {
-              // Edit submit: update the draft in place. The token is
-              // unchanged, so the pill already in the composer stays valid:
-              // no new pill is pasted.
-              store.updateComment(draftId, comment);
-              ctx.ui.notify(`Comment updated: ${draftId}`);
-            },
-            (draftId) => {
-              // Delete: drop the draft and strip its pill (first occurrence)
-              // from the composer. Pill already deleted by the user: remove
-              // the draft silently (the card render is the feedback).
-              // store.remove (not prune: prune KEEPS only the listed tokens).
-              store.remove(draftId);
-              const text = ctx.ui.getEditorText();
-              if (!text.includes(draftId)) return;
-              ctx.ui.setEditorText(text.replace(draftId, ""));
-              ctx.ui.notify(`Annotation deleted: ${draftId}`);
-            },
-            pendingDrafts,
-            // Chrome colors and the title's relative path come from the
-            // factory's active theme and the command's cwd.
-            theme,
-            ctx.cwd,
-          ),
-        { overlay: true, overlayOptions: { width: "80%", maxHeight: "80%", anchor: "center" } },
-      );
+      await openAnnotateCard(ctx, resolvePath(arg, ctx.cwd));
     },
   });
 

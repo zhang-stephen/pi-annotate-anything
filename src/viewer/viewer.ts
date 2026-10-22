@@ -21,7 +21,7 @@ import { commentBoxWrapWidth } from "./comment-mode.ts";
 import { rawColToDisplayCol, rawColsToDisplayCols, sliceWindow, tabExpanded } from "../tui/display.ts";
 import { displayPath } from "../core/message.ts";
 import { compilePattern, findMatches } from "../core/search.ts";
-import { normalize } from "../core/selection.ts";
+import { clampPosition, normalize } from "../core/selection.ts";
 import type { Range, VisualMode } from "../core/selection.ts";
 import { CHROME_ROWS, clampScrollLeft, COMMENT_BOX_TITLE, EDITOR_BOX_MAX_WIDTH, EDITOR_MAX_INNER_ROWS, MARKER_FIELD_WIDTH, MAX_VIEWPORT_ROWS, MIN_VIEWPORT_ROWS, PREVIEW_MAX_INNER_ROWS, gutterWidth } from "./layout.ts";
 import { applyStyleSpans, BOLD_ON, DIM_ON, INTENSITY_OFF, UNDERLINE_OFF, UNDERLINE_ON } from "./line-style.ts";
@@ -144,6 +144,11 @@ export class AnnotateCard implements Component, Focusable {
     pendingDrafts: () => PendingDraft[] = () => [],
     theme: Theme,
     cwd: string,
+    // Optional jump-back focus (spec 2026-10-23 "Composer Jump Back"):
+    // centers the viewport on this range with the cursor at its start.
+    // Null (the default) keeps the opening-at-top behavior of every
+    // pre-existing caller.
+    focus: Range | null = null,
   ) {
     this.tui = tui;
     this.file = file;
@@ -214,6 +219,23 @@ export class AnnotateCard implements Component, Focusable {
     // A reduce loop, not Math.max(...lines.map(...)): the spread form throws
     // RangeError past V8's argument-count limit on very large files.
     this.maxLineWidth = file.lines.reduce((max, l) => Math.max(max, rawColToDisplayCol(l, l.length)), 0);
+    // Jump-back focus: the range was computed against the file as it was
+    // when the pill was made, so it is clamped fail-open (clampPosition pins
+    // the cursor to the last line and that line's length; scrollTop clamps
+    // into [0, lines - vh]) and the card opens at the nearest live position
+    // when the file shortened or changed on disk. Centering aims at the
+    // cursor line, so the range start sits mid-viewport when the file is
+    // tall enough to scroll.
+    if (focus !== null) {
+      const cursor = clampPosition({ line: focus.startLine, col: focus.startCol }, file.lines);
+      const vh = this.viewportHeight();
+      const maxScroll = Math.max(0, file.lines.length - vh);
+      this.state = {
+        ...this.state,
+        cursor,
+        scrollTop: Math.min(Math.max(cursor.line - Math.floor(vh / 2), 0), maxScroll),
+      };
+    }
   }
 
   render(width: number): string[] {

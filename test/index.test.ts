@@ -33,6 +33,11 @@ interface NotifyCall {
 interface StubCard {
   onAnnotate: (range: Range, mode: VisualMode, comment: string) => void;
   done: () => void;
+  // Structural views of private fields (the jump-back tests observe the
+  // open payload the way viewer.test.ts observes card state).
+  file?: { path: string };
+  state?: { cursor: { line: number; col: number }; scrollTop: number };
+  pendingDrafts?: () => { token: string; range: Range; comment: string }[];
 }
 
 interface StubSession {
@@ -53,9 +58,9 @@ interface StubSession {
   getEditorComponentCallCount: () => number;
 }
 
-// Arguments for invoking a registered editor factory (never rendered; the
-// stub editors ignore them and AnnotateEditor only stores them).
-const stubTui = {} as TUI;
+// Arguments for invoking a registered editor factory. The stub terminal
+// size mirrors the host (the jump-back focus path reads it at construction).
+const stubTui = { terminal: { rows: 24, columns: 80 } } as unknown as TUI;
 const stubTheme = { borderColor: (s: string) => s } as EditorTheme;
 const stubKeybindings = {} as KeybindingsManager;
 
@@ -115,6 +120,9 @@ function stubSession(configured?: EditorFactory) {
         notifications.push({ message, level: level ?? "info" });
       },
       getEditorText: () => editorText,
+      setEditorText: (text: string) => {
+        editorText = text;
+      },
       pasteToEditor: (text: string) => {
         pasted.push(text);
       },
@@ -402,4 +410,149 @@ test("session_shutdown restores the captured predecessor factory and tolerates a
     afterRestore,
     "a repeated shutdown must not restore (or register) again",
   );
+});
+
+// alt+o jump-back (spec 2026-10-23 "Composer Jump Back") ----------------------
+
+// Second and later card opens (openCard asserts on a fresh session only).
+function openNewCard(session: StubSession, filePath: string): Promise<void> {
+  const before = session.cards.length;
+  const running = annotateHandler(session)(filePath, session.ctx);
+  assert.ok(session.cards.length === before + 1, "the handler must construct exactly one new card");
+  return running;
+}
+
+function registeredEditor(session: StubSession): EditorComponent {
+  const register = session.editorRegistrations[0]!;
+  return register(stubTui, stubTheme, stubKeybindings);
+}
+
+test("alt+o opens the viewer via the /annotate path on the LAST token's range", async () => {
+  const fixture = writeFixture();
+  try {
+    const line = { text: "" };
+    const session = stubSession(() => lineEditor(() => line.text));
+    annotateExtension(session.pi, true);
+    fireSessionStart(session);
+
+    // Two drafts in the same file through the real /annotate flow; the
+    // first pill stays "in the composer" (both the stub editor text and the
+    // host editor text) so the reconcile prune keeps its draft alive, like
+    // a real composer holding both pills.
+    const running1 = openCard(session, fixture.path);
+    session.cards[0]!.onAnnotate({ startLine: 0, startCol: 6, endLine: 0, endCol: 11 }, "char", "first");
+    const token1 = session.pasted[0]!;
+    session.cards[0]!.done();
+    await running1;
+
+    line.text = token1;
+    session.ctx.ui.setEditorText(line.text);
+    const running2 = openNewCard(session, fixture.path);
+    session.cards[1]!.onAnnotate({ startLine: 1, startCol: 0, endLine: 1, endCol: 6 }, "char", "second");
+    const token2 = session.pasted[1]!;
+    session.cards[1]!.done();
+    await running2;
+
+    line.text = `keep ${token1} then recheck ${token2} end`;
+    session.ctx.ui.setEditorText(line.text);
+
+    const before = session.cards.length;
+    registeredEditor(session).handleInput("\x1bo");
+    assert.equal(session.cards.length, before + 1, "alt+o must open the viewer");
+
+    const card = session.cards[before]!;
+    assert.equal(card.file!.path, fixture.path, "the open payload carries the token's file");
+    assert.deepEqual(
+      card.state!.cursor,
+      { line: 1, col: 0 },
+      "the cursor lands at the LAST draft's range start",
+    );
+    assert.deepEqual(
+      card.pendingDrafts!().map((d) => d.token),
+      [token1, token2],
+      "the store-driven pending replay carries every live draft of the file",
+    );
+  } finally {
+    rmSync(fixture.dir, { recursive: true, force: true });
+  }
+});
+
+test("alt+o clamps fail-open when the annotated file shortened on disk", async () => {
+  const fixture = writeFixture();
+  try {
+    const line = { text: "" };
+    const session = stubSession(() => lineEditor(() => line.text));
+    annotateExtension(session.pi, true);
+    fireSessionStart(session);
+
+    const running = openCard(session, fixture.path);
+    session.cards[0]!.onAnnotate({ startLine: 1, startCol: 7, endLine: 1, endCol: 12 }, "char", "gone soon");
+    const token = session.pasted[0]!;
+    session.cards[0]!.done();
+    await running;
+
+    // The file shrinks to one short line after the pill was made.
+    writeFileSync(fixture.path, "tiny\n");
+    line.text = token;
+    session.ctx.ui.setEditorText(line.text);
+
+    const before = session.cards.length;
+    registeredEditor(session).handleInput("\x1bo");
+    const card = session.cards[before]!;
+    assert.deepEqual(
+      card.state!.cursor,
+      // clampPosition pins the line to EOF and the col to the LANDED line's
+      // length ("tiny" is 4 wide): the nearest live position, not an error.
+      { line: 0, col: 4 },
+      "cursor clamps to the truncated file's EOF",
+    );
+    assert.equal(card.state!.scrollTop, 0);
+  } finally {
+    rmSync(fixture.dir, { recursive: true, force: true });
+  }
+});
+
+test("alt+o with no pill in the buffer passes through to the inner editor and opens nothing", () => {
+  const received: string[] = [];
+  const session = stubSession(() => ({
+    render: () => ["composer"],
+    getText: () => "",
+    setText: () => {},
+    handleInput: (data: string) => {
+      received.push(data);
+    },
+    invalidate: () => {},
+  }));
+  annotateExtension(session.pi, true);
+  fireSessionStart(session);
+
+  const before = session.cards.length;
+  registeredEditor(session).handleInput("\x1bo");
+  assert.deepEqual(received, ["\x1bo"], "the untouched alt+o bytes reach the inner editor");
+  assert.equal(session.cards.length, before, "no viewer opens without a live token");
+});
+
+test("alt+o on a pill whose file vanished notifies instead of opening the viewer", async () => {
+  const fixture = writeFixture();
+  const line = { text: "" };
+  const session = stubSession(() => lineEditor(() => line.text));
+  annotateExtension(session.pi, true);
+  fireSessionStart(session);
+
+  const running = openCard(session, fixture.path);
+  session.cards[0]!.onAnnotate({ startLine: 0, startCol: 0, endLine: 0, endCol: 5 }, "char", "doomed");
+  const token = session.pasted[0]!;
+  session.cards[0]!.done();
+  await running;
+
+  rmSync(fixture.dir, { recursive: true, force: true });
+  line.text = token;
+  session.ctx.ui.setEditorText(line.text);
+
+  const before = session.cards.length;
+  registeredEditor(session).handleInput("\x1bo");
+  assert.equal(session.cards.length, before, "a vanished file opens no viewer");
+  const errors = session.notifications.filter((n) => n.level === "error");
+  assert.equal(errors.length, 1);
+  assert.ok(errors[0]!.message.includes("not-found"), errors[0]!.message);
 });

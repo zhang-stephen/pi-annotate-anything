@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 
 import { AnnotationStore } from "../../src/core/store.ts";
 import { formatPayload, tokenLabel } from "../../src/core/message.ts";
-import { expandTokens } from "../../src/core/transform.ts";
+import { expandTokens, findTokenMatches, lastTokenIn } from "../../src/core/transform.ts";
 import type { Range, VisualMode } from "../../src/core/selection.ts";
 
 const CWD = "/repo";
@@ -176,4 +176,46 @@ test("expandTokens: longest token wins when one token is a prefix of another", (
 
   assert.equal(result.changed, true);
   assert.equal(result.text, `see\n\n${pLong}\n\n now`);
+});
+
+// findTokenMatches / lastTokenIn (alt+o jump-back selection) -----------------
+
+test("findTokenMatches locates every occurrence left to right with its index", () => {
+  const matches = findTokenMatches("a [b.ts:1-2] c [a.ts:1-2] d", ["[a.ts:1-2]", "[b.ts:1-2]"]);
+  assert.deepEqual(matches, [
+    { token: "[b.ts:1-2]", index: 2 },
+    { token: "[a.ts:1-2]", index: 15 },
+  ]);
+});
+
+test("findTokenMatches returns no matches for absent tokens or an empty token list", () => {
+  assert.deepEqual(findTokenMatches("no pills here", ["[a.ts:1-2]"]), []);
+  assert.deepEqual(findTokenMatches("[a.ts:1-2]", []), []);
+});
+
+test("findTokenMatches: a prefix token does not shadow its longer form", () => {
+  // Longest-first alternation: at the long token's position the whole long
+  // token matches, never its shorter prefix.
+  const matches = findTokenMatches("see [a.ts:1-2] and [a.ts:1-2 ~2]", ["[a.ts:1-2]", "[a.ts:1-2 ~2]"]);
+  assert.deepEqual(matches, [
+    { token: "[a.ts:1-2]", index: 4 },
+    { token: "[a.ts:1-2 ~2]", index: 19 },
+  ]);
+});
+
+test("lastTokenIn picks the rightmost occurrence of a mixed buffer", () => {
+  const tokens = ["[a.ts:1-2]", "[b.ts:3-4]"];
+  assert.deepEqual(lastTokenIn(`fix [a.ts:1-2] then recheck [b.ts:3-4] done`, tokens), {
+    token: "[b.ts:3-4]",
+    index: 28,
+  });
+  // Same token twice: the later occurrence wins (most recent attachment).
+  assert.deepEqual(lastTokenIn("[a.ts:1-2] ... [a.ts:1-2]", tokens), { token: "[a.ts:1-2]", index: 15 });
+});
+
+test("lastTokenIn returns null when no token occurs in the text", () => {
+  assert.equal(lastTokenIn("plain prose only", ["[a.ts:1-2]", "[b.ts:3-4]"]), null);
+  assert.equal(lastTokenIn("anything", []), null);
+  // Token-like text that matches no listed token is not a match.
+  assert.equal(lastTokenIn("see [c.ts:9-9] here", ["[a.ts:1-2]"]), null);
 });

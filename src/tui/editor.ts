@@ -1,5 +1,7 @@
 import { CustomEditor, type KeybindingsManager } from "@earendil-works/pi-coding-agent";
-import type { EditorComponent, EditorTheme, TUI } from "@earendil-works/pi-tui";
+import { parseKey, type EditorComponent, type EditorTheme, type TUI } from "@earendil-works/pi-tui";
+
+import { lastTokenIn } from "../core/transform.ts";
 
 /**
  * Wrap every exact occurrence of every token in `line` with `style`.
@@ -39,6 +41,39 @@ export function withTokenRecolor<T extends EditorComponent>(editor: T, getTokens
     const tokens = getTokens();
     if (tokens.length === 0) return lines;
     return lines.map((line) => recolorTokens(line, tokens, INVERSE));
+  };
+  return editor;
+}
+
+/**
+ * Proxy alt+o before the inner editor: the composer jump-back key (spec
+ * 2026-10-23 "Composer Jump Back").
+ *
+ * pi-tui's parseKey classifies the incoming chunk (the legacy ESC-o sequence
+ * and the kitty CSI-u forms alike yield "alt+o"); chunks it cannot classify
+ * (plain text, pastes, partial escape sequences) forward unchanged, so
+ * multi-byte input is never split. On alt+o the buffer is scanned for live
+ * pill tokens: the LAST (rightmost) match selects the jump target and the
+ * key is swallowed; with no token in the buffer the key passes through to
+ * the inner editor, where it is inert (pi-tui binds no alt combinations and
+ * pi binds no alt+o). Every other key, including a lone Esc (parseKey
+ * "escape"), is forwarded unchanged.
+ */
+export function withComposerJumpBack<T extends EditorComponent>(
+  editor: T,
+  getTokens: () => string[],
+  onJump: (token: string) => void,
+): T {
+  const baseHandleInput = editor.handleInput.bind(editor);
+  editor.handleInput = (data: string): void => {
+    if (parseKey(data) === "alt+o") {
+      const last = lastTokenIn(editor.getText(), getTokens());
+      if (last !== null) {
+        onJump(last.token);
+        return;
+      }
+    }
+    baseHandleInput(data);
   };
   return editor;
 }

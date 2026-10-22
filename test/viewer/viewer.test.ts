@@ -159,7 +159,7 @@ interface CardHarness {
   };
 }
 
-function makeCard(opts: { lines: string[]; path?: string; cwd?: string; rows?: number; cols?: number }): CardHarness {
+function makeCard(opts: { lines: string[]; path?: string; cwd?: string; rows?: number; cols?: number; focus?: Range | null }): CardHarness {
   const pending: Range[] = [];
   const drafts: PendingDraft[] = [];
   const fgCalls: { token: string; text: string }[] = [];
@@ -197,6 +197,7 @@ function makeCard(opts: { lines: string[]; path?: string; cwd?: string; rows?: n
     () => drafts,
     theme,
     opts.cwd ?? "/work",
+    opts.focus ?? null,
   );
   return { card, fgCalls, bgCalls, pending, drafts, calls };
 }
@@ -1495,4 +1496,54 @@ test("wiring: Esc leaves command mode and the drawer disappears with it", () => 
   for (const row of bare) {
     assert.ok(!row.includes("nohlsearch") && !row.includes("completions"), `drawer gone, got: ${row}`);
   }
+});
+
+// Jump-back focus (constructor focus range) ----------------------------------
+
+// The private state fields the focus tests observe (structural view, like
+// the searchHL reset above).
+function stateOf(card: AnnotateCard): { cursor: { line: number; col: number }; scrollTop: number } {
+  return (card as unknown as { state: { cursor: { line: number; col: number }; scrollTop: number } }).state;
+}
+
+test("focus lands the cursor at the range start and centers the viewport on it", () => {
+  // rows 24 -> viewport height floor(24*0.8) - CHROME_ROWS(4) = 15; a 40-line
+  // file scrolls, so centering aims scrollTop at startLine - floor(vh/2).
+  const lines = Array.from({ length: 40 }, (_, i) => `line ${i}`);
+  const h = makeCard({ lines, focus: { startLine: 20, startCol: 5, endLine: 22, endCol: 0 } });
+  const state = stateOf(h.card);
+  assert.deepEqual(state.cursor, { line: 20, col: 5 });
+  assert.equal(state.scrollTop, 20 - 7); // centered: 13, within [0, 40-15]
+});
+
+test("focus centering clamps at both file ends", () => {
+  const lines = Array.from({ length: 40 }, (_, i) => `line ${i}`);
+  // Near the top: centering would go negative, clamps to 0.
+  const top = stateOf(makeCard({ lines, focus: { startLine: 2, startCol: 0, endLine: 2, endCol: 3 } }).card);
+  assert.deepEqual(top.cursor, { line: 2, col: 0 });
+  assert.equal(top.scrollTop, 0);
+  // Near the bottom: centering would overshoot lines - vh, clamps to 25.
+  const bottom = stateOf(makeCard({ lines, focus: { startLine: 38, startCol: 0, endLine: 38, endCol: 3 } }).card);
+  assert.equal(bottom.scrollTop, 40 - 15);
+  assert.deepEqual(bottom.cursor, { line: 38, col: 0 });
+});
+
+test("focus clamps fail-open on a file shortened on disk", () => {
+  // The pill was made on line 500 of a file that now has 3 lines: the
+  // cursor pins to the last line and that line's length; scrollTop clamps
+  // to 0 (nothing to scroll in a file shorter than the viewport).
+  const h = makeCard({
+    lines: ["alpha", "beta", "gamma"],
+    focus: { startLine: 500, startCol: 30, endLine: 500, endCol: 40 },
+  });
+  const state = stateOf(h.card);
+  assert.deepEqual(state.cursor, { line: 2, col: 5 }, "clamped to EOF line, col to that line's length");
+  assert.equal(state.scrollTop, 0);
+});
+
+test("no focus keeps the opening-at-top state every pre-existing caller gets", () => {
+  const h = makeCard({ lines: ["alpha", "beta"] });
+  const state = stateOf(h.card);
+  assert.deepEqual(state.cursor, { line: 0, col: 0 });
+  assert.equal(state.scrollTop, 0);
 });
