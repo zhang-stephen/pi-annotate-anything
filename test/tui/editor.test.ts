@@ -89,7 +89,7 @@ test("withComposerJumpBack intercepts alt+o before the inner editor and reports 
   const spy: InputSpy = { received: [] };
   const base = inputEditor(spy, () => "check [a.ts:1-2] and [b.ts:3-4]");
   const jumps: string[] = [];
-  const wrapped = withComposerJumpBack(base, () => ["[a.ts:1-2]", "[b.ts:3-4]"], (t) => jumps.push(t));
+  const wrapped = withComposerJumpBack(base, () => ["[a.ts:1-2]", "[b.ts:3-4]"], (t) => jumps.push(t), () => {});
 
   assert.equal(wrapped, base); // same instance, predecessor preserved
   wrapped.handleInput(ALT_O);
@@ -101,36 +101,44 @@ test("withComposerJumpBack recognizes the kitty CSI-u alt+o form through parseKe
   const spy: InputSpy = { received: [] };
   const base = inputEditor(spy, () => "[a.ts:1-2]");
   const jumps: string[] = [];
-  const wrapped = withComposerJumpBack(base, () => ["[a.ts:1-2]"], (t) => jumps.push(t));
+  const wrapped = withComposerJumpBack(base, () => ["[a.ts:1-2]"], (t) => jumps.push(t), () => {});
 
   wrapped.handleInput("\x1b[111;3u");
   assert.deepEqual(jumps, ["[a.ts:1-2]"]);
   assert.deepEqual(spy.received, []);
 });
 
-test("withComposerJumpBack passes alt+o through when no token is in the buffer", () => {
+test("withComposerJumpBack swallows alt+o and calls onMiss when no token is in the buffer", () => {
   const spy: InputSpy = { received: [] };
+
   // No live tokens at all.
   const empty = inputEditor(spy, () => "plain text");
   const emptyJumps: string[] = [];
-  withComposerJumpBack(empty, () => [], (t) => emptyJumps.push(t)).handleInput(ALT_O);
+  const emptyMisses: number[] = [];
+  withComposerJumpBack(empty, () => [], (t) => emptyJumps.push(t), () => emptyMisses.push(1)).handleInput(ALT_O);
   assert.deepEqual(emptyJumps, []);
-  assert.deepEqual(spy.received, [ALT_O], "alt+o with no tokens forwards unchanged (inert for the inner editor)");
+  assert.deepEqual(emptyMisses, [1], "the miss callback fires exactly once");
+  assert.deepEqual(spy.received, [], "the swallowed alt+o never reaches the inner editor");
 
-  // A live token exists but the buffer lost its pill.
+  // A live token exists but the buffer lost its pill: still a miss.
   spy.received.length = 0;
   const unlisted = inputEditor(spy, () => "token was deleted");
   const unlistedJumps: string[] = [];
-  withComposerJumpBack(unlisted, () => ["[a.ts:1-2]"], (t) => unlistedJumps.push(t)).handleInput(ALT_O);
+  const unlistedMisses: number[] = [];
+  withComposerJumpBack(unlisted, () => ["[a.ts:1-2]"], (t) => unlistedJumps.push(t), () => unlistedMisses.push(1)).handleInput(
+    ALT_O,
+  );
   assert.deepEqual(unlistedJumps, []);
-  assert.deepEqual(spy.received, [ALT_O]);
+  assert.deepEqual(unlistedMisses, [1]);
+  assert.deepEqual(spy.received, [], "a miss never forwards alt+o to the inner editor");
 });
 
 test("withComposerJumpBack forwards every non-alt+o chunk unchanged, including a lone Esc", () => {
   const spy: InputSpy = { received: [] };
   const base = inputEditor(spy, () => "[a.ts:1-2]");
   const jumps: string[] = [];
-  const wrapped = withComposerJumpBack(base, () => ["[a.ts:1-2]"], (t) => jumps.push(t));
+  const misses: number[] = [];
+  const wrapped = withComposerJumpBack(base, () => ["[a.ts:1-2]"], (t) => jumps.push(t), () => misses.push(1));
 
   const chunks = [
     "x",
@@ -144,4 +152,5 @@ test("withComposerJumpBack forwards every non-alt+o chunk unchanged, including a
   for (const chunk of chunks) wrapped.handleInput(chunk);
   assert.deepEqual(spy.received, chunks, "each chunk reaches the inner editor byte-identical");
   assert.deepEqual(jumps, []);
+  assert.deepEqual(misses, [], "non-alt+o chunks never trigger the miss callback");
 });

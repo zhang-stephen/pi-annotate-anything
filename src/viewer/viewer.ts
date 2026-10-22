@@ -91,7 +91,7 @@ const COMMENT_MOVEMENT_SEQUENCES: Record<string, string> = {
   end: "\x1b[F",
 };
 
-export function normalizeCommentMovement(data: string): string {
+function normalizeCommentMovement(data: string): string {
   const parsed = parseKey(data);
   if (parsed === undefined) return data;
   const base = parsed.includes("+") ? parsed.slice(parsed.lastIndexOf("+") + 1) : parsed;

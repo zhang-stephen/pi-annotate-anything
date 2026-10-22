@@ -22,14 +22,13 @@
 //   present (unrelated messages) keep their drafts. Never blind-clear.
 
 import type { ExtensionAPI, ExtensionContext } from "@earendil-works/pi-coding-agent";
-import { parseKey } from "@earendil-works/pi-tui";
 
 import { AnnotateEditor, withComposerJumpBack, withTokenRecolor } from "./src/tui/editor.ts";
 import { extractRange, loadFile, resolvePath } from "./src/core/file-range.ts";
 import { tokenLabel } from "./src/core/message.ts";
 import { completePath, fuzzyAvailable } from "./src/tui/path-completion.ts";
 import { AnnotationStore } from "./src/core/store.ts";
-import { expandTokens, lastTokenIn } from "./src/core/transform.ts";
+import { expandTokens } from "./src/core/transform.ts";
 import type { Range } from "./src/core/selection.ts";
 import { AnnotateCard } from "./src/viewer/viewer.ts";
 
@@ -164,30 +163,23 @@ export function annotateExtension(pi: ExtensionAPI, fuzzy: boolean): void {
       const inner = predecessor
         ? withTokenRecolor(predecessor(tui, theme, keybindings), getTokens)
         : new AnnotateEditor(tui, theme, keybindings, getTokens);
-      // alt+o jump-back (spec 2026-10-23 "Composer Jump Back"): intercepted
-      // by the wrapper before the inner editor, which never sees the key
-      // when a live pill is in the buffer. The wrapper picks the LAST token
-      // in the buffer.
-      const editor = withComposerJumpBack(inner, getTokens, (token) => {
-        // The token came from getTokens(), so its draft is live; the guard
-        // is store.get's undefined branch, not a reachable path.
-        const draft = store.get(token);
-        if (draft) void openAnnotateCard(ctx, draft.absPath, draft.range);
-      });
-      // With no live pill in the buffer the jump-back wrapper forwards the
-      // key to the inner editor, where it would vanish as an inert no-op.
-      // Swallow it here instead and say why nothing happened. The
-      // classification mirrors withComposerJumpBack's own (parseKey alt+o,
-      // lastTokenIn scan), so the no-token miss is the only case this guard
-      // takes over; every other key forwards untouched.
-      const baseHandleInput = editor.handleInput.bind(editor);
-      editor.handleInput = (data: string): void => {
-        if (parseKey(data) === "alt+o" && lastTokenIn(editor.getText(), getTokens()) === null) {
-          ctx.ui.notify("alt+o: nothing to jump back to yet -- add an annotation first", "warning");
-          return;
-        }
-        baseHandleInput(data);
-      };
+      // alt+o jump-back (spec 2026-10-23 "Composer Jump Back"): the wrapper
+      // is the single owner of the key -- it parses once, swallows alt+o in
+      // both outcomes, and the inner editor never sees it. Hit: the LAST
+      // live pill in the buffer picks the jump target. Miss: onMiss says why
+      // nothing happened (there is no pass-through; the key would be inert
+      // downstream anyway).
+      const editor = withComposerJumpBack(
+        inner,
+        getTokens,
+        (token) => {
+          // The token came from getTokens(), so its draft is live; the guard
+          // is store.get's undefined branch, not a reachable path.
+          const draft = store.get(token);
+          if (draft) void openAnnotateCard(ctx, draft.absPath, draft.range);
+        },
+        () => ctx.ui.notify("alt+o: nothing to jump back to yet -- add an annotation first", "warning"),
+      );
       return editor;
     });
     // Explicit-failure gate (spec 2026-10-20 "Host version floor and

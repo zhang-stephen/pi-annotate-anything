@@ -46,32 +46,32 @@ export function withTokenRecolor<T extends EditorComponent>(editor: T, getTokens
 }
 
 /**
- * Proxy alt+o before the inner editor: the composer jump-back key (spec
- * 2026-10-23 "Composer Jump Back").
+ * Single owner of alt+o before the inner editor: the composer jump-back key
+ * (spec 2026-10-23 "Composer Jump Back").
  *
  * pi-tui's parseKey classifies the incoming chunk (the legacy ESC-o sequence
  * and the kitty CSI-u forms alike yield "alt+o"); chunks it cannot classify
  * (plain text, pastes, partial escape sequences) forward unchanged, so
- * multi-byte input is never split. On alt+o the buffer is scanned for live
- * pill tokens: the LAST (rightmost) match selects the jump target and the
- * key is swallowed; with no token in the buffer the key passes through to
- * the inner editor, where it is inert (pi-tui binds no alt combinations and
- * pi binds no alt+o). Every other key, including a lone Esc (parseKey
- * "escape"), is forwarded unchanged.
+ * multi-byte input is never split. alt+o is intercepted, parsed and consumed
+ * here exactly once: the buffer is scanned for live pill tokens, and the
+ * LAST (rightmost) match selects the jump target (onJump); with no token in
+ * the buffer onMiss fires instead. In both cases the key is swallowed and
+ * never reaches the inner editor. Every other key, including a lone Esc
+ * (parseKey "escape"), is forwarded byte-identical.
  */
 export function withComposerJumpBack<T extends EditorComponent>(
   editor: T,
   getTokens: () => string[],
   onJump: (token: string) => void,
+  onMiss: () => void,
 ): T {
   const baseHandleInput = editor.handleInput.bind(editor);
   editor.handleInput = (data: string): void => {
     if (parseKey(data) === "alt+o") {
       const last = lastTokenIn(editor.getText(), getTokens());
-      if (last !== null) {
-        onJump(last.token);
-        return;
-      }
+      if (last !== null) onJump(last.token);
+      else onMiss();
+      return;
     }
     baseHandleInput(data);
   };
