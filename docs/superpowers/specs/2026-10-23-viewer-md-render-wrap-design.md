@@ -1,6 +1,7 @@
 ---
 title: Viewer Markdown Rendering and Word Wrap - Design
 status: approved
+plan: ../plans/2026-10-27-viewer-md-render-wrap.md
 ---
 
 # Viewer Markdown Rendering and Word Wrap - Design
@@ -117,3 +118,21 @@ This is a display-label change within the current token-era composer, not a tray
 - Token matching, inverse-video recoloring, `alt+o`, comment editing, and payload expansion retain their current behavior.
 - Unit tests cover line and character ranges, same-basename collisions, NF-bearing token matching and recoloring, and unchanged payload output.
 - Manual E2E in a real terminal covers glyph width, cursor alignment, and composer wrapping; the existing wrapped-token recolor limitation must not be described as fixed unless separately implemented and verified.
+
+## Post-merge correction (2026-10-27): first-non-blank motion
+
+~~The keymap describes `^` as unchanged.~~ Source inspection during planning found no `^` arm in `src/viewer/state.ts`.
+The phase-1 implementation adds `^` as logical first-non-blank in both wrap modes; wrap-OFF equivalence applies to pre-existing motions, not this newly specified addition.
+
+## Supplementary requirement (2026-10-27): comment insertion caret
+
+This requirement changes the caret-cell decision implemented by [Comment Input Cursor Movement - Design](2026-10-22-comment-cursor-design.md) and [its plan](../plans/2026-10-22-comment-cursor.md); both remain done and unchanged.
+The current implementation paints the grapheme to the left of the caret's insertion offset, so end-of-text paints the last typed character.
+The required behavior is an insertion caret: paint the grapheme at the insertion column, or a blank cell after the text when the offset is at row end.
+
+- Keep text insertion and deletion semantics unchanged, and keep caret offsets as raw code-unit insertion boundaries.
+- A shared soft-wrap boundary belongs to the following visual row; hard-line and absolute text-end carets use the row-end blank cell.
+- Home, End, Up, Down, Left, and Right use the same insertion-point mapping, including one-press transitions across soft wraps.
+- A row-end blank may occupy the right `PAD_X` padding cell; framing must preserve exact row width and must never truncate the caret marker or emit an ellipsis for that cell.
+- Preserve grapheme-cluster safety and the existing hardware/fake cursor marker contract without reading cursor settings in the extension.
+- Unit tests cover empty, middle, end, wide-grapheme, hard-newline, and full-wrap-row positions; real-terminal E2E covers both hardware-cursor settings and arrow-key movement.
