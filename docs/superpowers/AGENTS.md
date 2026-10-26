@@ -32,6 +32,8 @@ Discipline for the spec/plan documents in this directory. Auto-loaded by pi-subd
 
 ## Amendments
 
-- Post-merge decision changes are recorded by striking through the deprecated decision, with a reason -- never rewrite approved history silently.
-- A plan that changes after merge gets an "Amendment (post-merge)" section summarizing what was removed and where the replacement decision lives.
+- Documents with `status: done` are immutable: never edit, amend, reformat, or clean them up.
+- New specs/plans that change a done document must link to the original and explicitly list each changed decision and the reason; never amend the original.
+- For documents not yet done, post-merge decision changes are recorded by striking through the deprecated decision, with a reason -- never rewrite approved history silently.
+- A non-done plan that changes after merge gets an "Amendment (post-merge)" section summarizing what was removed and where the replacement decision lives.
 - SDD ledgers under `.superpowers/sdd/` are gitignored, ephemeral execution state; a worktree ledger is deleted with the worktree -- the plan document is the durable record.

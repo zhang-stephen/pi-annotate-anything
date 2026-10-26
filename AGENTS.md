@@ -62,5 +62,7 @@ The workflow is spec -> plan -> code, and every step is gated:
 
 ## Specs and plans
 
+- Documents with `status: done` are immutable: never edit, amend, reformat, or clean them up.
+- If new work changes a decision in a done document, leave the original untouched and create a new spec/plan that links to it and explicitly lists each changed decision and the reason.
 - SDD documents live in `docs/superpowers/`; their discipline (STATUS.md protocol, front-matter schema, naming, amendments) is defined in `docs/superpowers/AGENTS.md`, which pi-subdir-context auto-loads when files under that directory are read.
 - Session entry point for status: `docs/superpowers/STATUS.md` (index only).
