@@ -1,6 +1,6 @@
 ---
 title: Viewer Markdown Rendering and Word Wrap - Design
-status: draft
+status: approved
 ---
 
 # Viewer Markdown Rendering and Word Wrap - Design
@@ -105,3 +105,15 @@ Design principles, in priority order:
 - Tables, LaTeX, fence-internal syntax highlighting (highlightCode-style hooks later).
 - g-family screen-line motions; comment markdown rendering.
 - Image rendering (phase 2).
+
+## Supplementary requirement (2026-10-27): current-pill restyle
+
+The existing inline composer pill changes from `[src/a.ts:10-20]` to `[<glyph> <basename><range>]`, for example `[<glyph> a.ts:10-20]`.
+The glyph is the existing NF comment glyph used for pending annotations in the viewer, and the range keeps its leading colon and existing line or character forms.
+This is a display-label change within the current token-era composer, not a tray, status-line, type-tag, or submission-order redesign.
+
+- `tokenLabel()` uses the draft basename while `displayPath()` and `formatPayload()` remain unchanged, so payload paths stay cwd-relative inside the cwd and absolute outside it.
+- Existing `~N` collision suffixes remain part of the token when needed, for example `[<glyph> a.ts:10-20~2]`.
+- Token matching, inverse-video recoloring, `alt+o`, comment editing, and payload expansion retain their current behavior.
+- Unit tests cover line and character ranges, same-basename collisions, NF-bearing token matching and recoloring, and unchanged payload output.
+- Manual E2E in a real terminal covers glyph width, cursor alignment, and composer wrapping; the existing wrapped-token recolor limitation must not be described as fixed unless separately implemented and verified.
