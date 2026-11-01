@@ -9,9 +9,9 @@ Do not open docs marked `done` unless the current work touches that area.
 ## Active
 
 - spec: `docs/superpowers/specs/2026-10-23-viewer-md-render-wrap-design.md`
-  - approved (user review 2026-10-27); phase 1 = wrap + CommonMark (no images) rendering + keymap adaptation + the 2026-10-27 current-pill restyle and comment-caret supplements, phase 2 = optional protocol-gated image support (sketch only); implementation plan approved, ready for execution
+  - in-progress (user review 2026-10-27); phase 1 = wrap + CommonMark (no images) rendering + keymap adaptation + the 2026-10-27 current-pill restyle and comment-caret supplements, phase 2 = optional protocol-gated image support (sketch only); Task 1 locally committed and reviewed, Task 2 next
 - plan: `docs/superpowers/plans/2026-10-27-viewer-md-render-wrap.md`
-  - in-progress 0/9, approved and ready for execution; Task 1 = comment-caret fix, Task 2 = current-pill restyle; no implementation started
+  - in-progress 1/9; Task 1 comment-caret fix locally committed and reviewer-approved; Task 2 current-pill restyle next; E2E pending before push and final integration
 - spec: `docs/superpowers/specs/2026-10-22-user-settings-design.md`
   - approved (user call 2026-10-22), implementation not started; rides a later train, not 2.0
 - spec: `docs/superpowers/specs/2026-10-22-settings-evolution-design.md`

@@ -535,7 +535,8 @@ test("wrapCommentLines: an emoji ZWJ sequence is one 2-column cluster", () => {
   // The family emoji renders as ONE glyph of 2 columns; its 8 code units
   // count as 2 display columns, never their sum.
   const family = "\u{1F468}\u200D\u{1F469}\u200D\u{1F467}";
-  // Cursor 10 = the family emoji's END offset: the caret that paints it.
+  // Caret 10 = the insertion point after the family emoji (before "cd"),
+  // rendered at display column a(1) + b(1) + family(2) = 4.
   const w = wrapCommentLines("ab" + family + "cd", 20, 10);
   assert.deepEqual(w.lines, ["ab" + family + "cd"]);
   assert.equal(w.cursorCol, 4); // a(1) + b(1) + family(2)
@@ -562,6 +563,46 @@ test("reduceComment: up and down aim across emoji clusters without splitting the
   assert.equal(st.caret, 0);
   st = reduceComment(st, { kind: "down" }, 2).state;
   assert.equal(st.caret, 9);
+});
+
+test("reduceComment: up from a full row's end clamps to the row above's last occupied cell", () => {
+  // Regression: 120 one-column chars at width 60 wrap into two full rows
+  // [0,60) / [60,120). Up from the absolute end used to aim at column 60 of
+  // row 0, whose caret offset 60 is the shared soft-wrap boundary - it
+  // rendered back on row 1 and the next Up was a no-op, making row 0
+  // unreachable. Vertical movement into a row that ends at a shared
+  // soft-wrap boundary clamps the aim to that row's last occupied cell
+  // (width - 1) while PRESERVING the original goal column.
+  const text = "b".repeat(120);
+  let st = end(text);
+  st = reduceComment(st, { kind: "up" }, 60).state;
+  assert.equal(st.caret, 59); // row 0's last occupied cell, not the boundary 60
+  assert.equal(st.goalCol, 60); // original goal preserved for later motion
+  const wrapped = wrapCommentLines(st.text, 60, st.caret);
+  assert.equal(wrapped.cursorRow, 0);
+  assert.equal(wrapped.cursorCol, 59);
+  const steady = reduceComment(st, { kind: "up" }, 60);
+  assert.deepEqual(steady.state, st); // at the top: harmless no-op
+  const back = reduceComment(st, { kind: "down" }, 60).state; // the preserved goal still aims at the end
+  assert.equal(back.caret, 120);
+});
+
+test("reduceComment: vertical clamping aims at whole clusters on an exact-full-row wide grapheme", () => {
+  // 60 two-column wide chars at width 60: two exact-full rows of 30 wide
+  // chars. Up from the end clamps the aim to column 59, which falls INSIDE
+  // the last wide char (columns 58-59) - the caret lands on the insertion
+  // point before that whole cluster (offset 29), never a split, and the
+  // preserved goal 60 still reaches the absolute end on the way back down.
+  const text = "\u4e2d".repeat(60);
+  let st = end(text);
+  st = reduceComment(st, { kind: "up" }, 60).state;
+  assert.equal(st.caret, 29);
+  assert.equal(st.goalCol, 60);
+  const wrapped = wrapCommentLines(st.text, 60, st.caret);
+  assert.equal(wrapped.cursorRow, 0);
+  assert.equal(wrapped.cursorCol, 58);
+  st = reduceComment(st, { kind: "down" }, 60).state;
+  assert.equal(st.caret, 60);
 });
 
 // cursorCellAt ----------------------------------------------------------------

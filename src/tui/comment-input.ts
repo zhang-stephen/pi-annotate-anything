@@ -160,7 +160,25 @@ export function reduceComment(state: CommentState, key: CommentKey, wrapWidth: n
       // end blank when the column is past its width.
       if (target < 0 || target >= wrapped.lines.length) return { state };
       const goal = state.goalCol ?? wrapped.cursorCol;
-      return { state: { text, caret: caretAtRowColumn(text, wrapped.rowStarts[target], wrapped.rowEnds[target], goal), goalCol: goal } };
+      const rowStart = wrapped.rowStarts[target];
+      // A target row that ends at a shared soft-wrap boundary has no
+      // row-end blank: aiming at its full width yields the boundary offset,
+      // which the following-row rule renders back on the row below (an
+      // unreachable no-op loop). Clamp the aim to that row's last occupied
+      // cell (width - 1) so the caret lands ON the row; hard-line ends and
+      // the absolute last row end keep the reachable row-end blank. The
+      // stored goal column stays the ORIGINAL aim for later vertical motion.
+      let aim = goal;
+      if (target + 1 < wrapped.lines.length && wrapped.rowEnds[target] === wrapped.rowStarts[target + 1]) {
+        let rowWidth = 0;
+        for (const seg of GRAPHEMES.segment(text)) {
+          if (seg.index >= wrapped.rowEnds[target]) break;
+          if (seg.index < rowStart) continue;
+          rowWidth += clusterWidth(seg.segment);
+        }
+        if (rowWidth > 0) aim = Math.min(goal, rowWidth - 1);
+      }
+      return { state: { text, caret: caretAtRowColumn(text, rowStart, wrapped.rowEnds[target], aim), goalCol: goal } };
     }
     case "submit":
       // State is left unchanged on purpose: the effect carries the text and

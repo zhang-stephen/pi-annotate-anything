@@ -1,6 +1,6 @@
 ---
 title: Viewer Markdown Rendering and Word Wrap - Design
-status: approved
+status: in-progress
 plan: ../plans/2026-10-27-viewer-md-render-wrap.md
 ---
 
@@ -133,6 +133,7 @@ The required behavior is an insertion caret: paint the grapheme at the insertion
 - Keep text insertion and deletion semantics unchanged, and keep caret offsets as raw code-unit insertion boundaries.
 - A shared soft-wrap boundary belongs to the following visual row; hard-line and absolute text-end carets use the row-end blank cell.
 - Home, End, Up, Down, Left, and Right use the same insertion-point mapping, including one-press transitions across soft wraps.
+- During vertical movement onto a shared soft-wrap row, clamp the aimed display column to its last occupied cell so the preceding row remains reachable; preserve the original goal column and do not clamp hard-line or absolute final-row ends.
 - A row-end blank may occupy the right `PAD_X` padding cell; framing must preserve exact row width and must never truncate the caret marker or emit an ellipsis for that cell.
 - Preserve grapheme-cluster safety and the existing hardware/fake cursor marker contract without reading cursor settings in the extension.
 - Unit tests cover empty, middle, end, wide-grapheme, hard-newline, and full-wrap-row positions; real-terminal E2E covers both hardware-cursor settings and arrow-key movement.

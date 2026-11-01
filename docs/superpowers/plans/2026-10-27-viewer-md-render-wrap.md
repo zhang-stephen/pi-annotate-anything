@@ -1,7 +1,7 @@
 ---
 title: Viewer Markdown, Word Wrap, Pill Restyle, and Comment Caret - Implementation Plan
 status: in-progress
-progress: 0/9
+progress: 1/9
 spec: ../specs/2026-10-23-viewer-md-render-wrap-design.md
 ---
 
@@ -18,7 +18,8 @@ The existing token store and payload pipeline remain intact; only the composer l
 **Spec:** `docs/superpowers/specs/2026-10-23-viewer-md-render-wrap-design.md`, including the 2026-10-27 current-pill and comment-caret supplements plus the post-merge `^` correction.
 
 **Execution:** Worktree `.pi/worktrees/viewer-md-render-wrap/`, branch `viewer-md-render-wrap`.
-No implementation has started.
+Task 1 is implemented, reviewed, and committed locally; Task 2 is next.
+Push and final integration wait for user-confirmed real-terminal E2E.
 
 ## Global constraints
 
@@ -69,7 +70,7 @@ No implementation has started.
 Original done documents: [Comment Input Cursor Movement - Design](../specs/2026-10-22-comment-cursor-design.md) and [Comment Input Cursor Movement - Plan](2026-10-22-comment-cursor.md).
 This task changes only their caret-cell and soft-wrap ownership decisions, replacing left-of-insertion cells with insertion-point rendering while preserving their hardware-cursor contract and full-row no-truncation requirements; the originals remain unchanged.
 
-- [ ] **Step 1: Write failing insertion-caret and full-row regression tests**
+- [x] **Step 1: Write failing insertion-caret and full-row regression tests**
 
 Replace assertions that codify the old left-of-insertion model and pin at least these cases:
 
@@ -88,21 +89,22 @@ Replace the old up-to-full-row-boundary fixture with absolute-end and hard-newli
 Expect the full-row caret in the right-padding cell, exact 80-column rows, no ellipsis, and no lost marker.
 Add a focused `frameCommentBox()` test proving only the marker-bearing row may use that extra cell and unfocused output remains byte-identical after ANSI stripping.
 
-- [ ] **Step 2: Run the focused tests and confirm RED**
+- [x] **Step 2: Run the focused tests and confirm RED**
 
 Run `node --test test/tui/comment-input.test.ts test/viewer/comment-mode.test.ts test/tui/card-chrome.test.ts test/viewer/viewer.test.ts`.
 Expect failures on the old left-character caret, previous-row boundary ownership, and last-interior-cell full-row behavior.
 
-- [ ] **Step 3: Implement the insertion-point model without losing the earlier regression fixes**
+- [x] **Step 3: Implement the insertion-point model without losing the earlier regression fixes**
 
 Change `cursorCellAt()` to return the grapheme at the insertion column and return a blank cell after the row at end, following the pi-tui Editor model.
 Make shared soft-wrap boundaries select the following row while hard-line and absolute text-end carets stay on their current row; keep `cursorCol` as the insertion display column.
 Change `caretAtRowColumn()` to return the target grapheme's start offset, make Home target the bare row start and End the row end, and align vertical goal placement with the same mapping.
+For vertical movement onto a shared soft-wrap row, clamp the aimed display column to its last occupied cell while preserving the original goal column; do not clamp hard-line or absolute final-row ends.
 Preserve pure grapheme stepping for Left / Right and update all comments that currently describe the caret as painting the cluster it ends.
 In `frameCommentBox()`, allow exactly one extra cell only on the `CURSOR_MARKER` row and reduce its right padding by that cell; all other rows keep the existing truncation budget and both padding cells.
 Keep `CURSOR_MARKER + renderFakeCursor()` unchanged so hardware and fake cursor modes remain TUI-owned.
 
-- [ ] **Step 4: Run focused and full verification**
+- [x] **Step 4: Run focused and full verification**
 
 Run the Step 2 command, the full suite, and typecheck.
 Expect all insertion-point, one-press transition, exact-width, and pre-existing annotation tests to pass.
@@ -111,7 +113,7 @@ Expect all insertion-point, one-press transition, exact-width, and pre-existing 
 
 In the minimal real-terminal sandbox, verify an empty comment, mid-text insertion, and end-of-text show the caret at the insertion point, including a blank cell to the right of the last typed character.
 Repeat with wide graphemes, both hardware-cursor settings, full wrapped rows, and arrow / Home / End movement; confirm no ellipsis, border overflow, or swallowed one-press wrap transition.
-After user confirmation, update bookkeeping and commit `fix(viewer): place comment caret at insertion point`.
+~~After user confirmation, update bookkeeping and commit `fix(viewer): place comment caret at insertion point`.~~ The user later required local commits for every task after automated verification and review; focused E2E moves to the final acceptance pass under the amendment below.
 
 ### Task 2: Restyle composer pills without changing payload identity
 
@@ -496,3 +498,9 @@ Do not substitute tmux or unit tests for terminal-dependent acceptance and do no
 
 After user approval, update final checkboxes, set plan `progress: 9/9` and `status: done`, set the linked spec `status: done`, and move both paths to the STATUS Done section in the same commit.
 Commit `docs: document viewer rendering acceptance` with the README and completion records, then follow the separate branch-finishing workflow for rebase, fast-forward integration, and worktree cleanup.
+
+## Amendment (post-merge): local task commits and final E2E
+
+The user requires every task to be committed locally after implementation, automated verification, and review.
+Real-terminal E2E remains mandatory before push and final integration.
+Task 1 focused E2E is deferred to Task 9, so its Step 5 remains unchecked until that acceptance pass.
