@@ -6,7 +6,7 @@ This directory is layered; the dependency direction is one-way: `core <- tui <- 
 
 - `core/` -- pure logic, no host imports (`@earendil-works/*`): selection, file-range, file-index, search, store, message, transform.
 - `tui/` -- reusable TUI widgets, may import host packages and `core/`: card-chrome, display, comment-input, editor, path-completion.
-- `viewer/` -- the annotation viewer feature, may import `core/` and `tui/`: viewer (AnnotateCard shell), state (reducer), movement, search-mode, comment-mode, layout, line-style, markdown (scanMarkdown: verbatim-verified Markdown scanner), status-line.
+- `viewer/` -- the annotation viewer feature, may import `core/` and `tui/`: viewer (AnnotateCard shell), state (reducer), movement, search-mode, comment-mode, layout, line-style, markdown (scanMarkdown: verbatim-verified Markdown scanner), wrap (buildVisualLayout: raw-mapped word wrap with raw/visual column mapping), status-line.
 - `index.ts` (repo root) -- the composition root; the only module that wires layers together.
 
 ## Rules
