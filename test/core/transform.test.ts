@@ -2,7 +2,7 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 
 import { AnnotationStore } from "../../src/core/store.ts";
-import { formatPayload, tokenLabel } from "../../src/core/message.ts";
+import { ANNOTATION_ICON, formatPayload, tokenLabel } from "../../src/core/message.ts";
 import { expandTokens, findTokenMatches, lastTokenIn } from "../../src/core/transform.ts";
 import type { Range, VisualMode } from "../../src/core/selection.ts";
 
@@ -30,7 +30,7 @@ function draft(opts: {
 }
 
 function added(store: AnnotationStore, opts: Parameters<typeof draft>[0]) {
-  const base = tokenLabel(opts.absPath, CWD, range(opts.startLine, opts.endLine), opts.mode ?? "line");
+  const base = tokenLabel(opts.absPath, range(opts.startLine, opts.endLine), opts.mode ?? "line");
   return store.add(draft(opts), base);
 }
 
@@ -196,10 +196,10 @@ test("findTokenMatches returns no matches for absent tokens or an empty token li
 test("findTokenMatches: a prefix token does not shadow its longer form", () => {
   // Longest-first alternation: at the long token's position the whole long
   // token matches, never its shorter prefix.
-  const matches = findTokenMatches("see [a.ts:1-2] and [a.ts:1-2 ~2]", ["[a.ts:1-2]", "[a.ts:1-2 ~2]"]);
+  const matches = findTokenMatches("see [a.ts:1-2] and [a.ts:1-2~2]", ["[a.ts:1-2]", "[a.ts:1-2~2]"]);
   assert.deepEqual(matches, [
     { token: "[a.ts:1-2]", index: 4 },
-    { token: "[a.ts:1-2 ~2]", index: 19 },
+    { token: "[a.ts:1-2~2]", index: 19 },
   ]);
 });
 
@@ -218,4 +218,46 @@ test("lastTokenIn returns null when no token occurs in the text", () => {
   assert.equal(lastTokenIn("anything", []), null);
   // Token-like text that matches no listed token is not a match.
   assert.equal(lastTokenIn("see [c.ts:9-9] here", ["[a.ts:1-2]"]), null);
+});
+
+// NF-bearing tokens (the pill label carries the annotation icon glyph) ------
+
+const PILL = `[${ANNOTATION_ICON} a.ts:10-20]`;
+const PILL2 = `[${ANNOTATION_ICON} a.ts:10-20~2]`;
+
+test("findTokenMatches locates NF-bearing tokens and keeps longest-first shadowing", () => {
+  const text = `see ${PILL} and ${PILL2}`;
+  const matches = findTokenMatches(text, [PILL, PILL2]);
+  assert.deepEqual(matches, [
+    { token: PILL, index: 4 },
+    { token: PILL2, index: text.indexOf(PILL2) },
+  ]);
+});
+
+test("expandTokens expands an NF-bearing token to the unchanged payload", () => {
+  const store = new AnnotationStore();
+  const opts = {
+    absPath: "/repo/src/a.ts",
+    startLine: 9,
+    endLine: 19,
+    snapshot: "line ten\nline twenty\n",
+    comment: "icon pill",
+  };
+  const d = added(store, opts);
+  assert.ok(d.token.includes(ANNOTATION_ICON), "the live token carries the NF icon");
+  const payload = payloadFor(opts, CWD);
+  // Payload identity: the path stays cwd-relative exactly as before.
+  assert.ok(payload.startsWith("In `src/a.ts` (lines 10-20):"), payload);
+
+  const result = expandTokens(`look ${d.token} now`, store, CWD);
+  assert.deepEqual(result, { changed: true, text: `look\n\n${payload}\n\n now` });
+});
+
+test("lastTokenIn picks the rightmost NF-bearing token", () => {
+  const text = `fix ${PILL} then recheck [${ANNOTATION_ICON} b.ts:3-4] done`;
+  const tokens = [PILL, `[${ANNOTATION_ICON} b.ts:3-4]`];
+  assert.deepEqual(lastTokenIn(text, tokens), {
+    token: tokens[1],
+    index: text.indexOf(tokens[1]),
+  });
 });

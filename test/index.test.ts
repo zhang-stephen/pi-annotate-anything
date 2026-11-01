@@ -17,6 +17,7 @@ import type { EditorComponent, EditorTheme, TUI } from "@earendil-works/pi-tui";
 
 import { annotateExtension } from "../index.ts";
 import { AnnotateEditor } from "../src/tui/editor.ts";
+import { ANNOTATION_ICON } from "../src/core/message.ts";
 import type { Range, VisualMode } from "../src/core/selection.ts";
 
 // EditorFactory is not re-exported from the package root; derive it the
@@ -383,6 +384,28 @@ test("card close with pending pills leaves the editor factory untouched", async 
       1,
       "closing with pending pills must keep the editor installed",
     );
+  } finally {
+    rmSync(fixture.dir, { recursive: true, force: true });
+  }
+});
+
+test("the pasted pill is icon + basename + range, regardless of where the file lives", async () => {
+  const fixture = writeFixture();
+  try {
+    const session = stubSession();
+    annotateExtension(session.pi, true);
+    fireSessionStart(session);
+
+    const running = openCard(session, fixture.path);
+    const card = session.cards[0]!;
+    card.onAnnotate({ startLine: 0, startCol: 0, endLine: 0, endCol: 5 }, "char", "needs review");
+    card.done();
+    await running;
+
+    // The pill label never qualifies the basename (even though the fixture
+    // lives outside the session cwd, where payloads stay absolute).
+    assert.strictEqual(session.pasted[0], `[${ANNOTATION_ICON} notes.ts:1:1-1:5]`);
+    assert.ok(!session.pasted[0]!.includes(fixture.dir), "the pill carries no directory part");
   } finally {
     rmSync(fixture.dir, { recursive: true, force: true });
   }

@@ -110,7 +110,7 @@ export function annotateExtension(pi: ExtensionAPI, fuzzy: boolean): void {
             const snapshot = extractRange(loaded.lines, range);
             const draft = store.add(
               { absPath: loaded.path, range, mode, snapshot, comment },
-              tokenLabel(loaded.path, ctx.cwd, range, mode),
+              tokenLabel(loaded.path, range, mode),
             );
             ctx.ui.pasteToEditor(draft.token);
             ctx.ui.notify(`Annotation added: ${draft.token}`);

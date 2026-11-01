@@ -2,6 +2,7 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import { visibleWidth, type EditorComponent } from "@earendil-works/pi-tui";
 import { recolorTokens, withComposerJumpBack, withTokenRecolor } from "../../src/tui/editor.ts";
+import { ANNOTATION_ICON } from "../../src/core/message.ts";
 
 // Visible marker wrapper for content assertions (per task brief).
 const marker = (s: string) => `<${s}>`;
@@ -35,9 +36,28 @@ test("recolorTokens returns the input unchanged when no token matches", () => {
 });
 
 test("recolorTokens: prefix token does not shadow its longer form", () => {
-  const line = "see [a.ts:1-2] and [a.ts:1-2 ~2]";
-  const out = recolorTokens(line, ["[a.ts:1-2]", "[a.ts:1-2 ~2]"], marker);
-  assert.equal(out, "see <[a.ts:1-2]> and <[a.ts:1-2 ~2]>");
+  const line = "see [a.ts:1-2] and [a.ts:1-2~2]";
+  const out = recolorTokens(line, ["[a.ts:1-2]", "[a.ts:1-2~2]"], marker);
+  assert.equal(out, "see <[a.ts:1-2]> and <[a.ts:1-2~2]>");
+});
+
+// NF-bearing pills (the label carries the shared annotation icon glyph) ------
+
+const NF_PILL = `[${ANNOTATION_ICON} a.ts:10-20]`;
+const NF_PILL2 = `[${ANNOTATION_ICON} a.ts:10-20~2]`;
+
+test("recolorTokens: longest-first keeps the NF-bearing suffixed token whole", () => {
+  const line = `see ${NF_PILL} and ${NF_PILL2}`;
+  const out = recolorTokens(line, [NF_PILL, NF_PILL2], marker);
+  assert.equal(out, `see <${NF_PILL}> and <${NF_PILL2}>`);
+});
+
+test("recolorTokens preserves visible width for an NF-bearing pill", () => {
+  const line = `annotate ${NF_PILL} now`;
+  const recolored = recolorTokens(line, [NF_PILL], inverse);
+  assert.equal(visibleWidth(recolored), visibleWidth(line));
+  // Stripping the escapes must yield the original line, icon included.
+  assert.equal(recolored.replace(/\x1b\[[0-9;]*m/g, ""), line);
 });
 
 test("withTokenRecolor decorates render output and returns the same instance", () => {

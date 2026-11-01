@@ -6,7 +6,7 @@
 import type { Range, VisualMode } from "./selection.ts";
 
 export interface Draft {
-  token: string; // "[a.ts:10-20]" or "[a.ts:10-20 ~2]"
+  token: string; // "[<icon> a.ts:10-20]" or "[<icon> a.ts:10-20~2]"
   absPath: string;
   range: Range;
   mode: VisualMode;
@@ -15,10 +15,10 @@ export interface Draft {
 }
 
 const FIRST_SUFFIX = 2;
-const SUFFIX_PATTERN = /^(.*) ~(\d+)\]$/;
+const SUFFIX_PATTERN = /^(.*)~(\d+)\]$/;
 
-// Strips a trailing " ~N" disambiguation suffix: "[a.ts:10-20 ~2]" ->
-// "[a.ts:10-20]"; tokens without a suffix pass through unchanged.
+// Strips a trailing "~N" collision suffix: "[<icon> a.ts:10-20~2]" ->
+// "[<icon> a.ts:10-20]"; tokens without a suffix pass through unchanged.
 function baseOf(token: string): string {
   const m = SUFFIX_PATTERN.exec(token);
   return m ? m[1] + "]" : token;
@@ -28,12 +28,13 @@ export class AnnotationStore {
   private drafts = new Map<string, Draft>();
 
   // Adds a draft under baseToken, or the next free "~N" variant of it when
-  // the base (or a prior variant) is already taken by a live draft.
+  // the base (or a prior variant) is already taken by a live draft. The
+  // suffix sits flush against the range ("...:10-20~2"), no space.
   add(draft: Omit<Draft, "token">, baseToken: string): Draft {
     const base = baseOf(baseToken);
     let token = base;
     for (let n = FIRST_SUFFIX; this.drafts.has(token); n++) {
-      token = `${base.slice(0, -1)} ~${n}]`;
+      token = `${base.slice(0, -1)}~${n}]`;
     }
     const stored: Draft = { ...draft, token };
     this.drafts.set(token, stored);

@@ -1,6 +1,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 
+import { ANNOTATION_ICON, tokenLabel } from "../../src/core/message.ts";
 import type { Range } from "../../src/core/selection.ts";
 import { AnnotationStore, type Draft } from "../../src/core/store.ts";
 
@@ -33,8 +34,20 @@ test("add: identical base annotated twice gets a ~2 suffix, third gets ~3", () =
   const t2 = store.add(draft("/a.ts", rangeA, "snap", "two"), "[a.ts:10-20]").token;
   const t3 = store.add(draft("/a.ts", rangeA, "snap", "three"), "[a.ts:10-20]").token;
   assert.equal(t1, "[a.ts:10-20]");
-  assert.equal(t2, "[a.ts:10-20 ~2]");
-  assert.equal(t3, "[a.ts:10-20 ~3]");
+  assert.equal(t2, "[a.ts:10-20~2]");
+  assert.equal(t3, "[a.ts:10-20~3]");
+});
+
+test("add: equal basenames in different directories collide and get the compact ~2 suffix", () => {
+  const store = new AnnotationStore();
+  // tokenLabel no longer qualifies the basename, so drafts of /repo/one/a.ts
+  // and /repo/two/a.ts produce the same base token; the store disambiguates.
+  const base = tokenLabel("/repo/one/a.ts", rangeA, "line");
+  const t1 = store.add(draft("/repo/one/a.ts", rangeA, "snap", "one"), base).token;
+  const t2 = store.add(draft("/repo/two/a.ts", rangeA, "snap", "two"), base).token;
+  assert.equal(t1, `[${ANNOTATION_ICON} a.ts:10-20]`);
+  assert.equal(t2, `[${ANNOTATION_ICON} a.ts:10-20~2]`);
+  assert.ok(!t2.includes(" ~"), "the collision suffix must have no preceding space");
 });
 
 test("add: suffix numbering reuses freed slots without colliding with live drafts", () => {
@@ -74,8 +87,8 @@ test("get: finds suffixed drafts by their exact token", () => {
   const store = new AnnotationStore();
   const t1 = store.add(draft("/a.ts", rangeA, "snap", "one"), "[a.ts:10-20]").token;
   const t2 = store.add(draft("/a.ts", rangeA, "snap", "two"), "[a.ts:10-20]").token;
-  assert.equal(t2, "[a.ts:10-20 ~2]");
-  assert.equal(store.get("[a.ts:10-20 ~3]"), undefined);
+  assert.equal(t2, "[a.ts:10-20~2]");
+  assert.equal(store.get("[a.ts:10-20~3]"), undefined);
   assert.equal(store.get(t1)?.comment, "one");
   assert.equal(store.get(t2)?.comment, "two");
 });
@@ -108,7 +121,7 @@ test("pruneFromText: keeps only drafts whose token appears as a substring of the
     "before [a.ts:10-20] after",
     "[b.ts:1-3] at line start",
     "truncated [b.ts:1- should not match",
-    "[c.ts:10-20 ~2] would be a different token",
+    "[c.ts:10-20~2] would be a different token",
   ].join("\n");
   store.pruneFromText(text);
   assert.deepEqual(store.list().map((d) => d.token), [t1, t2]);
@@ -124,7 +137,7 @@ test("pruneFromText: a suffixed token is not kept by its base appearing alone", 
   assert.equal(store.get(t2), undefined);
   // Re-annotating the same base reuses the now-free ~2 slot, no collision.
   const t3 = store.add(draft("/a.ts", rangeA, "snap", "again"), "[a.ts:10-20]").token;
-  assert.equal(t3, "[a.ts:10-20 ~2]");
+  assert.equal(t3, "[a.ts:10-20~2]");
   store.pruneFromText(`text [a.ts:10-20] and ${t3}`);
   assert.deepEqual(store.list().map((d) => d.token), [t1, t3]);
 });

@@ -1,7 +1,7 @@
 ---
 title: Viewer Markdown, Word Wrap, Pill Restyle, and Comment Caret - Implementation Plan
 status: in-progress
-progress: 1/9
+progress: 2/9
 spec: ../specs/2026-10-23-viewer-md-render-wrap-design.md
 ---
 
@@ -18,7 +18,7 @@ The existing token store and payload pipeline remain intact; only the composer l
 **Spec:** `docs/superpowers/specs/2026-10-23-viewer-md-render-wrap-design.md`, including the 2026-10-27 current-pill and comment-caret supplements plus the post-merge `^` correction.
 
 **Execution:** Worktree `.pi/worktrees/viewer-md-render-wrap/`, branch `viewer-md-render-wrap`.
-Task 1 is implemented, reviewed, and committed locally; Task 2 is next.
+Tasks 1 and 2 are implemented, reviewed, and committed locally; Task 3 is next.
 Push and final integration wait for user-confirmed real-terminal E2E.
 
 ## Global constraints
@@ -121,7 +121,7 @@ Repeat with wide graphemes, both hardware-cursor settings, full wrapped rows, an
 - Modify `src/core/message.ts`, `src/core/store.ts`, `src/viewer/viewer.ts`, and `index.ts`.
 - Modify `test/core/message.test.ts`, `test/core/store.test.ts`, `test/core/transform.test.ts`, `test/tui/editor.test.ts`, and `test/index.test.ts`.
 
-- [ ] **Step 1: Write failing label, collision, transform, and recolor tests**
+- [x] **Step 1: Write failing label, collision, transform, and recolor tests**
 
 Use the exported `ANNOTATION_ICON` in expected strings rather than duplicating the glyph literal.
 Pin at least these assertions:
@@ -132,28 +132,29 @@ assert.equal(tokenLabel("/repo/src/a.ts", range(9, 4, 9, 11), "char"), `[${ANNOT
 assert.equal(tokenLabel("/etc/hosts", range(9, 0, 19, 0), "line"), `[${ANNOTATION_ICON} hosts:10-20]`);
 ```
 
-Add two same-range drafts for `/repo/one/a.ts` and `/repo/two/a.ts` and expect tokens `[icon a.ts:10-10]` and `[icon a.ts:10-10~2]`, with no space before `~2`.
+Add two same-range drafts for `/repo/one/a.ts` and `/repo/two/a.ts` and expect tokens ~~`[icon a.ts:10-10]` and `[icon a.ts:10-10~2]`~~ `[icon a.ts:10-20]` and `[icon a.ts:10-20~2]`, with no space before `~2`.
+The corrected example follows the authoritative spec because same-range multi-line selections collapse to the shared line range rather than `10-10`.
 Keep the existing `formatPayload()` tests unchanged to prove payload paths remain `src/a.ts` or `/etc/hosts`.
 Add NF-bearing `findTokenMatches()`, `expandTokens()`, `lastTokenIn()`, longest-first `recolorTokens()`, and visible-width preservation tests.
 
-- [ ] **Step 2: Run the focused tests and confirm RED**
+- [x] **Step 2: Run the focused tests and confirm RED**
 
 Run `node --test test/core/message.test.ts test/core/store.test.ts test/core/transform.test.ts test/tui/editor.test.ts`.
 Expect failures on the old directory-qualified labels and old ` ~N` suffix spelling.
 
-- [ ] **Step 3: Implement the shared glyph and basename label**
+- [x] **Step 3: Implement the shared glyph and basename label**
 
 Export `ANNOTATION_ICON = "\u{F075}"` from `src/core/message.ts` and keep `PENDING_ICON` in `viewer.ts` as an alias so existing viewer imports and tests remain valid.
 Change the signature to `tokenLabel(absPath: string, range: Range, mode: VisualMode): string`, use `path.basename(absPath)`, and update `index.ts` plus test callers.
 Change store suffix parsing and generation from ` ~N` to `~N`, preserving the next-free-number behavior among live drafts.
 Reword the stale MVP-era header comment so it describes the current token and payload contracts rather than an immutable token-format freeze.
 
-- [ ] **Step 4: Run focused and full verification**
+- [x] **Step 4: Run focused and full verification**
 
 Run the Step 2 command, then `node --test test/*.test.ts test/**/*.test.ts` and `npx tsc --noEmit`.
 Expect all tests and typecheck to pass.
 
-- [ ] **Step 5: Review and commit**
+- [x] **Step 5: Review and commit**
 
 Update bookkeeping and commit `feat(composer): restyle annotation pills` with the code, tests, and SDD updates.
 

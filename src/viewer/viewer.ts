@@ -19,7 +19,7 @@ import { completionCandidates, renderCompletionClosing, renderCompletionDivider,
 import { INVERSE_OFF, INVERSE_ON, cursorCellAt, wrapCommentLines } from "../tui/comment-input.ts";
 import { commentBoxWrapWidth } from "./comment-mode.ts";
 import { rawColToDisplayCol, rawColsToDisplayCols, sliceWindow, tabExpanded } from "../tui/display.ts";
-import { displayPath } from "../core/message.ts";
+import { ANNOTATION_ICON, displayPath } from "../core/message.ts";
 import { compilePattern, findMatches } from "../core/search.ts";
 import { clampPosition, normalize } from "../core/selection.ts";
 import type { Range, VisualMode } from "../core/selection.ts";
@@ -37,11 +37,12 @@ import type { StatusLineInput } from "./status-line.ts";
 // draft's start line so the gutter counts sum to the title bar's (N) (spec
 // section 3). Lines a draft covers without starting there show the dim
 // CONTINUATION_MARK instead; a line that both starts a draft and continues
-// another keeps the icon (start wins). The icon glyph is WIDER than one cell
+// another keeps the icon (start wins). The icon is the shared ANNOTATION_ICON
+// (also the composer pill glyph, core/message.ts) and is WIDER than one cell
 // in many patched fonts (wcwidth says 1, the glyph bleeds right), so a spacer
 // cell separates it from the count digit; on true NF Mono fonts the spacer
 // just looks like a gap.
-export const PENDING_ICON = "\u{F075}"; // nf-fa-comment
+export const PENDING_ICON = ANNOTATION_ICON;
 // Continuation marker: a dim vertical bar centered in the marker field.
 export const CONTINUATION_MARK = "\u{2502}"; // box drawings light vertical
 

@@ -2,6 +2,7 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 
 import {
+  ANNOTATION_ICON,
   rangeLabel,
   displayPath,
   tokenLabel,
@@ -58,24 +59,31 @@ test("displayPath: path with spaces is preserved verbatim", () => {
   assert.equal(displayPath("/repo/my docs/a file.ts", "/repo"), "my docs/a file.ts");
 });
 
-test("tokenLabel: line-wise multi-line uses the compact range", () => {
-  assert.equal(tokenLabel("/repo/src/a.ts", "/repo", range(9, 0, 19, 40), "line"), "[src/a.ts:10-20]");
+test("tokenLabel: line-wise multi-line is icon, basename, compact range", () => {
+  assert.equal(tokenLabel("/repo/src/a.ts", range(9, 0, 19, 40), "line"), `[${ANNOTATION_ICON} a.ts:10-20]`);
 });
 
 test("tokenLabel: line-wise single line has one number", () => {
-  assert.equal(tokenLabel("/repo/src/a.ts", "/repo", range(9, 0, 9, 12), "line"), "[src/a.ts:10]");
+  assert.equal(tokenLabel("/repo/src/a.ts", range(9, 0, 9, 12), "line"), `[${ANNOTATION_ICON} a.ts:10]`);
 });
 
 test("tokenLabel: char-wise multi-line uses line:col pairs", () => {
-  assert.equal(tokenLabel("/repo/src/a.ts", "/repo", range(9, 4, 11, 19), "char"), "[src/a.ts:10:5-12:19]");
+  assert.equal(tokenLabel("/repo/src/a.ts", range(9, 4, 11, 19), "char"), `[${ANNOTATION_ICON} a.ts:10:5-12:19]`);
 });
 
 test("tokenLabel: char-wise single line keeps columns", () => {
-  assert.equal(tokenLabel("/repo/src/a.ts", "/repo", range(9, 4, 9, 11), "char"), "[src/a.ts:10:5-10:11]");
+  assert.equal(tokenLabel("/repo/src/a.ts", range(9, 4, 9, 11), "char"), `[${ANNOTATION_ICON} a.ts:10:5-10:11]`);
 });
 
-test("tokenLabel: file outside cwd uses the absolute path", () => {
-  assert.equal(tokenLabel("/etc/hosts", "/repo", range(9, 0, 19, 0), "line"), "[/etc/hosts:10-20]");
+test("tokenLabel: file outside cwd still labels by basename alone", () => {
+  assert.equal(tokenLabel("/etc/hosts", range(9, 0, 19, 0), "line"), `[${ANNOTATION_ICON} hosts:10-20]`);
+});
+
+test("tokenLabel: the same basename in different directories yields the identical label", () => {
+  const one = tokenLabel("/repo/one/a.ts", range(9, 0, 19, 40), "line");
+  const two = tokenLabel("/repo/two/a.ts", range(9, 0, 19, 40), "line");
+  assert.equal(one, `[${ANNOTATION_ICON} a.ts:10-20]`);
+  assert.equal(one, two);
 });
 
 test("formatPayload: char-wise payload with comment matches the layout", () => {

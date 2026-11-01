@@ -1,12 +1,19 @@
 // Pure payload and label formatting for annotations. All displayed
 // numbers are 1-based; internal positions are 0-based (see selection.ts).
-// Formats are contract-fixed: the token label is rendered in the composer
-// pill (editor.ts) and the payload is injected into the conversation
-// (transform.ts), so the exact strings here are part of the MVP contract.
+// Two string contracts live here. The token label is the composer pill's
+// display text: editor.ts recoloring and transform.ts's alt+o lookup match
+// it by exact substring, and store.ts appends its "~N" collision suffixes,
+// so any label restyle must keep every generated label exact-match stable.
+// The payload is the block injected into the conversation (transform.ts);
+// its layout stays stable because the model reads and quotes it back.
 
 import path from "node:path";
 
 import type { Range, VisualMode } from "./selection.ts";
+
+// The Nerd Font annotation glyph shared by composer pills (tokenLabel) and
+// the viewer's pending gutter marker (viewer.ts PENDING_ICON alias).
+export const ANNOTATION_ICON = "\u{F075}"; // nf-fa-comment
 
 // Markdown fence language tags keyed by file extension. Unlisted
 // extensions fall back to "" (a bare ``` fence, i.e. plain text).
@@ -63,18 +70,22 @@ export function displayPath(absPath: string, cwd: string): string {
   return rel;
 }
 
-// Compact form without the "lines" word: "[src/a.ts:10-20]",
-// "[src/a.ts:10]", "[src/a.ts:10:5-12:19]", "[src/a.ts:10:5-10:11]".
-export function tokenLabel(absPath: string, cwd: string, range: Range, mode: VisualMode): string {
-  const p = displayPath(absPath, cwd);
+// Compact pill label: "[<icon> <basename><range>]", e.g. "[<icon> a.ts:10-20]".
+// The basename alone keeps pills short and cwd-independent; identical
+// basenames from different directories produce identical labels, which
+// store.ts disambiguates with its "~N" suffix.
+export function tokenLabel(absPath: string, range: Range, mode: VisualMode): string {
+  const base = path.basename(absPath);
   const s = range.startLine + 1;
   const e = range.endLine + 1;
   if (mode === "char") {
     // endCol prints as-is: 0-based exclusive slice bound == 1-based inclusive
     // column of the last selected char.
-    return `[${p}:${s}:${range.startCol + 1}-${e}:${range.endCol}]`;
+    return `[${ANNOTATION_ICON} ${base}:${s}:${range.startCol + 1}-${e}:${range.endCol}]`;
   }
-  return isSingleLine(range) ? `[${p}:${s}]` : `[${p}:${s}-${e}]`;
+  return isSingleLine(range)
+    ? `[${ANNOTATION_ICON} ${base}:${s}]`
+    : `[${ANNOTATION_ICON} ${base}:${s}-${e}]`;
 }
 
 export function formatPayload(input: {
