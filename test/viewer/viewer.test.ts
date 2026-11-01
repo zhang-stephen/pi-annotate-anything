@@ -480,13 +480,14 @@ test("comment editor box keeps its fixed width while typing", () => {
   const after = h.card.render(80).map(strip);
   assert.equal(after[2], before[2]); // identical top border: same fixed width
   assert.equal(after[3], "│ 3     │ hi " + " ".repeat(57) + " │" + " ".repeat(6) + " │");
-  // The caret sits ON the last typed grapheme - the cluster the caret
-  // offset ENDS (pi-tui's CURSOR_MARKER followed by the fake-cursor-wrapped
-  // cell; the TUI resolves the pair into the positioned hardware cursor, or
-  // the old inverse cell when its showHardwareCursor flag is off).
+  // The caret sits at the insertion point AFTER the last typed grapheme -
+  // the row-end blank cell (pi-tui's CURSOR_MARKER followed by the
+  // fake-cursor-wrapped blank; the TUI resolves the pair into the
+  // positioned hardware cursor, or the old inverse cell when its
+  // showHardwareCursor flag is off).
   h.card.focused = true;
   const raw = h.card.render(80);
-  assert.ok(raw[3].includes(CURSOR_MARKER + renderFakeCursor("i")), "caret cell on the last typed grapheme");
+  assert.ok(raw[3].includes(CURSOR_MARKER + renderFakeCursor(" ")), "caret cell is the blank after the last typed grapheme");
 });
 
 // Comment box caret (pi-tui's Focusable contract) --------------------------------
@@ -506,7 +507,7 @@ const caretOf = (row: string) => {
   return { col: visibleWidth(row.slice(0, at)), tail: row.slice(at + CURSOR_MARKER.length) };
 };
 
-test("comment box caret: focused card puts the marker on the painted caret cell", () => {
+test("comment box caret: focused card puts the marker at the insertion column", () => {
   const h = makeCard({ lines: ["abc", "def", "ghi", "jkl", "mno"] });
   h.card.handleInput("v");
   h.card.handleInput("c");
@@ -514,23 +515,23 @@ test("comment box caret: focused card puts the marker on the painted caret cell"
   h.card.focused = true;
   const raw = h.card.render(80);
   const { col, tail } = caretOf(raw[3]);
-  assert.ok(tail.startsWith(renderFakeCursor("i")), "fake-wrapped last-typed grapheme rides the marker");
-  // The marker's display column is the caret cell in the plain row: the
-  // last typed grapheme 'i' itself (the strip is marker-safe).
+  assert.ok(tail.startsWith(renderFakeCursor(" ")), "fake-wrapped blank rides the marker: the insertion point after 'i'");
+  // The marker's display column is the caret's insertion column: right of
+  // the last typed grapheme 'i' (the strip is marker-safe).
   const plain = strip(raw[3]);
-  assert.equal(col, plain.indexOf("hi") + 1);
+  assert.equal(col, plain.indexOf("hi") + 2);
 });
 
-test("comment box caret: the marker wraps the whole grapheme the caret sits on", () => {
+test("comment box caret: the marker wraps the whole grapheme at the insertion column", () => {
   const h = makeCard({ lines: ["abc", "def", "ghi", "jkl", "mno"] });
   h.card.handleInput("v");
   h.card.handleInput("c");
   h.card.handleInput("\u4e2d\u6587");
-  h.card.handleInput("\x1b[D"); // left: the caret offset now ENDS \u4e2d, so it paints that cell
+  h.card.handleInput("\x1b[D"); // left: the insertion point between the two wide chars
   h.card.focused = true;
   const raw = h.card.render(80);
   const { tail } = caretOf(raw[3]);
-  assert.ok(tail.startsWith(renderFakeCursor("\u4e2d")), "wide char taken whole as the caret cell");
+  assert.ok(tail.startsWith(renderFakeCursor("\u6587")), "wide char taken whole as the caret cell");
 });
 
 test("comment box caret: unfocused card emits no caret bytes at all", () => {
@@ -555,24 +556,49 @@ test("comment box caret: the caret sequences add no visible width", () => {
   assert.equal(focusedRow, unfocusedRow);
 });
 
-test("comment box caret: a caret at a full wrapped row's end stays on the last interior cell", () => {
-  // Regression: the caret cell used to be APPENDED past a row that filled
-  // the interior, so the box renderer truncated the row ("..." artifact)
-  // and dropped the caret cell with its marker - the caret went invisible
-  // exactly when up/down landed on a full row's end.
+test("comment box caret: a caret at a full wrapped row's absolute end uses the right-padding cell", () => {
+  // The insertion caret at a full row's end is the row-end blank cell: the
+  // frame reserves exactly that cell out of the marker row's right padding,
+  // so the row keeps its exact width - no truncation artifact, no ellipsis,
+  // no lost marker (the old model painted the last interior cell instead).
   const h = makeCard({ lines: ["abc", "def", "ghi", "jkl", "mno"] });
   h.card.handleInput("v");
   h.card.handleInput("c");
-  h.card.handleInput("b".repeat(120)); // two full rows (wrap width 60); caret on row 2's end
-  h.card.render(80); // steady state: the reducer wraps at the rendered width
-  h.card.handleInput("\x1b[A"); // up: goal col 60 lands on row 1's end, a FULL row
+  h.card.handleInput("b".repeat(120)); // two full rows (wrap width 60); caret at the absolute end
+  h.card.focused = true;
+  const raw = h.card.render(80);
+  const bare = raw.map(strip);
+  assert.ok(!bare.some((r) => r.includes("...")), "no truncation artifact on any wrapped row");
+  const { col, tail } = caretOf(raw[4]);
+  assert.ok(tail.startsWith(renderFakeCursor(" ")), "the caret cell is the row-end blank");
+  assert.equal(bare[3], "│ 3     │ " + "b".repeat(60) + " │" + " ".repeat(6) + " │", "first full row stays plain");
+  assert.equal(bare[4], "│ 4     │ " + "b".repeat(60) + " │" + " ".repeat(6) + " │", "the blank rides the right padding cell");
+  assert.equal(col, bare[4].lastIndexOf("b") + 1, "the marker sits right of the last interior cell");
+  for (const row of raw) assert.equal(visibleWidth(row), 80);
+  // The caret bytes change no visible cell: stripped, focused equals unfocused.
+  h.card.focused = false;
+  assert.deepEqual(h.card.render(80).map(strip), bare);
+});
+
+test("comment box caret: a caret at a hard-newline row end uses the right-padding cell", () => {
+  // The caret at a hard line's end stays on that row (no following soft
+  // row): its cell is the row-end blank, carved out of the marker row's
+  // right padding, while the next row renders plain below it.
+  const h = makeCard({ lines: ["abc", "def", "ghi", "jkl", "mno"] });
+  h.card.handleInput("v");
+  h.card.handleInput("c");
+  h.card.handleInput("b".repeat(60)); // one full row (wrap width 60)
+  h.card.handleInput("\x1b[106;5u"); // ctrl+j: hard newline; the caret lands after it
+  h.card.handleInput("\x1b[D"); // left: back onto the hard-line end, row 0's blank cell
   h.card.focused = true;
   const raw = h.card.render(80);
   const bare = raw.map(strip);
   assert.ok(!bare.some((r) => r.includes("...")), "no truncation artifact on any wrapped row");
   const { col, tail } = caretOf(raw[3]);
-  assert.ok(tail.startsWith(renderFakeCursor("b")), "the caret cell is the full row's last grapheme");
-  assert.equal(col, bare[3].lastIndexOf("b"), "the marker sits on the last interior cell");
+  assert.ok(tail.startsWith(renderFakeCursor(" ")), "the caret cell is the hard line's row-end blank");
+  assert.equal(bare[3], "│ 3     │ " + "b".repeat(60) + " │" + " ".repeat(6) + " │", "the blank rides the right padding cell");
+  assert.equal(bare[4], "│ 4     │" + " ".repeat(62) + "│" + " ".repeat(6) + " │", "the empty next row stays plain");
+  assert.equal(col, bare[3].lastIndexOf("b") + 1);
   for (const row of raw) assert.equal(visibleWidth(row), 80);
 });
 

@@ -6,7 +6,7 @@
 // never import pi theme modules; AnnotateCard maps the active pi Theme to
 // the ChromeColors record.
 
-import { sliceByColumn, truncateToWidth, visibleWidth } from "@earendil-works/pi-tui";
+import { CURSOR_MARKER, sliceByColumn, truncateToWidth, visibleWidth } from "@earendil-works/pi-tui";
 
 
 // Blank columns reserved inside the left and right borders of every framed
@@ -48,12 +48,14 @@ function topBorder(width: number, title: string | undefined): string {
   return "╭─ " + kept + " " + dashes + "╮";
 }
 
-// One inner row: PAD_X blank columns inside each border, content padded with
-// spaces to the full display width (ANSI-aware via visibleWidth), the whole
-// row background-filled so nothing behind the panel bleeds through.
-function innerRow(content: string, width: number, colors: ChromeColors): string {
-  const pad = " ".repeat(Math.max(0, width - 2 - 2 * PAD_X - visibleWidth(content)));
-  return colors.bg(colors.border("│") + " ".repeat(PAD_X) + content + pad + " ".repeat(PAD_X) + colors.border("│"));
+// One inner row: PAD_X blank columns inside each border (rightPad overrides
+// the right one, for the caret row that lends its padding cell to the
+// row-end blank insertion cell), content padded with spaces to the full
+// display width (ANSI-aware via visibleWidth), the whole row
+// background-filled so nothing behind the panel bleeds through.
+function innerRow(content: string, width: number, colors: ChromeColors, rightPad: number = PAD_X): string {
+  const pad = " ".repeat(Math.max(0, width - 2 - PAD_X - rightPad - visibleWidth(content)));
+  return colors.bg(colors.border("│") + " ".repeat(PAD_X) + content + pad + " ".repeat(rightPad) + colors.border("│"));
 }
 
 function bottomBorder(width: number): string {
@@ -78,10 +80,20 @@ export function framePanel(rows: string[], width: number, opts: PanelOptions): s
 // Inner lines are truncated to the padded content budget (width minus the
 // two borders and the PAD_X padding; ANSI-aware, with the pi-tui default
 // ellipsis), padded to full width, and every row is background-filled.
+// Exception - the focused caret row: a line carrying pi-tui's CURSOR_MARKER
+// may be ONE display column wider than the budget (the row-end blank
+// insertion cell after a full wrapped row; see comment-input's
+// cursorCellAt): its budget grows by exactly that cell and its right
+// padding shrinks by it, so the row keeps the exact frame width, the marker
+// is never truncated, and no ellipsis is emitted. Every marker-free line
+// keeps the plain budget and both padding cells.
 export function frameCommentBox(lines: string[], width: number, colors: ChromeColors, title: string): string[] {
   const inner = width - 2 - 2 * PAD_X;
   const out: string[] = [colors.bg(colors.border(topBorder(width, title)))];
-  for (const line of lines) out.push(innerRow(truncateToWidth(line, inner), width, colors));
+  for (const line of lines) {
+    const caretExtra = line.includes(CURSOR_MARKER) ? 1 : 0;
+    out.push(innerRow(truncateToWidth(line, inner + caretExtra), width, colors, PAD_X - caretExtra));
+  }
   out.push(colors.bg(colors.border(bottomBorder(width))));
   return out;
 }

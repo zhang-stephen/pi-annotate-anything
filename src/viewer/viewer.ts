@@ -523,9 +523,10 @@ export class AnnotateCard implements Component, Focusable {
     // the reducer's row movement uses, so painted rows and caret placement
     // agree. This ONE width is also the box renderer's truncation budget
     // (frameCommentBox truncates at boxW minus the same border and padding
-    // numbers), so focused rows never measure wider than it and never
-    // truncate - the caret cell is always an existing row cell (see
-    // withCaret), so nothing is ever appended past the interior.
+    // numbers), so focused rows never measure wider than it - except the
+    // caret row's single row-end blank cell (withCaret below), which
+    // frameCommentBox carves out of the marker row's right padding instead
+    // of truncating.
     const box = this.state.comment;
     const boxW = Math.min(contentW, EDITOR_BOX_MAX_WIDTH);
     const interiorW = commentBoxWrapWidth(contentW);
@@ -553,12 +554,16 @@ export class AnnotateCard implements Component, Focusable {
   // cursor there (pi's showHardwareCursor setting on, its own flag) and
   // resolves to the same inverse cell the painted caret used when the
   // setting is off - the resolver, not this component, follows the setting.
-  // The cell is the whole grapheme cluster the caret offset ENDS: the cell
-  // left of the caret's insertion column (cursorCellAt). A wrap boundary
-  // offset paints the ending row's last cell and one cluster step further
-  // the next row's first cell, so one Right/Left press always visibly moves
-  // the caret across a soft wrap; the cell always exists inside the row, so
-  // a focused row never grows past the interior.
+  // The cell is the grapheme AT the caret's insertion column (cursorCellAt):
+  // the cluster the aimed-at column falls in, or the row-end blank cell
+  // when the insertion point sits after a full row. A wrap boundary caret
+  // belongs to the following row (wrapCommentLines) and paints its first
+  // cell, while one cluster step back paints the previous row's last cell,
+  // so one Right/Left press always visibly moves the caret across a soft
+  // wrap. The row-end blank makes the composed row one cell wider than the
+  // interior; frameCommentBox reserves exactly that cell out of the marker
+  // row's right padding, so the focused row never truncates and never
+  // overflows the frame.
   private withCaret(row: string, col: number): string {
     if (!this.focused) return row;
     const { before, cell, after } = cursorCellAt(row, col);

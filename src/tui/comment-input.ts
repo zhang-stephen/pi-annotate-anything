@@ -84,21 +84,20 @@ function graphemeEndAfter(text: string, index: number): number {
 }
 
 // Absolute caret offset for display column `col` within the row text.slice(rowStart,
-// rowEnd): the END offset of the cluster covering that column. A caret offset
-// paints the cluster it ENDS (cursorCellAt), so targeting the end puts the
-// caret ON the aimed-at cell - a bare row start would paint the PREVIOUS
-// row's last cell instead, visually absorbing a movement step. A column
-// inside a 2-column cluster aims at that whole cluster (never split); a
-// column at or past the row's width aims at the row end (the last cluster's
-// end). Mirror of the caret-to-column walk in wrapCommentLines, so placement
-// round-trips.
+// rowEnd): the START offset of the cluster covering that column - the
+// insertion point before the aimed-at grapheme, which cursorCellAt paints
+// as the caret cell. A column inside a 2-column cluster aims at that whole
+// cluster (never split); a column at or past the row's width aims at the
+// row end (the insertion point after the last cluster - the row-end blank
+// cell). Column 0 therefore targets the bare row start. Mirror of the
+// caret-to-column walk in wrapCommentLines, so placement round-trips.
 function caretAtRowColumn(text: string, rowStart: number, rowEnd: number, col: number): number {
   let width = 0;
   for (const seg of GRAPHEMES.segment(text)) {
     if (seg.index >= rowEnd) break;
     if (seg.index < rowStart) continue;
     const cw = clusterWidth(seg.segment);
-    if (width + cw > col) return seg.index + seg.segment.length;
+    if (width + cw > col) return seg.index;
     width += cw;
   }
   return rowEnd;
@@ -120,10 +119,11 @@ export function reduceComment(state: CommentState, key: CommentKey, wrapWidth: n
       return { state: { text: text.slice(0, start) + text.slice(at), caret: start } };
     }
     // Left/right are PURE cluster stepping in offset space - no (row, cell)
-    // round-trip. Soft-wrap crossing falls out of the caret model (see
-    // cursorCellAt): the wrap boundary offset paints the previous row's last
-    // cell and one cluster step further paints the next row's first cell, so
-    // every press visibly moves the caret with no boundary special case.
+    // round-trip. Soft-wrap crossing falls out of the insertion-caret model
+    // (see cursorCellAt): a boundary offset belongs to the following row and
+    // paints its first cell, while one cluster step back paints the previous
+    // row's last cell, so every press visibly moves the caret with no
+    // boundary special case.
     case "left": {
       if (at === 0) return { state };
       return { state: { text, caret: graphemeStartBefore(text, at) } };
@@ -134,16 +134,17 @@ export function reduceComment(state: CommentState, key: CommentKey, wrapWidth: n
     }
     case "home":
     case "end": {
-      // Edges of the CURRENT wrapped row (soft or hard): home to the row's
-      // first cell, end to its last. Boundary carets belong to the row that
-      // ends there (wrapCommentLines' rule), so end-of-row addresses that
-      // row, not the next one. The targets are END offsets of the edge
-      // clusters - the offsets that PAINT on those cells (caretAtRowColumn;
-      // a bare row start would paint the previous row's last cell) - so
-      // sitting on a row's first cell makes home a no-op.
+      // Bare edges of the CURRENT wrapped row (soft or hard): home to the
+      // row's first insertion column (its start offset - cursorCellAt paints
+      // the row's first grapheme there), end to the insertion point after
+      // its last cluster (its end offset - the row-end blank cell). A caret
+      // on a shared soft-wrap boundary belongs to the FOLLOWING row
+      // (wrapCommentLines), so home there is a no-op and end moves to that
+      // row's end; hard-line and text-end carets already sit on their row's
+      // end, so end is a no-op there.
       const wrapped = wrapCommentLines(text, wrapWidth, at);
       const target = key.kind === "home"
-        ? caretAtRowColumn(text, wrapped.rowStarts[wrapped.cursorRow], wrapped.rowEnds[wrapped.cursorRow], 0)
+        ? wrapped.rowStarts[wrapped.cursorRow]
         : wrapped.rowEnds[wrapped.cursorRow];
       if (target === at) return { state }; // already there: bit-for-bit no-op
       return { state: { text, caret: target } };
@@ -153,7 +154,10 @@ export function reduceComment(state: CommentState, key: CommentKey, wrapWidth: n
       const wrapped = wrapCommentLines(text, wrapWidth, at);
       const target = wrapped.cursorRow + (key.kind === "up" ? -1 : 1);
       // First/last row: no-op (the remembered goal column survives, matching
-      // the boundary no-ops above).
+      // the boundary no-ops above). The goal column aims through the same
+      // insertion-point mapping as horizontal motion: the caret lands before
+      // the cluster covering that column (caretAtRowColumn), or at the row's
+      // end blank when the column is past its width.
       if (target < 0 || target >= wrapped.lines.length) return { state };
       const goal = state.goalCol ?? wrapped.cursorCol;
       return { state: { text, caret: caretAtRowColumn(text, wrapped.rowStarts[target], wrapped.rowEnds[target], goal), goalCol: goal } };
@@ -174,8 +178,9 @@ export interface WrappedComment {
   // row-relative caret placement (home/end, up/down, row edges) is exact.
   rowStarts: number[];
   rowEnds: number[];
-  // Row containing the text cursor, and the cursor's display column within
-  // that row (equal to the row's width when the cursor sits at its end).
+  // Row containing the text cursor, and the caret's insertion display
+  // column within that row (equal to the row's width when the insertion
+  // point sits at the row end - the row-end blank cell).
   cursorRow: number;
   cursorCol: number;
 }
@@ -184,9 +189,12 @@ export interface WrappedComment {
 // cursor (a raw code-unit offset into `text`) in the wrapped grid. Rows break
 // at newlines (hard) and just before the first grapheme cluster that would
 // overflow `width` (soft); a cluster that does not fit (a wide character, an
-// emoji sequence) starts the next row instead of being split. A cursor on a
-// row boundary belongs to the row that ends there, so the caret paints that
-// row's LAST cell - the cluster the boundary offset ends (cursorCellAt).
+// emoji sequence) starts the next row instead of being split. A caret on a
+// shared soft-wrap boundary belongs to the FOLLOWING row - the insertion
+// point after one row's last cluster is the point before the next row's
+// first cluster, so it renders there. A caret at a hard-line end or the
+// absolute text end has no following soft row and stays on its row at the
+// row-end blank cell (cursorCol = the row's width).
 export function wrapCommentLines(text: string, width: number, cursor: number): WrappedComment {
   const w = Math.max(1, width);
   const lines: string[] = [];
@@ -215,40 +223,52 @@ export function wrapCommentLines(text: string, width: number, cursor: number): W
 
   const at = Math.min(Math.max(cursor, 0), text.length); // absolute caret
   let cursorRow = lines.length - 1;
+  // Ownership: the first row the caret is STRICTLY inside wins (a shared
+  // soft-wrap boundary belongs to the following row). Only a hard-line end
+  // or the absolute text end matches no strict row; it falls back to the
+  // last row that contains it (the row-end blank cell).
+  let owned = false;
   for (let k = 0; k < lines.length; k++) {
-    if (rowStarts[k] <= at && at <= rowEnds[k]) {
+    if (rowStarts[k] <= at && at < rowEnds[k]) {
       cursorRow = k;
+      owned = true;
       break;
     }
   }
-  // Display column of the caret cell WITHIN its row: the END column of the
-  // cluster the caret paints (the cluster ending at the caret offset; the
-  // viewer paints the caret cell at this column via cursorCellAt, and
-  // reduceComment seeds its vertical goal from it). Rows break at cluster
-  // boundaries and every caret sits on one, so skipped segments ahead of
-  // the row are whole rows, never half a cluster.
+  if (!owned) {
+    for (let k = 0; k < lines.length; k++) {
+      if (rowStarts[k] <= at && at <= rowEnds[k]) cursorRow = k;
+    }
+  }
+  // Insertion display column WITHIN its row: the summed width of the
+  // clusters entirely before the caret offset (the caret renders at the
+  // left edge of the cell at this column - cursorCellAt; reduceComment
+  // seeds its vertical goal from it). Rows break at cluster boundaries and
+  // every caret sits on one, so skipped segments ahead of the row are whole
+  // rows, never half a cluster.
   let cursorCol = 0;
   const rowStart = rowStarts[cursorRow];
   for (const seg of GRAPHEMES.segment(text)) {
     if (seg.index < rowStart) continue;
-    if (seg.index + seg.segment.length > at) break; // counts only clusters the caret offset ENDS
+    if (seg.index + seg.segment.length > at) break; // counts only clusters wholly before the caret
     cursorCol += clusterWidth(seg.segment);
   }
   return { lines, rowStarts, rowEnds, cursorRow, cursorCol };
 }
 
-// Splits a wrapped row at the caret's display column into the text before
-// the caret CELL, the cell itself, and the text after it. The caret model is
-// "an offset paints the cluster it ENDS": the cell is the cluster occupying
-// the column left of `col` (`col` is the insertion column, so the painted
-// cell always exists inside the row - there is no past-the-end caret cell to
-// overflow the box renderer). By construction then: a wrap boundary offset
-// (a row end equal to the next row's start) paints the ENDING row's last
-// cell, and one cluster step further paints the next row's first cell, so
-// pure cluster stepping visibly crosses a soft wrap in one press. Column 0
-// (the text start, where no cluster ends) paints the FIRST cluster; an empty
-// row paints a single space; a column past the row's width clamps to the
-// LAST cluster.
+// Splits a wrapped row at the caret's insertion column into the text before
+// the insertion cell, the cell itself, and the text after it. The caret model
+// is the INSERTION POINT (mirroring pi-tui's Editor): the cell is the
+// grapheme occupying the column `col` aims at - the cluster whose column
+// range covers `col` (a column inside a 2-column cluster takes the whole
+// cluster, never a split; cursorCol from wrapCommentLines is exactly this
+// column). A column at or past the row's width is the ROW-END BLANK: cell
+// " " placed after the row's text, riding the frame's right padding cell
+// (frameCommentBox allows exactly that one extra cell on the marker row).
+// An empty row is all blank. The one-press soft-wrap transition falls out of
+// the model: a boundary caret belongs to the following row (wrapCommentLines)
+// and paints its first cell, while one cluster step back paints the previous
+// row's last cell.
 // The row must be plain text (comment input filters control characters); the
 // walk is cluster-based, matching the wrap/caret column math: a cluster (a
 // wide character, an emoji sequence) is taken whole, never half. The viewer
@@ -262,19 +282,15 @@ export function cursorCellAt(
   col: number,
 ): { before: string; cell: string; after: string } {
   let width = 0;
-  let last: { index: number; cluster: string } | null = null;
   for (const seg of GRAPHEMES.segment(line)) {
     const cw = clusterWidth(seg.segment);
-    // The cluster covering column col - 1 is the caret cell; col - 1 < 0
-    // (the text start) takes the first cluster.
-    if (col - 1 < width + cw) {
+    // The cluster whose column range covers col is the caret cell (a wide
+    // cluster is taken whole, never split).
+    if (col < width + cw) {
       return { before: line.slice(0, seg.index), cell: seg.segment, after: line.slice(seg.index + seg.segment.length) };
     }
     width += cw;
-    last = { index: seg.index, cluster: seg.segment };
   }
-  if (last !== null) {
-    return { before: line.slice(0, last.index), cell: last.cluster, after: "" };
-  }
+  // At or past the row's width: the row-end blank insertion cell.
   return { before: line, cell: " ", after: "" };
 }

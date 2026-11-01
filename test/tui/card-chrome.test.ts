@@ -1,7 +1,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 
-import { stripTerminalSequences, visibleWidth } from "@earendil-works/pi-tui";
+import { CURSOR_MARKER, renderFakeCursor, stripTerminalSequences, visibleWidth } from "@earendil-works/pi-tui";
 
 import { commentBoxPlacement, draftAtCursor, frameCommentBox, framePanel, spliceRow } from "../../src/tui/card-chrome.ts";
 import type { ChromeColors } from "../../src/tui/card-chrome.ts";
@@ -139,6 +139,46 @@ test("frameCommentBox backgrounds every row and pads wide-char content", () => {
   assert.equal(rows[2], "bg(b(╰──────────╯))");
   // The exact strings above already pin the padding (中文 + 6 padding columns
   // fill the 10-column interior), so no separate width loop is needed here.
+});
+
+// The focused caret row's one extra cell ---------------------------------------
+//
+// An insertion caret at a full row's end paints a blank cell AFTER the row
+// (cursorCellAt), so that one line measures budget + 1 display columns.
+// frameCommentBox lets exactly the CURSOR_MARKER-bearing row exceed the
+// budget by that cell, carving it out of the row's right padding; every
+// marker-free line keeps the plain budget and both padding cells.
+
+test("frameCommentBox lets a CURSOR_MARKER row exceed the budget by exactly the caret cell", () => {
+  // Width 14: interior budget 10. The marker row carries a full 10-column
+  // row plus the row-end blank caret cell (11 visible columns): the row
+  // stays exactly 14 columns with the marker and fake cell intact and no
+  // ellipsis.
+  const caretRow = "b".repeat(10) + CURSOR_MARKER + renderFakeCursor(" ");
+  const rows = frameCommentBox(["b".repeat(10), caretRow], 14, plain, "C");
+  assert.equal(visibleWidth(rows[1]), 14);
+  assert.equal(visibleWidth(rows[2]), 14);
+  assert.equal(stripTerminalSequences(rows[1]), "│ bbbbbbbbbb │");
+  assert.equal(stripTerminalSequences(rows[2]), "│ bbbbbbbbbb │"); // the blank rides the right padding cell
+  assert.ok(rows[2].includes(CURSOR_MARKER), "marker preserved");
+  assert.ok(rows[2].includes(renderFakeCursor(" ")), "fake caret cell preserved");
+  assert.ok(!rows.some((r) => r.includes("...")), "no ellipsis on the caret row");
+});
+
+test("frameCommentBox keeps the plain budget for rows without the marker", () => {
+  // The extra cell is exclusive to the marker-bearing row: an 11-column
+  // marker-free line still truncates to the 10-column budget.
+  const rows = frameCommentBox(["b".repeat(11)], 14, plain, "C");
+  assert.equal(visibleWidth(rows[1]), 14);
+  assert.equal(stripTerminalSequences(rows[1]), "│ bbbbbbb... │");
+});
+
+test("frameCommentBox: a focused caret row strips to the unfocused framing byte-for-byte", () => {
+  // The extra caret cell is invisible once the marker bytes are stripped:
+  // the focused full row's ANSI-stripped output equals the plain row's.
+  const plainRow = frameCommentBox(["b".repeat(10)], 14, plain, "C")[1];
+  const caretRow = frameCommentBox(["b".repeat(10) + CURSOR_MARKER + renderFakeCursor(" ")], 14, plain, "C")[1];
+  assert.equal(stripTerminalSequences(caretRow), stripTerminalSequences(plainRow));
 });
 
 // commentBoxPlacement -----------------------------------------------------------
