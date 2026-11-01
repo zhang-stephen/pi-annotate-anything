@@ -1,7 +1,7 @@
 ---
 title: Viewer Markdown, Word Wrap, Pill Restyle, and Comment Caret - Implementation Plan
 status: in-progress
-progress: 3/9
+progress: 4/9
 spec: ../specs/2026-10-23-viewer-md-render-wrap-design.md
 ---
 
@@ -18,7 +18,7 @@ The existing token store and payload pipeline remain intact; only the composer l
 **Spec:** `docs/superpowers/specs/2026-10-23-viewer-md-render-wrap-design.md`, including the 2026-10-27 current-pill and comment-caret supplements plus the post-merge `^` correction.
 
 **Execution:** Worktree `.pi/worktrees/viewer-md-render-wrap/`, branch `viewer-md-render-wrap`.
-Tasks 1-3 are implemented, reviewed, and committed locally; Task 4 is next.
+Tasks 1-4 are implemented, reviewed, and committed locally; Task 5 is next.
 Push and final integration wait for user-confirmed real-terminal E2E.
 
 ## Global constraints
@@ -221,7 +221,7 @@ Update bookkeeping and commit `feat(tui): add coordinate-preserving display line
 - Create `src/viewer/markdown.ts` and `test/viewer/markdown.test.ts`.
 - Modify `src/AGENTS.md` and `test/architecture.test.ts`.
 
-- [ ] **Step 1: Write failing scanner golden tests**
+- [x] **Step 1: Write failing scanner golden tests**
 
 Assert one `DisplayScanLine` per input raw line for every phase-1 construct:
 
@@ -237,12 +237,12 @@ Cover ATX and setext headings; bold, emphasis, strike, code spans, links, and es
 Include a link-class non-verbatim fixture and malformed input and assert the affected inline span is dropped without throwing or changing line count.
 Add `viewer/markdown.ts` to the architecture sanity list.
 
-- [ ] **Step 2: Run scanner and architecture tests and confirm RED**
+- [x] **Step 2: Run scanner and architecture tests and confirm RED**
 
 Run `node --test test/viewer/markdown.test.ts test/architecture.test.ts`.
 Expect the module and scanner to be absent.
 
-- [ ] **Step 3: Implement `scanMarkdown()`**
+- [x] **Step 3: Implement `scanMarkdown()`**
 
 Export `scanMarkdown(lines: string[]): DisplayScanLine[]` from `src/viewer/markdown.ts`.
 Use `new Marked().lexer(lines.join("\n"))`, locate block token `raw` only at verified raw line boundaries, and derive each line's literal prefix plus raw UTF-16 spans.
@@ -250,12 +250,14 @@ Accept inline token `raw` only through a forward-only verbatim cursor; on mismat
 Skip table tokens and all inline styling inside code, catch lexer failures into an all-plain scan, and never reflow, hide, normalize, or concatenate raw source lines.
 Document the new viewer module in `src/AGENTS.md`.
 
-- [ ] **Step 4: Run focused and full verification**
+- [x] **Step 4: Run focused and full verification**
 
 Run the Step 2 command, the full suite, and typecheck.
 Expect all golden scans and architecture checks to pass.
+Review recorded safe phase-1 degradation for nested emphasis and full/collapsed reference links: nested emphasis may render only its outer italic style, and those reference forms stay plain.
+Cursor-mismatch and lexer-throw branches remain inspection-covered where the current peer lexer cannot construct deterministic public failure fixtures.
 
-- [ ] **Step 5: Review and commit**
+- [x] **Step 5: Review and commit**
 
 Update bookkeeping and commit `feat(viewer): scan markdown without reflowing source`.
 

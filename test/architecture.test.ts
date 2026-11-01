@@ -98,6 +98,7 @@ test("the scan covers the full src module map (guards against a vacuous walk)", 
     "viewer/comment-mode.ts",
     "viewer/layout.ts",
     "viewer/line-style.ts",
+    "viewer/markdown.ts",
     "viewer/status-line.ts",
   ];
   const missing = moved.filter((m) => !walked.has(m));
