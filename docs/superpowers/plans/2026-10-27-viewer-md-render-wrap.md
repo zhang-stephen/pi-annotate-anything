@@ -1,7 +1,7 @@
 ---
 title: Viewer Markdown, Word Wrap, Pill Restyle, and Comment Caret - Implementation Plan
 status: in-progress
-progress: 2/9
+progress: 3/9
 spec: ../specs/2026-10-23-viewer-md-render-wrap-design.md
 ---
 
@@ -18,7 +18,7 @@ The existing token store and payload pipeline remain intact; only the composer l
 **Spec:** `docs/superpowers/specs/2026-10-23-viewer-md-render-wrap-design.md`, including the 2026-10-27 current-pill and comment-caret supplements plus the post-merge `^` correction.
 
 **Execution:** Worktree `.pi/worktrees/viewer-md-render-wrap/`, branch `viewer-md-render-wrap`.
-Tasks 1 and 2 are implemented, reviewed, and committed locally; Task 3 is next.
+Tasks 1-3 are implemented, reviewed, and committed locally; Task 4 is next.
 Push and final integration wait for user-confirmed real-terminal E2E.
 
 ## Global constraints
@@ -164,7 +164,7 @@ Update bookkeeping and commit `feat(composer): restyle annotation pills` with th
 - Modify `src/tui/display.ts` and `src/viewer/line-style.ts`.
 - Create `test/tui/display.test.ts` and `test/viewer/line-style.test.ts`.
 
-- [ ] **Step 1: Write failing display-line and style-composition tests**
+- [x] **Step 1: Write failing display-line and style-composition tests**
 
 Test this exact interface and geometry:
 
@@ -182,33 +182,36 @@ assert.deepEqual(line.spans.at(-1), { start: 6, end: 7, style: "mdBold" });
 Also cover an empty prefix, an ANSI-highlighted base whose visible width is unchanged, unsorted raw spans, and a zero-width raw span being omitted.
 Add `applyStyleSpans()` cases proving Markdown styles compose with `target`, `match`, and `inverse` rather than entering the pending-emphasis precedence race.
 
-- [ ] **Step 2: Run the new tests and confirm RED**
+- [x] **Step 2: Run the new tests and confirm RED**
 
 Run `node --test test/tui/display.test.ts test/viewer/line-style.test.ts`.
 Expect missing exports and missing Markdown style behavior.
 
-- [ ] **Step 3: Implement shared types and `buildDisplayLine()`**
+- [x] **Step 3: Implement shared types and `buildDisplayLine()`**
 
 Move `SpanStyle` and `StyleSpan` to `src/tui/display.ts`, re-export them from `line-style.ts`, and add these Markdown styles: `mdDim`, `mdBold`, `mdItalic`, `mdStrike`, `mdHeading`, `mdLink`, `mdLinkUrl`, `mdCode`, `mdCodeBlock`, `mdCodeBlockBorder`, `mdQuote`, `mdQuoteBorder`, `mdHr`, and `mdListBullet`.
 Define:
 
 ```ts
-export interface RawStyleSpan { startCol: number; endCol: number; style: SpanStyle }
-export interface DisplayScanLine { prefix?: string; prefixStyle?: SpanStyle; spans?: RawStyleSpan[] }
+export type DisplayStyle = SpanStyle | MdSpanStyle
+export interface RawStyleSpan { startCol: number; endCol: number; style: DisplayStyle }
+export interface DisplayScanLine { prefix?: string; prefixStyle?: DisplayStyle; spans?: RawStyleSpan[] }
 export interface DisplayLine { raw: string; text: string; prefixWidth: number; spans: StyleSpan[] }
 export function buildDisplayLine(raw: string, scan?: DisplayScanLine, highlighted?: string): DisplayLine
 ```
+
+~~The initial interface draft placed all Markdown names directly in `SpanStyle`.~~ Review accepted the compatibility refinement that keeps the six legacy names in `SpanStyle`, defines `MdSpanStyle` for Markdown, and uses their `DisplayStyle` union at display boundaries; widening `SpanStyle` itself would require an out-of-scope `viewer.ts` theme-record change in this task.
 
 `highlighted` is the existing per-line tab-expanded ANSI base; otherwise use `tabExpanded(raw)`.
 Sort copies of raw spans, map their columns in one batch, add `prefixWidth`, prepend the prefix and its optional span, and never mutate the scan input.
 Extend `applyStyleSpans()` so every Markdown style composes independently while existing inverse, search, and pending precedence remains unchanged.
 
-- [ ] **Step 4: Run focused and full verification**
+- [x] **Step 4: Run focused and full verification**
 
 Run the Step 2 command, the full suite, and typecheck.
 Expect all tests to pass and no architecture violations.
 
-- [ ] **Step 5: Review and commit**
+- [x] **Step 5: Review and commit**
 
 Update bookkeeping and commit `feat(tui): add coordinate-preserving display lines`.
 

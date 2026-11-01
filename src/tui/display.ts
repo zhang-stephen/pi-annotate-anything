@@ -1,7 +1,9 @@
 // Display-column helpers shared by the viewer and the viewer state
-// machine: tab expansion and the raw-to-display column mapping. A leaf
-// module (depends only on pi-tui) so the viewer state modules can import
-// these without depending back on viewer.ts.
+// machine: tab expansion, the raw-to-display column mapping, the shared
+// span style vocabulary, and buildDisplayLine (raw line + scan plan to the
+// coordinate-preserving render unit). A leaf module (depends only on
+// pi-tui) so the viewer state modules can import these without depending
+// back on viewer.ts.
 
 import { sliceByColumn, visibleWidth } from "@earendil-works/pi-tui";
 
@@ -81,4 +83,100 @@ export function rawColsToDisplayCols(line: string, cols: number[], tabSize: numb
     out[k] = width;
   }
   return out;
+}
+
+// The span style vocabulary shared by the viewer's line painter and the
+// display model. SpanStyle holds the viewer's own emphasis/search styles
+// (the pending-emphasis precedence set); MdSpanStyle holds the Markdown
+// rendering styles, which compose independently of that precedence;
+// DisplayStyle is everything a rendered line may paint.
+export type SpanStyle = "inverse" | "underline" | "target" | "dimUnderline" | "match" | "matchCurrent";
+export type MdSpanStyle =
+  | "mdDim"
+  | "mdBold"
+  | "mdItalic"
+  | "mdStrike"
+  | "mdHeading"
+  | "mdLink"
+  | "mdLinkUrl"
+  | "mdCode"
+  | "mdCodeBlock"
+  | "mdCodeBlockBorder"
+  | "mdQuote"
+  | "mdQuoteBorder"
+  | "mdHr"
+  | "mdListBullet";
+export type DisplayStyle = SpanStyle | MdSpanStyle;
+
+// A paint range over one rendered line's display columns (start inclusive,
+// end exclusive), shared by the viewer painter (applyStyleSpans) and the
+// display model below.
+export interface StyleSpan {
+  start: number;
+  end: number;
+  style: DisplayStyle;
+}
+
+// A styling intent over the raw line in UTF-16 code-unit columns (the
+// Position.col convention of selection.ts), mapped to display columns only
+// at build time so stored coordinates never leave raw space.
+export interface RawStyleSpan {
+  startCol: number;
+  endCol: number;
+  style: DisplayStyle;
+}
+
+// One scanned line's rendering plan: a literal block prefix plus its style
+// and raw-column spans. Produced by the Markdown scanner; plain lines carry
+// no fields at all.
+export interface DisplayScanLine {
+  prefix?: string;
+  prefixStyle?: DisplayStyle;
+  spans?: RawStyleSpan[];
+}
+
+// The coordinate-preserving render unit for one raw line: text is what the
+// renderer prints, prefixWidth is the block prefix's display width, and
+// spans are display-column paint ranges over text (the prefix span, when
+// present, first). Every span column maps back to raw as
+// column - prefixWidth through the line's tab expansion.
+export interface DisplayLine {
+  raw: string;
+  text: string;
+  prefixWidth: number;
+  spans: StyleSpan[];
+}
+
+// Builds the display line for raw: tab-expand it (or reuse highlighted, the
+// per-line tab-expanded ANSI base of raw -- callers guarantee it has raw's
+// visible width and column geometry, so raw columns stay authoritative),
+// prepend the block prefix, and map the scan's raw-column spans to display
+// columns plus the prefix offset. Raw spans are copied, sorted, and mapped
+// in one batch; the scan input is never mutated, and zero-width or
+// clamped-empty spans are dropped. The raw source is never reflowed or
+// rewritten.
+export function buildDisplayLine(raw: string, scan?: DisplayScanLine, highlighted?: string): DisplayLine {
+  const prefix = scan?.prefix ?? "";
+  const prefixWidth = visibleWidth(prefix);
+  const text = prefix + (highlighted ?? tabExpanded(raw));
+  const spans: StyleSpan[] = [];
+  if (prefixWidth > 0 && scan?.prefixStyle) spans.push({ start: 0, end: prefixWidth, style: scan.prefixStyle });
+  const sorted = (scan?.spans ?? [])
+    .filter((s) => s.endCol > s.startCol)
+    .sort((a, b) => a.startCol - b.startCol);
+  if (sorted.length > 0) {
+    // rawColsToDisplayCols needs ascending cols; overlapping spans make the
+    // per-span pairs unsorted, so sort a flat copy and recover each column's
+    // mapping by value (duplicates map identically).
+    const cols = sorted.flatMap((s) => [s.startCol, s.endCol]).sort((a, b) => a - b);
+    const mapped = rawColsToDisplayCols(raw, cols);
+    const display = new Map<number, number>();
+    for (let k = 0; k < cols.length; k++) display.set(cols[k], mapped[k]);
+    for (const s of sorted) {
+      const start = (display.get(s.startCol) ?? 0) + prefixWidth;
+      const end = (display.get(s.endCol) ?? 0) + prefixWidth;
+      if (end > start) spans.push({ start, end, style: s.style });
+    }
+  }
+  return { raw, text, prefixWidth, spans };
 }
