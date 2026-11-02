@@ -31,6 +31,11 @@ pi install npm:pi-annotate-anything
 ## Features
 
 - Overlay card with line numbers, syntax highlighting, a live pending-count title bar, and a vim-style mode badge footer.
+- Word wrap on by default: a long line flows across visual rows instead of scrolling horizontally, breaking after Latin whitespace or punctuation when one fits, between double-width CJK graphemes, and otherwise at the widest whole-grapheme boundary that fits.
+- Raw-faithful Markdown styling for `.md` files: headings, emphasis, inline and fenced code, links, and quote / list block prefixes are painted without reflowing, hiding, or normalizing any source text, so every painted column maps back to the file.
+- Display toggles that keep the cursor on the same raw text: `zw` flips word wrap and `zr` flips Markdown rendering (`zr` is an exact no-op on non-Markdown files); wrap OFF plus render OFF restores the plain source-style view.
+- Visual versus logical motion: with wrap ON the vertical motions (`j` `k`, arrows, `gg`/`G`, page jumps, `{count}G`) step through the wrapped grid one visual row at a time, while `h` `l` keep counting raw characters; with wrap OFF the vertical keys move one logical line per press and the view scrolls horizontally.
+- Ranges stay raw end to end: a selection drawn across wrapped rows or styled Markdown maps back to exact source positions, and the annotation payload quotes raw file text, never rendered decoration.
 - Vim-style `/` search in the viewer: regex + smartcase (case-insensitive unless the pattern has an uppercase letter), jumps to the nearest match as you type, all matches stay highlighted after submit, `n`/`N` hop with wrap messages, `{count}` prefixes work on motions and hops, and backspace at the empty prompt exits like `Esc`.
 - `:` command line in the viewer: `quit` (`:q`) closes the card, `nohlsearch` (`:noh`) clears the search highlight while `n`/`N` keep working, and a bare number (`:7`) jumps like `7G`; a single trailing `!` is ignored (`:q!`), prefixes resolve down to each command's short form (`:noh`, never `:n`), and unknown or malformed input reports vim-style errors (`E492`, `E464`, `E488`).
 - Command completion behind Tab: an enclosed drawer (labeled divider with the cycling count, dim descriptions, closing rule) opens on Tab with the matching commands, further Tabs cycle the selection, and typing closes it keeping the accepted value; this drawer is the surface future sources (paths for `:e`, buffers) plug into.
@@ -62,6 +67,7 @@ Every key is listed per mode; `-` means the key does nothing in that mode. The s
 | --- | --- | --- | --- | --- | --- |
 | `h` `j` `k` `l` / arrows | move the cursor | expand / shrink the selection | - | - | - |
 | `0` / `$` | start / end of the line | same, keeping the anchor | - | - | - |
+| `^` | first non-blank character of the raw line (skips spaces and tabs; a blank line clamps to line end) | same, keeping the anchor | - | - | - |
 | `gg` / `G` | first / last line; `{count}G` jumps to line N | same, keeping the anchor | - | - | - |
 | `ctrl+d` `ctrl+u` / `PgDn` `PgUp` | half / full page | same | - | - | - |
 | `1`-`9` (then digits) | count prefix for `j` `k` `h` `l` `G` `n` `N`, shown in the cmdline row until the motion lands | - | - | - | - |
@@ -79,6 +85,8 @@ Every key is listed per mode; `-` means the key does nothing in that mode. The s
 | `c` | edit the targeted annotation's comment (pre-filled) | comment the selection | - | - | - |
 | `x` | delete the targeted annotation (and its pill) | - | - | - | - |
 | `p` | toggle the hover preview of pending comments | - | - | - | - |
+| `zw` | toggle word wrap (the cursor stays on the same raw text and the viewport offset is preserved) | same, keeping the anchor | - | - | - |
+| `zr` | toggle Markdown rendering (no-op on non-Markdown files) | same, keeping the anchor | - | - | - |
 | `Esc` | - | exit to normal mode | cancel; the cursor returns to where `/` started | cancel; back to normal | cancel the edit |
 
 `q` is unmapped: `:q` is the only way to close the card.
@@ -138,7 +146,6 @@ Label variants:
 
 - **Buffers**: annotate and navigate multiple sources in a single card session.
 - **More vim**: a limited, curated set of additional vim commands (motions and operators that fit the annotation workflow).
-- **Basic Markdown rendering**: render `.md` files with basic formatting (headings, emphasis, lists, code blocks) in the viewer instead of raw text.
 
 ## Development
 
