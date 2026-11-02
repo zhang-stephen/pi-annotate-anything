@@ -5,8 +5,8 @@
 // bordered panel via the card-chrome helpers (framePanel, frameCommentBox,
 // commentBoxPlacement) with the two-row bottom area from status-line.ts
 // (renderStatusLine, renderCommandLine); all chrome colors come from the pi
-// theme passed by the ctx.ui.custom factory, and syntax colors come from
-// pi's highlightCode with the same theme.
+// theme passed by the ctx.ui.custom factory. Non-Markdown syntax colors
+// come from pi's highlightCode; Markdown uses the raw-faithful scanner.
 
 import { getLanguageFromPath, highlightCode } from "@earendil-works/pi-coding-agent";
 import type { Theme } from "@earendil-works/pi-coding-agent";
@@ -192,17 +192,17 @@ export class AnnotateCard implements Component, Focusable {
       // pair (the runtime partitions fg/bg tokens, so swapping them throws;
       // SGR inverse is the only theme-safe inversion).
       matchCurrent: (s) => theme.bold(theme.inverse(theme.bg("searchMatchBg", theme.fg("searchMatchText", s)))),
-      mdDim: (s) => theme.fg("dim", s),
+      mdDim: (s) => this.colors.dim(s),
       mdHeading: (s) => theme.fg("mdHeading", theme.bold(s)),
       mdBold: (s) => theme.bold(s),
       mdItalic: (s) => theme.italic(s),
       mdStrike: (s) => theme.strikethrough(s),
       mdCode: (s) => theme.fg("mdCode", s),
-      mdCodeBlock: (s) => theme.fg("mdCodeBlock", theme.bg("toolPendingBg", s)),
-      mdCodeBlockBorder: (s) => theme.fg("mdCodeBlockBorder", s),
+      mdCodeBlock: (s) => theme.bg("selectedBg", theme.fg("mdCodeBlock", s)),
+      mdCodeBlockBorder: (s) => this.colors.dim(theme.fg("mdCodeBlockBorder", s)),
       mdLink: (s) => theme.fg("mdLink", theme.underline(s)),
-      mdLinkUrl: (s) => theme.fg("mdLinkUrl", s),
-      mdQuote: (s) => theme.fg("mdQuote", theme.italic(s)),
+      mdLinkUrl: (s) => this.colors.dim(theme.fg("mdLinkUrl", s)),
+      mdQuote: (s) => theme.fg("mdQuote", s),
       mdQuoteBorder: (s) => theme.fg("mdQuoteBorder", s),
       mdHr: (s) => theme.fg("mdHr", s),
       mdListBullet: (s) => theme.fg("mdListBullet", s),
@@ -469,10 +469,11 @@ export class AnnotateCard implements Component, Focusable {
       }
     }
     let content = applyStyleSpans(selected ? stripTerminalSequences(row.text) : row.text, spans, this.spanStyles);
-    if (cursorOn && this.state.cursor.line === row.line && this.state.cursor.col >= raw.length && row.endCol === raw.length) {
+    const gutter = row.continuation ? " ".repeat(gutterWidth(this.file.lines.length)) : this.gutter(row.line);
+    if (cursorOn && this.state.cursor.line === row.line && this.state.cursor.col >= raw.length && row.endCol === raw.length
+      && visibleWidth(gutter + content) < contentW) {
       content += INVERSE_ON + " " + INVERSE_OFF;
     }
-    const gutter = row.continuation ? " ".repeat(gutterWidth(this.file.lines.length)) : this.gutter(row.line);
     const rendered = gutter + content + (content.includes("\x1b[") ? "\x1b[0m" : "");
     return rendered + " ".repeat(Math.max(0, contentW - visibleWidth(rendered)));
   }

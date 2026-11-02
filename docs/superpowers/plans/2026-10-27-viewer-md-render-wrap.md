@@ -1,7 +1,7 @@
 ---
 title: Viewer Markdown, Word Wrap, Pill Restyle, and Comment Caret - Implementation Plan
 status: in-progress
-progress: 6/9
+progress: 7/9
 spec: ../specs/2026-10-23-viewer-md-render-wrap-design.md
 ---
 
@@ -18,7 +18,7 @@ The existing token store and payload pipeline remain intact; only the composer l
 **Spec:** `docs/superpowers/specs/2026-10-23-viewer-md-render-wrap-design.md`, including the 2026-10-27 current-pill and comment-caret supplements plus the post-merge `^` correction.
 
 **Execution:** Worktree `.pi/worktrees/viewer-md-render-wrap/`, branch `viewer-md-render-wrap`.
-Tasks 1-6 are implemented, reviewed, and committed locally; Task 7 is next.
+Tasks 1-7 are implemented, reviewed, and committed locally; Task 8 is next.
 Push and final integration wait for user-confirmed real-terminal E2E.
 
 ## Global constraints
@@ -388,8 +388,9 @@ Update bookkeeping and commit `feat(viewer): add visual-row motions and display 
 **Files:**
 - Modify `src/viewer/viewer.ts`, `src/viewer/status-line.ts`, `test/viewer/viewer.test.ts`, and `test/viewer/status-line.test.ts`.
 - Integration correction from Task 5 review: also modify `src/tui/display.ts`, `src/viewer/wrap.ts`, `test/tui/display.test.ts`, and `test/viewer/wrap.test.ts` to unify display text, annotation/Markdown/search spans, and visual slicing on one grapheme-width geometry in wrapped and nowrap modes.
+- Review correction: also modify `src/viewer/movement.ts` so nowrap cursor following includes the current display line's full literal prefix width while preserving raw cursor state.
 
-- [ ] **Step 1: Write failing renderer and resize tests**
+- [x] **Step 1: Write failing renderer and resize tests**
 
 Add Markdown fixtures for every scanner style, nested quote plus list prefixes, code background, links, reference definitions, images, and raw table / HTML / entity text.
 Add regression fixtures with ZWJ or skin-tone emoji before styled spans and adjacent tabs, proving identical raw span targeting in wrapped and nowrap rendering.
@@ -402,12 +403,12 @@ Pin the normal hints to:
 hjkl move  v/V select  / search  n/N next/prev  c/x comment/delete  p preview  zw wrap  zr render  :q close
 ```
 
-- [ ] **Step 2: Run viewer and status-line tests and confirm RED**
+- [x] **Step 2: Run viewer and status-line tests and confirm RED**
 
 Run `node --test test/viewer/viewer.test.ts test/viewer/status-line.test.ts`.
 Expect missing visual rows, Markdown styling, toggles, and hints.
 
-- [ ] **Step 3: Implement cached display modes and visual rendering**
+- [x] **Step 3: Implement cached display modes and visual rendering**
 
 Initialize `wrapOn: true` and `renderOn: true` in the card state.
 Before wiring production rendering, correct the legacy per-code-point display-span divergence identified in Task 5 review so display text, raw-derived spans, and wrap slicing use one whole-grapheme width space with global tab stops; keep ASCII behavior unchanged and update the wrap-side tab-geometry mirror accordingly.
@@ -434,12 +435,15 @@ Use these theme mappings and no unverified color names:
 
 Update the test theme harness for italic and strikethrough and add the normal-mode hints above.
 
-- [ ] **Step 4: Run focused and full verification**
+- [x] **Step 4: Run focused and full verification**
 
 Run the Step 2 command, the full suite, and typecheck.
 Expect all renderer, resize, and equivalence tests to pass.
+After two workers stalled without edits, the controller implemented Task 7 under the user's explicit fallback authorization; glm-5.3 retained independent review.
+Review required `fix(viewer): preserve cursor geometry across display modes` for full-width EOL overflow and nowrap prefix-blind cursor following; the final suite is 707/707.
+Task 8 must add a tall-file stale-scroll clamp fixture and preserve full prefix widths for degenerate nowrap viewports where the wrapped grid's cosmetic prefix is truncated.
 
-- [ ] **Step 5: Review and commit**
+- [x] **Step 5: Review and commit**
 
 Update bookkeeping and commit `feat(viewer): render markdown and wrapped visual rows`.
 
@@ -447,6 +451,7 @@ Update bookkeeping and commit `feat(viewer): render markdown and wrapped visual 
 
 **Files:**
 - Modify `src/viewer/viewer.ts` and `test/viewer/viewer.test.ts`.
+- Task 7 review follow-up: also modify `src/viewer/wrap.ts`, `src/viewer/movement.ts`, `test/viewer/wrap.test.ts`, and `test/viewer/movement.test.ts` to retain full prefix widths for nowrap follow and to cover genuine stale-scroll clamping.
 
 - [ ] **Step 1: Write failing interaction-geometry tests**
 
@@ -455,6 +460,7 @@ Verify selection, pending underline / target emphasis, cursor, and current / ord
 Assert statusline cursor and selection positions remain raw logical positions without a Markdown prefix.
 Anchor the comment editor and hover preview to the correct visual row and display cell, including a continuation row and a zero-horizontal-scroll wrap layout.
 Extend jump-back focus tests so constructor-time checks remain valid and the first actual-width render recenters a wrapped target visual row; retain shortened-file clamping and no-focus opening-at-top behavior.
+Use a tall-file fixture that truly advances scrollTop before a widening resize, and a degenerate nowrap Markdown viewport whose cosmetic wrapped prefix is truncated while cursor follow must still use the full literal prefix.
 
 - [ ] **Step 2: Run interaction tests and confirm RED**
 
@@ -468,6 +474,7 @@ Compute search matches on raw lines exactly as today, then map them through the 
 Map comment and preview anchors with `toVisualPosition()` while keeping their existing raw anchor data and `commentBoxPlacement()` inputs.
 Recenter a pending jump-back focus against the actual first-render layout while preserving the constructor's fail-open raw cursor clamp.
 Keep extraction, pending store identity, statusline coordinates, and comment payload rendering unchanged.
+Carry untruncated per-line prefix geometry for nowrap cursor follow independently of any cosmetic prefix truncation in wrapped rows.
 
 - [ ] **Step 4: Run focused and full verification**
 

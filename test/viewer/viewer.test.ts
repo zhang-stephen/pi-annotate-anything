@@ -265,7 +265,7 @@ test("statusline and cmdline follow the mode: badge in accent, hints in dim", ()
   assert.ok(bare[bare.length - 3].endsWith("1:1 │"));
   assert.ok(bare[bare.length - 2].startsWith("│ hjkl move  v/V select"));
   assert.ok(normal.fgCalls.some((c) => c.token === "accent" && c.text === "-- NORMAL --"));
-  assert.ok(normal.fgCalls.some((c) => c.token === "dim" && c.text === "hjkl move  v/V select  / search  n/N next/prev  c/x comment/delete  p preview  ^ first-non-blank  zw wrap  zr md  :q close"));
+  assert.ok(normal.fgCalls.some((c) => c.token === "dim" && c.text === "hjkl move  v/V select  / search  n/N next/prev  c/x comment/delete  p preview  ^ first-non-blank  zw wrap  zr render  :q close"));
 
   // Visual-char: the statusline carries the selection range as L:C-L:C.
   const visual = makeCard({ lines: ["alpha", "beta"] });
@@ -1697,7 +1697,7 @@ test("Markdown renders every phase-1 token without reflowing raw source lines", 
   for (const token of ["mdHeading", "mdCode", "mdLink", "mdLinkUrl", "mdCodeBlockBorder", "mdQuoteBorder", "mdHr", "mdListBullet", "dim"]) {
     assert.ok(fgTokens.has(token), `Markdown style uses theme token ${token}`);
   }
-  assert.ok(h.bgCalls.some((call) => call.token === "toolPendingBg"));
+  assert.ok(h.bgCalls.some((call) => call.token === "selectedBg"));
   assert.ok(rows.some((row) => row.includes("\x1b[3m")), "italic theme method is used");
   assert.ok(rows.some((row) => row.includes("\x1b[9m")), "strikethrough theme method is used");
   for (const row of rows) assert.equal(visibleWidth(row), 120);
@@ -1755,4 +1755,67 @@ test("continuation gutters stay blank and virtual EOL cursor appears only on the
   assert.ok(!body[0].includes(INVERSE_ON));
   assert.ok(body[1].includes(INVERSE_ON), "logical EOL inverse cell rides on the final visual segment");
   for (const row of body) assert.ok(visibleWidth(row) <= 14);
+});
+
+test("a full-width final segment never overflows when EOL has no free cell", () => {
+  const h = makeCard({ lines: ["abcd"] });
+  h.card.handleInput("$");
+  const rows = h.card.render(14).slice(1, -3);
+  for (const row of rows) assert.equal(visibleWidth(row), 14);
+});
+
+test("nowrap Markdown horizontal follow keeps the cursor visible after a literal prefix", () => {
+  const h = makeCard({ path: "/work/a.md", lines: ["> " + "x".repeat(40)] });
+  turnWrapOff(h.card);
+  h.card.render(30);
+  h.card.handleInput("$");
+  const body = h.card.render(30).slice(1, -3);
+  assert.ok(body.some((row) => row.includes(INVERSE_ON)), "cursor remains inside the horizontal window");
+});
+
+test("wrap-off plus render-off keeps the ASCII raw-view content snapshot", () => {
+  const h = makeCard({ path: "/work/a.md", lines: ["abcdefgh", "xyz"] });
+  turnWrapOff(h.card);
+  h.card.handleInput("z");
+  h.card.handleInput("r");
+  assert.deepEqual(h.card.render(18).slice(1, -3).map(strip), [
+    "│ 1     abcdefgh │",
+    "│ 2     xyz      │",
+  ]);
+});
+
+test("viewer rendering targets the same emoji-tab raw span in wrapped and nowrap modes", () => {
+  const raw = "\u{1F44D}\u{1F3FD}\tX";
+  const underlinedText = (rows: string[]) => {
+    const row = rows.find((candidate) => candidate.includes(UNDERLINE_ON));
+    assert.ok(row, "styled X is visible");
+    const start = row.indexOf(UNDERLINE_ON) + UNDERLINE_ON.length;
+    const end = row.indexOf(UNDERLINE_OFF, start);
+    return strip(row.slice(start, end));
+  };
+  const wrapped = makeCard({ lines: [raw] });
+  wrapped.pending.push({ startLine: 0, startCol: 5, endLine: 0, endCol: 6 });
+  wrapped.card.handleInput("$");
+  const wrappedText = underlinedText(wrapped.card.render(13).slice(1, -3));
+  const nowrap = makeCard({ lines: [raw] });
+  nowrap.pending.push({ startLine: 0, startCol: 5, endLine: 0, endCol: 6 });
+  turnWrapOff(nowrap.card);
+  nowrap.card.render(13);
+  nowrap.card.handleInput("$");
+  const nowrapText = underlinedText(nowrap.card.render(13).slice(1, -3));
+  assert.equal(wrappedText, "X");
+  assert.equal(nowrapText, wrappedText);
+});
+
+test("resize clamps a bottom visual viewport without stale cached rows", () => {
+  const h = makeCard({ lines: ["alpha beta gamma", "second line"] });
+  assert.equal(h.card.render(18).slice(1, -3).length, 5);
+  h.card.handleInput("G");
+  const wideBody = h.card.render(60).slice(1, -3).map(strip);
+  assert.equal(wideBody.length, 2);
+  assert.ok(wideBody[1].includes("second line"));
+  const narrowBody = h.card.render(18).slice(1, -3).map(strip);
+  assert.equal(narrowBody.length, 5);
+  assert.ok(narrowBody[3].includes("second"));
+  assert.ok(narrowBody[4].includes("line"));
 });

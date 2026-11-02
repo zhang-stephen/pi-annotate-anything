@@ -141,8 +141,8 @@ function keepVisibleVisual(state: ViewerState, lines: string[], viewport: Viewer
 // left of the window -> pin to the window's left edge; at or past its right
 // edge -> pin to the window's right edge. Applied to every cursor-moving key.
 // Wrap mode (visualLayout non-null) swaps the vertical half for visual-row
-// following with scrollLeft pinned to 0; the nowrap path below stays the
-// single source of the legacy behavior.
+// following with scrollLeft pinned to 0; the nowrap path below preserves
+// legacy behavior and adds any current display-line prefix offset.
 export function keepVisible(state: ViewerState, lines: string[], viewport: ViewerViewport): ViewerState {
   const layout = visualLayout(state, viewport);
   if (layout !== null) return keepVisibleVisual(state, lines, viewport, layout);
@@ -155,7 +155,8 @@ export function keepVisible(state: ViewerState, lines: string[], viewport: Viewe
   const cw = Math.max(1, viewport.contentWidth);
   const bound = Math.max(0, viewport.maxLineWidth - cw + 1);
   const clampedLeft = Math.min(Math.max(state.scrollLeft ?? 0, 0), bound);
-  const displayCol = rawColToDisplayCol(lines[state.cursor.line] ?? "", state.cursor.col);
+  const firstRow = viewport.display?.current.rows[viewport.display.current.firstRowByLine[state.cursor.line]];
+  const displayCol = (firstRow?.prefixWidth ?? 0) + rawColToDisplayCol(lines[state.cursor.line] ?? "", state.cursor.col);
   let scrollLeft = clampedLeft;
   if (displayCol < scrollLeft) scrollLeft = displayCol;
   if (displayCol >= scrollLeft + cw) scrollLeft = displayCol - cw + 1;
