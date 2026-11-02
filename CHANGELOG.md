@@ -1,5 +1,25 @@
 # Changelog
 
+## [2.2.0](https://github.com/zhang-stephen/pi-annotate-anything/compare/pi-annotate-anything-v2.1.0...pi-annotate-anything-v2.2.0) (2026-11-02)
+
+
+### Features
+
+* **tui:** add coordinate-preserving display lines ([91327aa](https://github.com/zhang-stephen/pi-annotate-anything/commit/91327aa3b7e8476954350814212edc760c2d2da8))
+* **viewer:** add raw-mapped word wrap ([ff441d1](https://github.com/zhang-stephen/pi-annotate-anything/commit/ff441d1b07cc5bcb7723e908cab05af234670442))
+* **viewer:** add visual-row motions and display toggles ([4f4282b](https://github.com/zhang-stephen/pi-annotate-anything/commit/4f4282b6e3268306bbb3e355db926948f5d69cb4))
+* **viewer:** preserve annotation mapping in visual rows ([de10ce2](https://github.com/zhang-stephen/pi-annotate-anything/commit/de10ce207b5d598ad3f6422c3e46e3068f534038))
+* **viewer:** render markdown and wrapped visual rows ([66f63c5](https://github.com/zhang-stephen/pi-annotate-anything/commit/66f63c55ed08f22073467133d74ccef2fc32d379))
+* **viewer:** scan markdown without reflowing source ([29f7d96](https://github.com/zhang-stephen/pi-annotate-anything/commit/29f7d96d9bc1010d8bc8e620b999835cc26526e2))
+
+
+### Bug Fixes
+
+* **viewer:** follow render toggles in target layout ([8bd662a](https://github.com/zhang-stephen/pi-annotate-anything/commit/8bd662a0e715b077cb7316141bc8a1cd0763e4e0))
+* **viewer:** keep wrapped overlays visible ([924cda9](https://github.com/zhang-stephen/pi-annotate-anything/commit/924cda97eb77be75edeca09f5b4ab539d6137e8b))
+* **viewer:** preserve cursor geometry across display modes ([0a39e78](https://github.com/zhang-stephen/pi-annotate-anything/commit/0a39e78e14d9a9315246cee72eb13fe215c923d5))
+* **viewer:** unify wrap grapheme width mapping ([a3bfb4c](https://github.com/zhang-stephen/pi-annotate-anything/commit/a3bfb4cb699f930ecd2673d566b35adde55cac47))
+
 ## [2.1.0](https://github.com/zhang-stephen/pi-annotate-anything/compare/pi-annotate-anything-v2.0.1...pi-annotate-anything-v2.1.0) (2026-11-02)
 
 
