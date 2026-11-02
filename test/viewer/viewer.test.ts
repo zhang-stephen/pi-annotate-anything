@@ -652,8 +652,8 @@ test("comment box caps at 8 rows and keeps the cursor's row visible", () => {
 test("comment box splices occluded rows ANSI-safely: no cut escapes, SGR state carried", () => {
   // A pending-marked, selected line styled with raw SGR runs; the fixed box
   // cuts mid-run, so the right sliver must re-open the carried SGR state.
-  // Nowrap: this is a legacy chrome splice test - wrap's open-below budget
-  // would move the box off the styled row it exists to cut.
+  // Pin the explicit legacy-nowrap guarantee; the wrap counterpart below
+  // covers the same ANSI-splice behavior through a wrapped row.
   const lines = ["a".repeat(70), "second"];
   const h = makeCard({ lines });
   turnWrapOff(h.card);
@@ -673,6 +673,28 @@ test("comment box splices occluded rows ANSI-safely: no cut escapes, SGR state c
   assert.ok(sliverCodes.includes("\x1b[4m") && sliverCodes.includes("\x1b[7m"), `sliver carries SGR state, got: ${JSON.stringify(afterBox)}`);
   // The surviving text closes its underline attribute (no permanent bleed).
   assert.ok(afterBox.includes("\x1b[24m"));
+});
+
+test("comment box splices occluded wrapped rows ANSI-safely: no cut escapes, SGR state carried", () => {
+  // Wrap-mode counterpart of the nowrap splice test: a pending-underlined
+  // line wraps, and the flipped full box lands on its first visual row,
+  // cutting the underline run mid-row; the right sliver must re-open the
+  // carried SGR state and the row must keep its display width.
+  const lines = ["a".repeat(80), "tail"];
+  const h = makeCard({ lines });
+  h.pending.push({ startLine: 0, startCol: 0, endLine: 0, endCol: 80 });
+  h.card.handleInput("v");
+  h.card.handleInput("c");
+  const rows = h.card.render(80);
+  const row = rows[1]; // content row 0 (the styled wrapped line) under the box top border
+  assert.equal(visibleWidth(row), 80); // splice preserves the display width
+  const tail = "aaaaaa"; // row-local cells 64..69 survive right of the 70-cell row
+  assert.equal(strip(row), "\u2502 1 " + PENDING_ICON + " " + "1 " + EDITOR_TOP + tail + " \u2502");
+  assert.ok(!strip(row).includes("\x1b"), "no broken escape sequences survive the splice");
+  const afterBox = row.slice(row.lastIndexOf("\u256e") + 1); // after the box's right border glyph
+  const sliverCodes = afterBox.slice(0, afterBox.indexOf("aa"));
+  assert.ok(sliverCodes.includes("\x1b[4m"), `sliver re-opens the carried underline, got: ${JSON.stringify(afterBox)}`);
+  assert.ok(afterBox.includes("\x1b[24m"), "the surviving text closes its underline attribute");
 });
 
 test("comment box left sliver closes a cut SGR run before the border glyphs", () => {
@@ -1938,7 +1960,7 @@ test("current and ordinary search matches paint their visual segments", () => {
   assert.deepEqual(runs(body[2]), [{ text: "d", current: false }, { text: "h", current: true }]);
 });
 
-test("comment editor anchors below the selection's last covered visual row", () => {
+test("comment editor flips its full box above the selection when the wrapped viewport cannot hold it below", () => {
   // At cw 70 each line wraps after 11 words: line 0 -> rows 0/1, line 2 -> rows 4/5.
   const lines = [
     "alpha ".repeat(14) + "end1",
@@ -1953,14 +1975,20 @@ test("comment editor anchors below the selection's last covered visual row", () 
   h.card.handleInput("j");
   h.card.handleInput("j"); // j rides visual rows: cursor (2,0) on line 2's first visual row 4
   h.card.handleInput("c");
+  h.card.focused = true; // the caret row must be visible, not clipped
   const body = bodyRows(h.card.render(80));
-  assert.equal(boxTopRow(body), 5, "box opens below the selection's last covered visual row (row 4)");
+  // 6 rendered rows cannot hold a 3-row box below row 4, so the box flips
+  // above the selection start (row 0) and lands fully painted: the user must
+  // see the borders, the interior, and the caret they type into.
+  assert.equal(boxTopRow(body), 0, "box flips above the selection's last covered visual row (row 4)");
   // Stripped: the spliced border row carries splice/border SGR bytes, so a
   // raw indexOf measures byte offsets, not display columns.
-  assert.equal(strip(body[5]).indexOf("╭─ Comment"), 2 + 6, "box aligns to the anchor cell with scrollLeft 0");
+  assert.equal(strip(body[0]).indexOf("╭─ Comment"), 2 + 6, "box aligns to the anchor cell with scrollLeft 0");
+  assert.ok(body[1].includes(CURSOR_MARKER + renderFakeCursor(" ")), "caret row paints inside the visible box");
+  assert.ok(strip(body[2]).includes(EDITOR_BOTTOM), "bottom border paints inside the viewport");
 });
 
-test("comment editor anchors below a continuation-row selection start", () => {
+test("comment editor flips above a continuation-row selection start to stay fully visible", () => {
   const lines = ["alpha ".repeat(14) + "end1", "filler"];
   const h = makeCard({ lines });
   h.card.render(80);
@@ -1971,9 +1999,14 @@ test("comment editor anchors below a continuation-row selection start", () => {
   h.card.handleInput("l"); // cursor (0,66): line 0's second visual row, row-local col 0
   h.card.handleInput("v");
   h.card.handleInput("c");
+  h.card.focused = true;
   const body = bodyRows(h.card.render(80));
-  assert.equal(boxTopRow(body), 2, "box opens below the continuation row holding the anchor");
-  assert.equal(strip(body[2]).indexOf("╭─ Comment"), 2 + 6);
+  // 3 rendered rows cannot hold the box below the anchor row 1: it flips to
+  // row 0 and paints borders, interior, and caret in full.
+  assert.equal(boxTopRow(body), 0, "box flips above the continuation row holding the anchor");
+  assert.equal(strip(body[0]).indexOf("╭─ Comment"), 2 + 6);
+  assert.ok(body[1].includes(CURSOR_MARKER + renderFakeCursor(" ")), "caret row paints inside the visible box");
+  assert.ok(strip(body[2]).includes(EDITOR_BOTTOM), "bottom border paints inside the viewport");
 });
 
 test("hover preview anchors to the cursor's visual row and the draft start's visual cell", () => {
@@ -1986,8 +2019,13 @@ test("hover preview anchors to the cursor's visual row and the draft start's vis
   for (let i = 0; i < 68; i++) h.card.handleInput("l"); // cursor (0,68) on visual row 1
   const body = bodyRows(h.card.render(80));
   const top = boxTopRow(body);
-  assert.equal(top, 2, "preview opens below the cursor's visual row (row 1)");
+  // 3 rendered rows cannot hold the box below the cursor's row 1: it flips
+  // above and lands fully painted (read-only: no caret row anywhere).
+  assert.equal(top, 0, "preview flips above the cursor's visual row (row 1) to stay fully visible");
   assert.equal(strip(body[top]).indexOf("╭─ Comment"), 2 + 6 + 2, "box aligns to the draft start's row-local cell");
+  assert.ok(strip(body[1]).includes("│ hi"), "preview comment row paints inside the visible box");
+  assert.ok(strip(body[2]).includes("╰"), "bottom border paints inside the viewport");
+  for (const row of body) assert.ok(!row.includes(CURSOR_MARKER), "read-only preview paints no caret");
 });
 
 test("jump-back focus recenters against the first actual-width render's wrapped layout", () => {

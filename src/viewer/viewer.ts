@@ -728,7 +728,7 @@ export class AnnotateCard implements Component, Focusable {
     if (cursorRow >= 0 && cursorRow < shown.length) {
       shown[cursorRow] = this.withCaret(shown[cursorRow], wrapped.cursorCol);
     }
-    this.paintCommentBox(rows, contentW, shown, boxW, { top: startCell.row, bottom: endCell.row, col: startCell.col }, COMMENT_BOX_TITLE, layout !== null ? this.viewportHeight() : rows.length);
+    this.paintCommentBox(rows, contentW, shown, boxW, { top: startCell.row, bottom: endCell.row, col: startCell.col }, COMMENT_BOX_TITLE);
   }
 
   // The comment box caret (pi-tui's Focusable contract): while the card has
@@ -824,7 +824,7 @@ export class AnnotateCard implements Component, Focusable {
       top: cursorCell.row,
       bottom: cursorCell.row,
       col: startCell.col,
-    }, title, layout !== null ? this.viewportHeight() : rows.length);
+    }, title);
   }
 
   // Resolves one raw anchor position into the comment-box placement space:
@@ -854,11 +854,10 @@ export class AnnotateCard implements Component, Focusable {
   // bottom viewport rows of the covered range, content-local anchor column;
   // see anchorCell), so the editor (selection or cursor) and the preview
   // (cursor row, draft start cell) share one placement path in either
-  // coordinate space. viewH is the placement budget: wrap mode budgets the
-  // full overlay viewport (the box anchors below its anchor's last covered
-  // visual row even when a short file cannot hold it, clipping past the
-  // content area instead of flipping above on a viewport the file does not
-  // fill); nowrap keeps the legacy rendered-rows budget. The editor keeps
+  // coordinate space. The budget is the actual rendered row count in both
+  // coordinate spaces: a box that cannot fit below its anchor flips above
+  // within the rendered rows and always lands fully painted, so the caret
+  // row and borders the user types into are never clipped. The editor keeps
   // the default title; the preview passes its positional "Comment (i/n)"
   // title.
   private paintCommentBox(
@@ -868,21 +867,16 @@ export class AnnotateCard implements Component, Focusable {
     boxW: number,
     anchor: { top: number; bottom: number; col: number },
     title: string = COMMENT_BOX_TITLE,
-    viewH: number = rows.length,
   ): void {
     const box = frameCommentBox(textLines, boxW, this.colors, title);
-    // commentBoxPlacement clamps the box inside the VIEWPORT [0, viewH - boxH]
+    // commentBoxPlacement clamps the box inside the viewport [0, viewH - boxH]
     // and against the content budget, so border, padding, and footer rows
     // stay clear.
-    const place = commentBoxPlacement(anchor.top, anchor.bottom, anchor.col, box.length, boxW, contentW, viewH);
-    // The wrap budget can exceed a short file's rendered rows: pin the box's
-    // first row onto a visible content row so at least its border paints (a
-    // no-op for nowrap, whose budget already equals rows.length).
-    const top = Math.min(place.top, Math.max(0, rows.length - 1));
+    const place = commentBoxPlacement(anchor.top, anchor.bottom, anchor.col, box.length, boxW, contentW, rows.length);
     // Degenerate viewports of 1-2 rows cannot fit the 3-row minimum box; the
     // placement clamps the top, and rows past the viewport stay untouched.
     for (let k = 0; k < box.length; k++) {
-      const idx = top + k;
+      const idx = place.top + k;
       if (idx >= rows.length) continue;
       const base = rows[idx];
       // The left sliver may end mid-SGR-run (e.g. an underline the box edge

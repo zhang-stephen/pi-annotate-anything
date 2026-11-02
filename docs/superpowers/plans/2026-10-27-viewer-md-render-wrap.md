@@ -1,7 +1,7 @@
 ---
 title: Viewer Markdown, Word Wrap, Pill Restyle, and Comment Caret - Implementation Plan
 status: in-progress
-progress: 7/9
+progress: 8/9
 spec: ../specs/2026-10-23-viewer-md-render-wrap-design.md
 ---
 
@@ -18,7 +18,7 @@ The existing token store and payload pipeline remain intact; only the composer l
 **Spec:** `docs/superpowers/specs/2026-10-23-viewer-md-render-wrap-design.md`, including the 2026-10-27 current-pill and comment-caret supplements plus the post-merge `^` correction.
 
 **Execution:** Worktree `.pi/worktrees/viewer-md-render-wrap/`, branch `viewer-md-render-wrap`.
-Tasks 1-7 are implemented, reviewed, and committed locally; Task 8 is next.
+Tasks 1-8 are implemented, reviewed, and committed locally; Task 9 is next.
 Push and final integration wait for user-confirmed real-terminal E2E.
 
 ## Global constraints
@@ -453,7 +453,7 @@ Update bookkeeping and commit `feat(viewer): render markdown and wrapped visual 
 - Modify `src/viewer/viewer.ts` and `test/viewer/viewer.test.ts`.
 - Task 7 review follow-up: also modify `src/viewer/wrap.ts`, `src/viewer/movement.ts`, `test/viewer/wrap.test.ts`, and `test/viewer/movement.test.ts` to retain full prefix widths for nowrap follow and to cover genuine stale-scroll clamping.
 
-- [ ] **Step 1: Write failing interaction-geometry tests**
+- [x] **Step 1: Write failing interaction-geometry tests**
 
 Select across at least one wrap boundary and submit a comment; assert the emitted `Range` is the expected raw UTF-16 range and the snapshot is unchanged raw text.
 Verify selection, pending underline / target emphasis, cursor, and current / ordinary search matches intersect and paint each visual segment correctly with prefixes, tabs, and CJK input.
@@ -462,12 +462,12 @@ Anchor the comment editor and hover preview to the correct visual row and displa
 Extend jump-back focus tests so constructor-time checks remain valid and the first actual-width render recenters a wrapped target visual row; retain shortened-file clamping and no-focus opening-at-top behavior.
 Use a tall-file fixture that truly advances scrollTop before a widening resize, and a degenerate nowrap Markdown viewport whose cosmetic wrapped prefix is truncated while cursor follow must still use the full literal prefix.
 
-- [ ] **Step 2: Run interaction tests and confirm RED**
+- [x] **Step 2: Run interaction tests and confirm RED**
 
 Run `node --test test/viewer/viewer.test.ts`.
 Expect failures where raw line numbers were treated as visual rows or raw columns lacked prefix / segment mapping.
 
-- [ ] **Step 3: Implement shared annotation mapping through visual rows**
+- [x] **Step 3: Implement shared annotation mapping through visual rows**
 
 Make `displaySpan()` prefix-aware in nowrap mode and intersect selection and pending ranges with each `VisualRow`'s `[startCol, endCol)` window in wrap mode.
 Compute search matches on raw lines exactly as today, then map them through the same prefix and segment path before applying interaction styles.
@@ -476,12 +476,14 @@ Recenter a pending jump-back focus against the actual first-render layout while 
 Keep extraction, pending store identity, statusline coordinates, and comment payload rendering unchanged.
 Carry untruncated per-line prefix geometry for nowrap cursor follow independently of any cosmetic prefix truncation in wrapped rows.
 
-- [ ] **Step 4: Run focused and full verification**
+- [x] **Step 4: Run focused and full verification**
 
 Run the Step 2 command, the full suite, and typecheck.
 Expect all interaction, payload, overlay, and focus tests to pass.
+Review required `fix(viewer): keep wrapped overlays visible` after strengthened tests exposed short-file editor/preview clipping to only a top border; placement now budgets actual rendered rows, full caret/interior/bottom visibility is pinned, and wrap ANSI-splice coverage passes.
+The final suite is 726/726, and the independent re-review is APPROVED.
 
-- [ ] **Step 5: Review and commit**
+- [x] **Step 5: Review and commit**
 
 Update bookkeeping and commit `feat(viewer): preserve annotation mapping in visual rows`.
 
