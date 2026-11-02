@@ -1,6 +1,6 @@
 ---
 title: Viewer Markdown Rendering and Word Wrap - Design
-status: in-progress
+status: done
 plan: ../plans/2026-10-27-viewer-md-render-wrap.md
 ---
 

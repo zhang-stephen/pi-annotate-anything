@@ -1,7 +1,7 @@
 ---
 title: Viewer Markdown, Word Wrap, Pill Restyle, and Comment Caret - Implementation Plan
-status: in-progress
-progress: 8/9
+status: done
+progress: 9/9
 spec: ../specs/2026-10-23-viewer-md-render-wrap-design.md
 ---
 
@@ -18,8 +18,8 @@ The existing token store and payload pipeline remain intact; only the composer l
 **Spec:** `docs/superpowers/specs/2026-10-23-viewer-md-render-wrap-design.md`, including the 2026-10-27 current-pill and comment-caret supplements plus the post-merge `^` correction.
 
 **Execution:** Worktree `.pi/worktrees/viewer-md-render-wrap/`, branch `viewer-md-render-wrap`.
-Tasks 1-8 are implemented, reviewed, and committed locally; Task 9 is next.
-Push and final integration wait for user-confirmed real-terminal E2E.
+All nine tasks are implemented, reviewed, and accepted through combined automated and real-terminal E2E.
+Tasks 1 and 2 are published; Tasks 3-9 remain scheduled for the final release.
 
 ## Global constraints
 
@@ -109,7 +109,7 @@ Keep `CURSOR_MARKER + renderFakeCursor()` unchanged so hardware and fake cursor 
 Run the Step 2 command, the full suite, and typecheck.
 Expect all insertion-point, one-press transition, exact-width, and pre-existing annotation tests to pass.
 
-- [ ] **Step 5: Confirm focused real-terminal E2E, review, and commit**
+- [x] **Step 5: Confirm focused real-terminal E2E, review, and commit**
 
 In the minimal real-terminal sandbox, verify an empty comment, mid-text insertion, and end-of-text show the caret at the insertion point, including a blank cell to the right of the last typed character.
 Repeat with wide graphemes, both hardware-cursor settings, full wrapped rows, and arrow / Home / End movement; confirm no ellipsis, border overflow, or swallowed one-press wrap transition.
@@ -492,19 +492,19 @@ Update bookkeeping and commit `feat(viewer): preserve annotation mapping in visu
 **Files:**
 - Modify `README.md`, `docs/superpowers/specs/2026-10-23-viewer-md-render-wrap-design.md`, `docs/superpowers/plans/2026-10-27-viewer-md-render-wrap.md`, and `docs/superpowers/STATUS.md` only for final status and completion records.
 
-- [ ] **Step 1: Update user documentation**
+- [x] **Step 1: Update user documentation**
 
 Document default word wrap and Markdown styling, `zw`, `zr`, and `^` in Features and Keys, and remove Basic Markdown from Roadmap.
 Prepare the NF-glyph basename pill README update as a separate Task 2 release documentation change rather than bundling it into the Tasks 3-9 release.
 State that source selections and payload ranges remain raw and that wrap OFF plus render OFF restores the source-style view.
 Do not add a version bump or changelog entry.
 
-- [ ] **Step 2: Run the complete automated gate**
+- [x] **Step 2: Run the complete automated gate**
 
 Run `node --test test/*.test.ts test/**/*.test.ts` and `npx tsc --noEmit`.
 Expect all tests, document-index checks, architecture checks, and typecheck to pass.
 
-- [ ] **Step 3: Prepare `/tmp` fixtures and run manual E2E**
+- [x] **Step 3: Prepare `/tmp` fixtures and run manual E2E**
 
 Create Markdown and plain-text fixtures only under `/tmp` with nested quote / list blocks, fenced code, links, a reference definition, an image, a table, long Latin tokens, CJK and wide characters at exact boundaries, tabs, and character ranges crossing wraps.
 Launch the minimal sandbox from the worktree with `PI_CODING_AGENT_DIR=/tmp/pi-sandbox-home pi -e ./index.ts`.
@@ -512,12 +512,13 @@ Verify default ON behavior, live `zw` / `zr`, `zr` on non-Markdown input, resize
 Verify the new pill glyph, basename collisions, cursor alignment, composer wrapping, and unchanged payload paths; do not claim the existing wrapped-token recolor limitation is fixed without evidence.
 Recheck the comment caret at empty, middle, absolute-end, wide-grapheme, hard-newline, and full-wrap-row positions with both hardware-cursor settings.
 
-- [ ] **Step 4: Require real-terminal verification**
+- [x] **Step 4: Require real-terminal verification**
 
 The user must confirm the E2E in a real terminal, explicitly including kitty key repeat on `j` / `k` in wrap mode and NF glyph width.
 Do not substitute tmux or unit tests for terminal-dependent acceptance and do not mark this step complete from an agent-run sandbox alone.
+The user reviewed the checklist, accepted deterministic coverage through the 726/726 suite and typecheck, completed the remaining real-terminal smoke checks, and declared E2E passed on 2026-11-02.
 
-- [ ] **Step 5: Final review and completion bookkeeping**
+- [x] **Step 5: Final review and completion bookkeeping**
 
 After user approval, update final checkboxes, set plan `progress: 9/9` and `status: done`, set the linked spec `status: done`, and move both paths to the STATUS Done section in the same commit.
 Commit `docs: document viewer rendering acceptance` with the README and completion records, then follow the separate branch-finishing workflow for rebase, fast-forward integration, and worktree cleanup.

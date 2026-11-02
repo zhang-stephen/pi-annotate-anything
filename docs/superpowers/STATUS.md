@@ -8,10 +8,6 @@ Do not open docs marked `done` unless the current work touches that area.
 
 ## Active
 
-- spec: `docs/superpowers/specs/2026-10-23-viewer-md-render-wrap-design.md`
-  - in-progress (user review 2026-10-27); phase 1 = wrap + CommonMark (no images) rendering + keymap adaptation + the 2026-10-27 current-pill restyle and comment-caret supplements, phase 2 = optional protocol-gated image support (sketch only); Tasks 1-8 locally committed and reviewed, Task 9 next
-- plan: `docs/superpowers/plans/2026-10-27-viewer-md-render-wrap.md`
-  - in-progress 8/9; Tasks 1-8 locally committed and reviewer-approved; Task 9 documentation and shared E2E acceptance next; three releases planned after the E2E pass
 - spec: `docs/superpowers/specs/2026-10-22-user-settings-design.md`
   - approved (user call 2026-10-22), implementation not started; rides a later train, not 2.0
 - spec: `docs/superpowers/specs/2026-10-22-settings-evolution-design.md`
@@ -20,6 +16,13 @@ Do not open docs marked `done` unless the current work touches that area.
   - draft, on hold: low priority, do not schedule (user call 2026-10-20)
 
 ## Known issues (deferred, no spec yet)
+
+- 2026-11-02: conditional Git diff annotation view (3.0 candidate, idea only): for files Git marks as changed, allow opening a diff view for annotation.
+  Expected complexity includes old/new content identity, hunk and raw-coordinate mapping, unified/split views, and payload semantics; requires a separate spec before implementation and is not part of the current 2.x release train.
+
+- 2026-11-02: visual-row comment icon anchor (deferred design idea, not a current acceptance failure): with wrap enabled, anchor `nf-fa-comment` to the visual display row where the comment starts rather than always to the raw logical line's first visual row.
+  Example: raw line 1 wraps into three display lines and the comment starts on display line 2, so the icon belongs on display line 2; this does not request repeating the icon on every continuation row.
+  Current rendering derives the pending gutter from the raw logical line and blanks continuation gutters; any change requires a separate spec decision.
 
 - 2026-10-20: path-completion symlinked dirPart: the ready-index subtree match is lexical, so a symlinked directory part (linkdir/ -> sub/) matches nothing in the index while the degraded path lists through the symlink; candidate fix: treat "no entry carries the prefix at all" as a fall-through to the live directory listing. Also absorbs the case-mismatched dirPart edge on case-insensitive filesystems.
 
@@ -33,10 +36,12 @@ Do not open docs marked `done` unless the current work touches that area.
 
 - 2026-10-22: composer tray and annotation kinds (future major, no spec yet): explore store-backed attachments rendered one row per mark above the composer, a closed note/question/todo kind vocabulary, and prompt-first submission with payloads appended in draft order and token parsing retired.
   Empty prompt with attachments still submits; `alt+backspace` removes the last row and `/annotate` provides fine-grained management; open decisions are tray height cap and kind input.
-  The approved token-era pill label restyle is tracked separately in the viewer Markdown/wrap spec.
+
 
 ## Done
 
+- spec: `docs/superpowers/specs/2026-10-23-viewer-md-render-wrap-design.md`
+- plan: `docs/superpowers/plans/2026-10-27-viewer-md-render-wrap.md`
 - spec: `docs/superpowers/specs/2026-10-22-comment-cursor-design.md`
 - plan: `docs/superpowers/plans/2026-10-22-comment-cursor.md`
 - spec: `docs/superpowers/specs/2026-10-23-composer-jump-back-design.md`

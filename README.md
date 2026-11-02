@@ -146,6 +146,7 @@ Label variants:
 
 - **Buffers**: annotate and navigate multiple sources in a single card session.
 - **More vim**: a limited, curated set of additional vim commands (motions and operators that fit the annotation workflow).
+- Conditional Git diff views: for changed files, with old/new content identity and unified/split annotation modes to be designed.
 
 ## Development
 
