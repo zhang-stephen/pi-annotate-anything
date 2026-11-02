@@ -254,6 +254,131 @@ test("maps display columns inside the prefix to the row start column and clamps 
   assert.deepEqual(toVisualPosition(lines, layout, { line: 0, col: 6 }), { row: 0, col: 8 }); // logical EOL
 });
 
+test("round-trips boundary columns through skin-tone and ZWJ emoji clusters", () => {
+  // The skin-tone modifier joins its base into one four-unit cluster, so
+  // raw column 4 is the boundary between the cluster and "x".
+  const lines = ["\u{1F44D}\u{1F3FD}x"];
+  const layout = buildVisualLayout(lines, displaysOf(lines), 20);
+  assert.equal(layout.rows.length, 1);
+  assert.equal(layout.rows[0].text, lines[0]);
+  assert.deepEqual(toVisualPosition(lines, layout, { line: 0, col: 4 }), { row: 0, col: 2 });
+  assert.deepEqual(toRawPosition(lines, layout, 0, 2), { line: 0, col: 4 });
+  // The ZWJ family is one eight-unit cluster; raw column 8 ends it.
+  const family = ["\u{1F468}\u200D\u{1F469}\u200D\u{1F467}x"];
+  const familyLayout = buildVisualLayout(family, displaysOf(family), 20);
+  assert.equal(familyLayout.rows.length, 1);
+  assert.equal(familyLayout.rows[0].text, family[0]);
+  assert.deepEqual(toVisualPosition(family, familyLayout, { line: 0, col: 8 }), { row: 0, col: 2 });
+  assert.deepEqual(toRawPosition(family, familyLayout, 0, 2), { line: 0, col: 8 });
+});
+
+test("wraps Indic clusters whole so every cluster renders and slices stay lossless", () => {
+  const lines = ["\u0915\u093F".repeat(4)];
+  const layout = buildVisualLayout(lines, displaysOf(lines), 4);
+  assert.deepEqual(layout.rows.map((r) => [r.startCol, r.endCol]), [
+    [0, 4],
+    [4, 8],
+  ]);
+  // Each row renders both of its clusters: two per row at two columns each.
+  assert.deepEqual(layout.rows.map((r) => r.text), ["\u0915\u093F\u0915\u093F", "\u0915\u093F\u0915\u093F"]);
+  assert.equal(layout.rows.map((r) => lines[0].slice(r.startCol, r.endCol)).join(""), lines[0]);
+  for (const col of [0, 2, 4, 6, 8]) {
+    const visual = toVisualPosition(lines, layout, { line: 0, col });
+    assert.deepEqual(toRawPosition(lines, layout, visual.row, visual.col), { line: 0, col });
+  }
+});
+
+test("round-trips every multi-code-point cluster boundary across widths", () => {
+  const lines = [
+    "\u{1F44D}\u{1F3FD}x",
+    "\u{1F468}\u200D\u{1F469}\u200D\u{1F467}x",
+    "\u0915\u093F".repeat(4),
+  ];
+  const boundaries = new Intl.Segmenter(undefined, { granularity: "grapheme" });
+  for (const width of [1, 2, 3, 5, 9, 20]) {
+    const layout = buildVisualLayout(lines, displaysOf(lines), width);
+    lines.forEach((raw, line) => {
+      const joined = layout.rows
+        .filter((r) => r.line === line)
+        .map((r) => raw.slice(r.startCol, r.endCol))
+        .join("");
+      assert.equal(joined, raw, `lossless line ${line} at width ${width}`);
+      const stops = new Set<number>([0, raw.length]);
+      for (const seg of boundaries.segment(raw)) stops.add(seg.index);
+      for (const col of stops) {
+        const visual = toVisualPosition(lines, layout, { line, col });
+        assert.deepEqual(toRawPosition(lines, layout, visual.row, visual.col), { line, col }, `line ${line} col ${col} width ${width}`);
+      }
+    });
+  }
+});
+
+test("keeps row text, widths, and mappings in one display-space geometry across Indic, emoji, and tabs", () => {
+  // Indic spacing-mark clusters plus a skin-tone emoji before a tab: the
+  // emoji's code points each count toward tui/display's tab expansion while
+  // the whole cluster renders at its whole-cluster width, so the row walk
+  // must width graphemes exactly as they occupy display.text.
+  const raw = "\u0915\u093F mix \u{1F44D}\u{1F3FD} tab\there";
+  const display = buildDisplayLine(raw);
+  const boundaries = new Intl.Segmenter(undefined, { granularity: "grapheme" });
+  // Ground truth for row text slicing: lockstep-aligns raw's grapheme
+  // clusters with display.text's clusters (non-tab clusters match
+  // one-for-one; each raw tab consumes its run of expanded spaces) and
+  // joins the display.text clusters a row's raw range must render.
+  const expectedRowText = (startCol: number, endCol: number): string => {
+    const raws = Array.from(boundaries.segment(raw));
+    const texts = Array.from(boundaries.segment(display.text));
+    let t = 0;
+    let out = "";
+    let collecting = false;
+    for (const seg of raws) {
+      if (seg.index >= endCol) break;
+      if (seg.index >= startCol) collecting = true;
+      if (seg.segment === "\t") {
+        while (t < texts.length && texts[t].segment === " ") {
+          if (collecting) out += texts[t].segment;
+          t++;
+        }
+      } else {
+        if (collecting) out += texts[t].segment;
+        t++;
+      }
+    }
+    return out;
+  };
+  for (const width of [0, 1, 2, 3, 5, 6, 8, 20]) {
+    const layout = buildVisualLayout([raw], [display], width);
+    const rows = layout.rows;
+    // Raw slices concatenate losslessly.
+    assert.equal(
+      rows.map((r) => raw.slice(r.startCol, r.endCol)).join(""),
+      raw,
+      `lossless raw slices at width ${width}`,
+    );
+    for (const r of rows) {
+      // No raw-advancing row renders empty.
+      if (r.startCol < r.endCol) {
+        assert.ok(r.text.length > 0, `row [${r.startCol}, ${r.endCol}) renders at width ${width}`);
+      }
+      // Each row's text is its raw slice with the globally expanded tabs.
+      assert.equal(r.text, expectedRowText(r.startCol, r.endCol), `row [${r.startCol}, ${r.endCol}) text at width ${width}`);
+    }
+    // Every cluster renders: the rows tile the display line exactly.
+    assert.equal(rows.map((r) => r.text).join(""), display.text, `rows tile display.text at width ${width}`);
+    // Exact boundary round trips in both mapping directions.
+    const stops = new Set<number>([0, raw.length]);
+    for (const seg of boundaries.segment(raw)) stops.add(seg.index);
+    for (const col of stops) {
+      const visual = toVisualPosition([raw], layout, { line: 0, col });
+      assert.deepEqual(
+        toRawPosition([raw], layout, visual.row, visual.col),
+        { line: 0, col },
+        `boundary ${col} round trip at width ${width}`,
+      );
+    }
+  }
+});
+
 test("round-trips raw positions through visual rows across tabs, prefixes, astral chars, and EOL", () => {
   const lines = [
     "alpha beta gamma delta",

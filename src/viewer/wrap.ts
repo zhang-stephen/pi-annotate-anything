@@ -8,7 +8,7 @@
 // while the raw text and the raw/visual column mapping remain lossless.
 
 import { sliceByColumn, visibleWidth } from "@earendil-works/pi-tui";
-import { DEFAULT_TAB_SIZE, rawColToDisplayCol } from "../tui/display.ts";
+import { DEFAULT_TAB_SIZE } from "../tui/display.ts";
 import type { DisplayLine, StyleSpan } from "../tui/display.ts";
 import type { Position } from "../core/selection.ts";
 
@@ -42,12 +42,11 @@ export interface VisualLayout {
 // never split across rows.
 const GRAPHEMES = new Intl.Segmenter(undefined, { granularity: "grapheme" });
 
-// Display width of one grapheme cluster: its base code point's width (2 for
-// East Asian Wide/Fullwidth and most emoji bases); combining marks and ZWJ
-// joiners contribute nothing. Mirrors the caret math in tui/comment-input.
-function clusterWidth(cluster: string): number {
-  return visibleWidth(String.fromCodePoint(cluster.codePointAt(0) as number));
-}
+// Display width of one grapheme cluster in pi-tui's whole-grapheme width
+// space: visibleWidth measures whole clusters (RGI emoji and ZWJ families
+// count 2, terminal-spacing marks such as Indic signs count after their
+// base), the same widths sliceByColumn slices row text by. The wrap walk's
+// geometry therefore equals the row text slicing's geometry.
 
 // Smallest multiple of tabSize strictly greater than width (tab behavior),
 // mirroring tui/display's nextTabStop so a tab's expanded width inside the
@@ -58,27 +57,53 @@ function nextTabStop(width: number, tabSize: number): number {
 }
 
 // One raw grapheme of the wrapped line: its [start, end) UTF-16 raw columns
-// and its display width in the line's global tab expansion.
+// and its width as it occupies display.text's grapheme space (the space
+// visibleWidth and sliceByColumn measure, hence the space rows render in).
 interface Grapheme {
   start: number;
   end: number;
   width: number;
 }
 
-// Segments raw into graphemes width'ed in the line's global tab expansion:
-// a tab advances to the next tab stop of the width so far, any other
-// cluster contributes its base code point width. The accumulated width
-// before grapheme k is therefore exactly rawColToDisplayCol(raw,
-// graphemes[k].start), keeping row geometry aligned with DisplayLine.text.
+// Segments raw into graphemes width'ed in display.text's grapheme space, so
+// row fitting, row text slicing, and both mapping directions share one
+// geometry. Non-tab clusters render verbatim and keep their whole-cluster
+// width; a tab's width is the number of spaces tui/display's tabExpanded
+// replaced it with -- its tab stop over the code-point width tabExpanded
+// accumulates (visibleWidth per code point, so each code point of a
+// multi-code-point cluster counts separately there even though the whole
+// cluster renders at its whole-cluster width). Mirrors tabExpanded exactly,
+// keeping the walk's geometry equal to the rendered line's geometry.
 function segmentGraphemes(raw: string): Grapheme[] {
   const out: Grapheme[] = [];
-  let width = 0;
+  let expandedWidth = 0; // tabExpanded's code-point width counter
   for (const seg of GRAPHEMES.segment(raw)) {
-    const w = seg.segment === "\t" ? nextTabStop(width, DEFAULT_TAB_SIZE) - width : clusterWidth(seg.segment);
-    out.push({ start: seg.index, end: seg.index + seg.segment.length, width: w });
-    width += w;
+    let width: number;
+    if (seg.segment === "\t") {
+      const stop = nextTabStop(expandedWidth, DEFAULT_TAB_SIZE);
+      width = stop - expandedWidth;
+      expandedWidth = stop;
+    } else {
+      width = visibleWidth(seg.segment);
+      for (const ch of seg.segment) expandedWidth += visibleWidth(ch);
+    }
+    out.push({ start: seg.index, end: seg.index + seg.segment.length, width });
   }
   return out;
+}
+
+// Display offset (tab-expanded, prefix excluded) of a raw UTF-16 column:
+// the summed whole-grapheme widths of the clusters before it, with a
+// column inside a cluster rounded up to that cluster's far edge (the
+// established convention for mid-cluster raw columns).
+function displayOffset(segments: Grapheme[], rawCol: number): number {
+  let offset = 0;
+  for (const seg of segments) {
+    if (rawCol <= seg.start) break;
+    offset += seg.width;
+    if (rawCol < seg.end) break; // rawCol inside the cluster: far edge
+  }
+  return offset;
 }
 
 function isAsciiWhitespace(cluster: string): boolean {
@@ -214,7 +239,8 @@ export function toVisualPosition(lines: string[], layout: VisualLayout, pos: Pos
     }
   }
   const row = layout.rows[target];
-  const offset = rawColToDisplayCol(raw, col) - rawColToDisplayCol(raw, row.startCol);
+  const segments = segmentGraphemes(raw);
+  const offset = displayOffset(segments, col) - displayOffset(segments, row.startCol);
   return { row: target, col: row.prefixWidth + offset };
 }
 
@@ -229,20 +255,17 @@ export function toRawPosition(lines: string[], layout: VisualLayout, row: number
   const vr = layout.rows[Math.min(Math.max(row, 0), layout.rows.length - 1)];
   const line = vr.line;
   const raw = line < lines.length ? lines[line] : "";
-  const contentWidth = rawColToDisplayCol(raw, vr.endCol) - rawColToDisplayCol(raw, vr.startCol);
+  const segments = segmentGraphemes(raw);
+  const contentWidth = displayOffset(segments, vr.endCol) - displayOffset(segments, vr.startCol);
   const col = Math.min(Math.max(displayCol, 0), vr.prefixWidth + contentWidth);
   if (col < vr.prefixWidth) return { line, col: vr.startCol };
   const target = col - vr.prefixWidth;
-  let globalWidth = 0; // display width from column 0 (tabs expand globally)
-  let rowWidth = 0; // display width of the graphemes before the cursor
-  for (const seg of GRAPHEMES.segment(raw)) {
-    if (seg.index >= vr.endCol) break;
-    const w = seg.segment === "\t" ? nextTabStop(globalWidth, DEFAULT_TAB_SIZE) - globalWidth : clusterWidth(seg.segment);
-    if (seg.index >= vr.startCol) {
-      if (rowWidth + w > target) return { line, col: seg.index };
-      rowWidth += w;
-    }
-    globalWidth += w;
+  let rowWidth = 0; // display width of the row's clusters before the cursor
+  for (const seg of segments) {
+    if (seg.end <= vr.startCol) continue; // cluster entirely above the row
+    if (seg.start >= vr.endCol) break; // cluster entirely below the row
+    if (rowWidth + seg.width > target) return { line, col: seg.start };
+    rowWidth += seg.width;
   }
   return { line, col: vr.endCol };
 }

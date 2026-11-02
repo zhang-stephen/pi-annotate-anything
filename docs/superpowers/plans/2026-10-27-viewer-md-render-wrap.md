@@ -1,7 +1,7 @@
 ---
 title: Viewer Markdown, Word Wrap, Pill Restyle, and Comment Caret - Implementation Plan
 status: in-progress
-progress: 4/9
+progress: 5/9
 spec: ../specs/2026-10-23-viewer-md-render-wrap-design.md
 ---
 
@@ -18,7 +18,7 @@ The existing token store and payload pipeline remain intact; only the composer l
 **Spec:** `docs/superpowers/specs/2026-10-23-viewer-md-render-wrap-design.md`, including the 2026-10-27 current-pill and comment-caret supplements plus the post-merge `^` correction.
 
 **Execution:** Worktree `.pi/worktrees/viewer-md-render-wrap/`, branch `viewer-md-render-wrap`.
-Tasks 1-4 are implemented, reviewed, and committed locally; Task 5 is next.
+Tasks 1-5 are implemented, reviewed, and committed locally; Task 6 is next.
 Push and final integration wait for user-confirmed real-terminal E2E.
 
 ## Global constraints
@@ -267,7 +267,7 @@ Update bookkeeping and commit `feat(viewer): scan markdown without reflowing sou
 - Create `src/viewer/wrap.ts` and `test/viewer/wrap.test.ts`.
 - Modify `src/AGENTS.md` and `test/architecture.test.ts`.
 
-- [ ] **Step 1: Write failing wrap and round-trip tests**
+- [x] **Step 1: Write failing wrap and round-trip tests**
 
 Pin raw boundaries as well as rendered text:
 
@@ -284,12 +284,12 @@ Assert concatenating raw `[startCol, endCol)` slices reproduces each original li
 Round-trip `toVisualPosition()` and `toRawPosition()` across tabs, prefix cells, astral characters, intermediate break boundaries, and logical EOL; a display column inside a prefix maps to `row.startCol`.
 Add `viewer/wrap.ts` to the architecture sanity list.
 
-- [ ] **Step 2: Run wrap and architecture tests and confirm RED**
+- [x] **Step 2: Run wrap and architecture tests and confirm RED**
 
 Run `node --test test/viewer/wrap.test.ts test/architecture.test.ts`.
 Expect the module and mapping functions to be absent.
 
-- [ ] **Step 3: Implement the layout and mapping API**
+- [x] **Step 3: Implement the layout and mapping API**
 
 Export:
 
@@ -318,12 +318,15 @@ Keep the break character on the preceding row, emit at least one row per logical
 Repeat the block prefix on continuation rows, slice existing ANSI text and display spans into row-local coordinates, and compute `maxLineWidth` from the unwrapped display lines.
 Clamp width to at least one content cell and drop or truncate only cosmetic prefix cells when they cannot fit; raw mapping and text content must remain lossless.
 
-- [ ] **Step 4: Run focused and full verification**
+- [x] **Step 4: Run focused and full verification**
 
 Run the Step 2 command, the full suite, and typecheck.
 Expect all wrap, mapping, and architecture tests to pass.
+Review required a follow-up commit, `fix(viewer): unify wrap grapheme width mapping`, to unify multi-code-point grapheme widths and mixed tab geometry; the final 9,696-check sweep and original P1 reproductions pass.
+The double-width CJK break proxy is accepted for phase 1.
+A pre-existing display-layer emoji span-space drift is scheduled for the Task 7 integration correction below rather than papered over inside wrap slicing.
 
-- [ ] **Step 5: Review and commit**
+- [x] **Step 5: Review and commit**
 
 Update bookkeeping and commit `feat(viewer): add raw-mapped word wrap`.
 
@@ -383,10 +386,12 @@ Update bookkeeping and commit `feat(viewer): add visual-row motions and display 
 
 **Files:**
 - Modify `src/viewer/viewer.ts`, `src/viewer/status-line.ts`, `test/viewer/viewer.test.ts`, and `test/viewer/status-line.test.ts`.
+- Integration correction from Task 5 review: also modify `src/tui/display.ts`, `src/viewer/wrap.ts`, `test/tui/display.test.ts`, and `test/viewer/wrap.test.ts` to unify display text, annotation/Markdown/search spans, and visual slicing on one grapheme-width geometry in wrapped and nowrap modes.
 
 - [ ] **Step 1: Write failing renderer and resize tests**
 
 Add Markdown fixtures for every scanner style, nested quote plus list prefixes, code background, links, reference definitions, images, and raw table / HTML / entity text.
+Add regression fixtures with ZWJ or skin-tone emoji before styled spans and adjacent tabs, proving identical raw span targeting in wrapped and nowrap rendering.
 Assert production `wrapOn` and `renderOn` default ON, `zw` and `zr` re-render live, and `zr` is inert for non-`.md` paths.
 Add a wrap-OFF plus render-OFF byte-equivalence snapshot and update only horizontal-scroll-specific legacy tests to disable wrap explicitly.
 Assert continuation visual rows have a blank line-number gutter and do not duplicate pending counts, every row satisfies `visibleWidth(row) <= width`, and repeated narrow / wide renders rebuild rows and clamp the viewport without stale cache entries.
@@ -404,6 +409,7 @@ Expect missing visual rows, Markdown styling, toggles, and hints.
 - [ ] **Step 3: Implement cached display modes and visual rendering**
 
 Initialize `wrapOn: true` and `renderOn: true` in the card state.
+Before wiring production rendering, correct the legacy per-code-point display-span divergence identified in Task 5 review so display text, raw-derived spans, and wrap slicing use one whole-grapheme width space with global tab stops; keep ASCII behavior unchanged and update the wrap-side tab-geometry mirror accordingly.
 Scan Markdown once per file and cache current and alternate `VisualLayout` objects by content width and render mode; use the plain display model for non-Markdown files and for render OFF, retaining the existing `highlighted` cache.
 Build the viewport passed to the reducer from the same cached current and alternate layouts used by rendering.
 Implement `renderVisualRow()` with row-local spans, no `sliceWindow`, blank continuation gutters, and an inverse virtual EOL cell only on the logical line's final segment.

@@ -73,6 +73,7 @@ Design principles, in priority order:
 
 - `src/core/selection.ts` and all stored state remain untouched.
 - Display column arithmetic gains exactly one term: `displayCol = rawDisplayCol + prefixWidth` for selection/cursor/hlsearch painting; hlsearch matches are computed on raw text (unchanged) and painted through the same path, so no divergence is possible.
+- Display text, Markdown/annotation/search spans, and visual slicing must share one whole-grapheme display-width space, including multi-code-point emoji and Indic clusters plus global tab stops; any legacy per-code-point divergence must be corrected before production rendering so wrapped and nowrap views target identical raw spans.
 - Selections spanning wrapped segments are painted per visual segment (intersect range with each segment's raw-column window); extraction reads raw text and is unaffected.
 - Comment payloads never render markdown (unchanged; user call 2026-10-23).
 
