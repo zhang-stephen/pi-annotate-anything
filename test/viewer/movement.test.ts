@@ -3,7 +3,10 @@ import assert from "node:assert/strict";
 
 import { stackAtCursor, cycleTarget, pendingKeysOf } from "../../src/viewer/movement.ts";
 import { reduceViewer } from "../../src/viewer/state.ts";
-import type { PendingDraft, ViewerState } from "../../src/viewer/state.ts";
+import type { PendingDraft, ViewerState, ViewerViewport } from "../../src/viewer/state.ts";
+import { buildDisplayLine } from "../../src/tui/display.ts";
+import { buildVisualLayout, toVisualPosition } from "../../src/viewer/wrap.ts";
+import type { VisualLayout } from "../../src/viewer/wrap.ts";
 
 // 30-line fixture: "line 0" .. "line 29" (col max 6 for single-digit lines).
 const LINES = Array.from({ length: 30 }, (_, i) => `line ${i}`);
@@ -548,4 +551,247 @@ test("pendingKeysOf renders String(count): leading zeros cannot appear (03 shows
   const three = view(zero.state, "3");
   assert.equal(three.state.count, 3);
   assert.equal(pendingKeysOf(three.state), "3");
+});
+
+// Wrapped-layout motion (real Task 5 layouts) -------------------------------
+// With wrap on and display layouts in the viewport, j/k/arrows and the jump
+// family move by VISUAL ROW over the buildVisualLayout grid while h/l stay
+// raw-count motions; scrollTop counts visual rows and scrollLeft stays 0.
+
+const WRAP_LINES = ["aaa bbb ccc", "hi", "ddd eee fff"];
+// Width 8 wraps both long lines after "bbb "/"eee ": 5 visual rows,
+// firstRowByLine [0, 2, 3].
+const WRAP_LAYOUT = buildVisualLayout(WRAP_LINES, WRAP_LINES.map((l) => buildDisplayLine(l)), 8);
+const BIG_LINES = Array.from({ length: 6 }, () => "aaa bbb ccc"); // 12 visual rows at width 8
+const BIG_LAYOUT = buildVisualLayout(BIG_LINES, BIG_LINES.map((l) => buildDisplayLine(l)), 8);
+
+// Viewport carrying display layouts; alternate mirrors current (only zr's
+// render flip uses a differing alternate).
+function wrapVp(layout: VisualLayout, height: number, width: number, canToggleRender = false): ViewerViewport {
+  return {
+    height,
+    contentWidth: width,
+    maxLineWidth: layout.maxLineWidth,
+    display: { current: layout, alternate: layout, canToggleRender },
+  };
+}
+
+test("wrap: j moves by visual row across a wrapped line", () => {
+  const vp = wrapVp(WRAP_LAYOUT, 4, 8);
+  let state = viewer();
+  state = reduceViewer(state, "j", WRAP_LINES, vp).state;
+  assert.deepEqual(state.cursor, { line: 0, col: 8 }); // row 1 = "ccc"
+  assert.equal(state.scrollTop, 0);
+  state = reduceViewer(state, "j", WRAP_LINES, vp).state;
+  assert.deepEqual(state.cursor, { line: 1, col: 0 }); // row 2 = "hi"
+  state = reduceViewer(state, "j", WRAP_LINES, vp).state;
+  assert.deepEqual(state.cursor, { line: 2, col: 0 }); // row 3
+  state = reduceViewer(state, "j", WRAP_LINES, vp).state;
+  assert.deepEqual(state.cursor, { line: 2, col: 8 }); // row 4 = "fff"
+  assert.equal(state.scrollTop, 1); // row 4 needs the last page (5 rows, vh 4)
+  assert.equal(state.wantedCol, 0); // display goal rides along
+});
+
+test("wrap: k mirrors j back up the visual rows", () => {
+  const vp = wrapVp(WRAP_LAYOUT, 4, 8);
+  let state = viewer({ cursor: { line: 2, col: 8 }, scrollTop: 1 });
+  state = reduceViewer(state, "k", WRAP_LINES, vp).state;
+  assert.deepEqual(state.cursor, { line: 2, col: 0 });
+  state = reduceViewer(state, "k", WRAP_LINES, vp).state;
+  assert.deepEqual(state.cursor, { line: 1, col: 0 });
+});
+
+test("wrap: arrow keys mirror visual j/k", () => {
+  const vp = wrapVp(WRAP_LAYOUT, 4, 8);
+  const down = reduceViewer(viewer(), "\x1b[B", WRAP_LINES, vp).state;
+  assert.deepEqual(down.cursor, { line: 0, col: 8 });
+  const up = reduceViewer(down, "\x1b[A", WRAP_LINES, vp).state;
+  assert.deepEqual(up.cursor, { line: 0, col: 0 });
+});
+
+test("wrap: {count}j moves count visual rows and consumes the count", () => {
+  const vp = wrapVp(WRAP_LAYOUT, 4, 8);
+  let state = viewer();
+  state = reduceViewer(state, "2", WRAP_LINES, vp).state;
+  state = reduceViewer(state, "j", WRAP_LINES, vp).state;
+  // Two visual rows from row 0: rows 1-2 ("hi" on line 1); the legacy
+  // two-line jump would land on line 2 instead.
+  assert.deepEqual(state.cursor, { line: 1, col: 0 });
+  assert.equal(state.count, null);
+});
+
+test("wrap: j keeps the unclamped display goal across short and prefixed rows", () => {
+  const lines = ["aaaa bbbb cccc dddd", "x", "yyyy zzzz qqqq"];
+  const displays = [buildDisplayLine(lines[0]), buildDisplayLine("x", { prefix: "> " }), buildDisplayLine(lines[2])];
+  const layout = buildVisualLayout(lines, displays, 10);
+  const vp = wrapVp(layout, 4, 10);
+  // (0,14) sits on row 1 at display col 4; below it the prefixed "x" row is
+  // only 3 cells wide (2 prefix + 1 content).
+  let state = viewer({ cursor: { line: 0, col: 14 } });
+  state = reduceViewer(state, "j", lines, vp).state;
+  assert.deepEqual(state.cursor, { line: 1, col: 1 }); // clamped to the short row
+  assert.equal(state.wantedCol, 4); // unclamped goal survives
+  state = reduceViewer(state, "j", lines, vp).state;
+  assert.deepEqual(state.cursor, { line: 2, col: 4 }); // goal re-aimed on landing
+  state = reduceViewer(state, "k", lines, vp).state;
+  assert.deepEqual(state.cursor, { line: 1, col: 1 }); // clamped again
+  state = reduceViewer(state, "k", lines, vp).state;
+  assert.deepEqual(state.cursor, { line: 0, col: 14 }); // goal restored: round trip
+});
+
+test("wrap: h/l stay raw-count motions and never scroll horizontally", () => {
+  const vp = wrapVp(WRAP_LAYOUT, 4, 8);
+  let state = viewer({ cursor: { line: 0, col: 5 } });
+  for (let i = 0; i < 6; i++) state = reduceViewer(state, "l", WRAP_LINES, vp).state;
+  // Raw col clamps at the line end (11): crossing soft-break segments moves
+  // the cursor but must not scroll horizontally (legacy would pin scrollLeft).
+  assert.deepEqual(state.cursor, { line: 0, col: 11 });
+  assert.equal(state.scrollLeft, 0);
+  state = reduceViewer(state, "l", WRAP_LINES, vp).state;
+  assert.deepEqual(state.cursor, { line: 0, col: 11 }); // logical-line clamp, no line wrap
+  for (let i = 0; i < 11; i++) state = reduceViewer(state, "h", WRAP_LINES, vp).state;
+  assert.deepEqual(state.cursor, { line: 0, col: 0 });
+  assert.equal(state.scrollLeft, 0);
+});
+
+test("wrap: wrapOn false keeps the legacy horizontal scroll even with layouts", () => {
+  // Visual motion needs wrapOn !== false AND layouts; either one missing
+  // falls back to the nowrap path, horizontal follow included.
+  const lines = ["x".repeat(100)];
+  const layout = buildVisualLayout(lines, lines.map((l) => buildDisplayLine(l)), 20);
+  const vp = wrapVp(layout, 5, 20);
+  let state = viewer({ wrapOn: false });
+  for (let i = 0; i < 20; i++) state = reduceViewer(state, "l", lines, vp).state;
+  assert.deepEqual(state.cursor, { line: 0, col: 20 });
+  assert.equal(state.scrollLeft, 1); // legacy follow: 20 >= 0 + 20
+});
+
+test("wrap: 0 and $ keep logical-line semantics", () => {
+  const vp = wrapVp(WRAP_LAYOUT, 4, 8);
+  const dollar = reduceViewer(viewer(), "$", WRAP_LINES, vp).state;
+  assert.deepEqual(dollar.cursor, { line: 0, col: 11 }); // raw end-of-line
+  const zero = reduceViewer(dollar, "0", WRAP_LINES, vp).state;
+  assert.deepEqual(zero.cursor, { line: 0, col: 0 });
+});
+
+test("motion: ^ targets the first non-whitespace raw column (nowrap)", () => {
+  const lines = ["", "  deep", "plain", "\t\ttabbed", "    "];
+  const vp = { height: 5, contentWidth: 20, maxLineWidth: 10 };
+  assert.deepEqual(reduceViewer(viewer({ cursor: { line: 1, col: 5 } }), "^", lines, vp).state.cursor, { line: 1, col: 2 });
+  assert.deepEqual(reduceViewer(viewer({ cursor: { line: 3, col: 4 } }), "^", lines, vp).state.cursor, { line: 3, col: 2 }); // tabs are whitespace
+  assert.deepEqual(reduceViewer(viewer({ cursor: { line: 2, col: 3 } }), "^", lines, vp).state.cursor, { line: 2, col: 0 });
+  assert.deepEqual(reduceViewer(viewer({ cursor: { line: 0, col: 0 } }), "^", lines, vp).state.cursor, { line: 0, col: 0 }); // empty line
+  // A blank line has no non-whitespace column: clamp to the raw length
+  // (end-exclusive cursor cell on the last space).
+  assert.deepEqual(reduceViewer(viewer({ cursor: { line: 4, col: 1 } }), "^", lines, vp).state.cursor, { line: 4, col: 4 });
+});
+
+test("motion: ^ works in wrap mode with the visual viewport following", () => {
+  const vp = wrapVp(WRAP_LAYOUT, 4, 8);
+  const res = reduceViewer(viewer({ cursor: { line: 0, col: 9 } }), "^", WRAP_LINES, vp);
+  assert.deepEqual(res.state.cursor, { line: 0, col: 0 });
+  assert.equal(res.state.scrollLeft, 0);
+});
+
+test("wrap: plain G targets the last visual row and scrolls the last page", () => {
+  const vp = wrapVp(WRAP_LAYOUT, 4, 8);
+  const res = reduceViewer(viewer(), "G", WRAP_LINES, vp);
+  assert.deepEqual(res.state.cursor, { line: 2, col: 8 }); // row 4 start
+  assert.equal(res.state.scrollTop, 1); // 5 rows - vh 4
+  assert.equal(res.state.count, null);
+  assert.equal(res.state.wantedCol, null);
+});
+
+test("wrap: {count}G targets the 1-based visual row", () => {
+  const vp = wrapVp(WRAP_LAYOUT, 4, 8);
+  let state = viewer();
+  state = reduceViewer(state, "2", WRAP_LINES, vp).state;
+  state = reduceViewer(state, "G", WRAP_LINES, vp).state;
+  assert.deepEqual(state.cursor, { line: 0, col: 8 }); // row 1
+  state = reduceViewer(state, "99", WRAP_LINES, vp).state;
+  state = reduceViewer(state, "G", WRAP_LINES, vp).state;
+  assert.deepEqual(state.cursor, { line: 2, col: 8 }); // clamped to the last row
+});
+
+test("wrap: G preserves the current visual column through toRawPosition", () => {
+  const vp = wrapVp(WRAP_LAYOUT, 4, 8);
+  const res = reduceViewer(viewer({ cursor: { line: 1, col: 1 } }), "G", WRAP_LINES, vp);
+  // Row 2 at display col 1 -> raw col 1 carried onto the last row ("fff" starts at 8).
+  assert.deepEqual(res.state.cursor, { line: 2, col: 9 });
+});
+
+test("wrap: gg targets the first visual row and scrolls to the top", () => {
+  const vp = wrapVp(WRAP_LAYOUT, 4, 8);
+  let state = viewer({ cursor: { line: 2, col: 8 }, scrollTop: 1 });
+  state = reduceViewer(state, "g", WRAP_LINES, vp).state;
+  state = reduceViewer(state, "g", WRAP_LINES, vp).state;
+  assert.deepEqual(state.cursor, { line: 0, col: 0 }); // row 0, display col 0
+  assert.equal(state.scrollTop, 0);
+  assert.equal(state.wantedCol, null);
+  assert.equal(state.pending, null);
+});
+
+test("wrap: gg preserves the current visual column", () => {
+  const vp = wrapVp(WRAP_LAYOUT, 4, 8);
+  let state = viewer({ cursor: { line: 1, col: 1 } }); // row 2, display col 1
+  state = reduceViewer(state, "g", WRAP_LINES, vp).state;
+  state = reduceViewer(state, "g", WRAP_LINES, vp).state;
+  assert.deepEqual(state.cursor, { line: 0, col: 1 });
+});
+
+test("wrap: ctrl+d/ctrl+u and PgDn/PgUp move by visual rows keeping the goal", () => {
+  const vp = wrapVp(BIG_LAYOUT, 4, 8);
+  let state = viewer();
+  state = reduceViewer(state, "\x04", BIG_LINES, vp).state; // ctrl+d: row 0 -> 2
+  assert.deepEqual(state.cursor, { line: 1, col: 0 });
+  assert.equal(state.scrollTop, 0);
+  state = reduceViewer(state, "\x1b[6~", BIG_LINES, vp).state; // PgDn: row 2 -> 6
+  assert.deepEqual(state.cursor, { line: 3, col: 0 });
+  assert.equal(state.scrollTop, 3); // cursor row 6 -> 6 - 4 + 1
+  state = reduceViewer(state, "\x15", BIG_LINES, vp).state; // ctrl+u: row 6 -> 4
+  assert.deepEqual(state.cursor, { line: 2, col: 0 });
+  assert.equal(state.scrollTop, 3); // row 4 still visible from scrollTop 3
+  state = reduceViewer(state, "\x1b[5~", BIG_LINES, vp).state; // PgUp: row 4 -> 0
+  assert.deepEqual(state.cursor, { line: 0, col: 0 });
+  assert.equal(state.scrollTop, 0);
+  assert.equal(state.wantedCol, 0); // goal session kept alive across all four
+});
+
+test("wrap: page jumps clamp at the last visual row and preserve the column", () => {
+  const vp = wrapVp(BIG_LAYOUT, 4, 8);
+  const res = reduceViewer(viewer({ cursor: { line: 0, col: 5 } }), "\x1b[6~", BIG_LINES, vp);
+  // Row 0 + 4 -> row 4 (line 2 first row) at display col 5 -> raw col 5.
+  assert.deepEqual(res.state.cursor, { line: 2, col: 5 });
+  assert.equal(res.state.scrollTop, 1); // cursor row 4 -> 4 - 4 + 1
+  assert.equal(res.state.wantedCol, 5);
+  const bottom = reduceViewer(viewer({ cursor: { line: 5, col: 0 } }), "\x1b[6~", BIG_LINES, vp);
+  // Row 10 + 4 -> clamped to row 11 (line 5, "ccc").
+  assert.deepEqual(bottom.state.cursor, { line: 5, col: 8 });
+  assert.equal(bottom.state.scrollTop, 8); // 12 rows - vh 4
+});
+
+test("wrap: :N stays a logical-line address while the viewport follows visually", () => {
+  const vp = wrapVp(BIG_LAYOUT, 4, 8);
+  let state = viewer();
+  state = reduceViewer(state, ":", BIG_LINES, vp).state;
+  state = reduceViewer(state, "3", BIG_LINES, vp).state;
+  const res = reduceViewer(state, "\r", BIG_LINES, vp);
+  assert.equal(res.state.mode, "normal");
+  assert.deepEqual(res.state.cursor, { line: 2, col: 0 }); // logical line 2
+  assert.equal(toVisualPosition(BIG_LINES, BIG_LAYOUT, res.state.cursor).row, 4); // NOT visual row 2
+  assert.equal(res.state.scrollTop, 1); // visual follow: row 4 -> 4 - 4 + 1
+});
+
+test("wrap: n jumps to the raw match and the visual viewport follows", () => {
+  const vp = wrapVp(BIG_LAYOUT, 4, 8);
+  const res = reduceViewer(viewer({ cursor: { line: 4, col: 8 }, lastSearch: "bbb" }), "n", BIG_LINES, vp);
+  assert.deepEqual(res.state.cursor, { line: 5, col: 4 }); // raw match on line 5
+  // Line 5's first visual row is 10; vh 4 -> scrollTop 10 - 3 = 7.
+  assert.equal(res.state.scrollTop, 7);
+});
+
+test("wrap: N jumps backward to the raw match", () => {
+  const vp = wrapVp(BIG_LAYOUT, 4, 8);
+  const res = reduceViewer(viewer({ cursor: { line: 1, col: 0 }, lastSearch: "bbb" }), "N", BIG_LINES, vp);
+  assert.deepEqual(res.state.cursor, { line: 0, col: 4 });
 });

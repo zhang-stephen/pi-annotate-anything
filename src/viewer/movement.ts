@@ -7,6 +7,8 @@ import { clampPosition } from "../core/selection.ts";
 import type { Position } from "../core/selection.ts";
 import { draftAtCursor } from "../tui/card-chrome.ts";
 import { rawColToDisplayCol } from "../tui/display.ts";
+import { toRawPosition, toVisualPosition } from "./wrap.ts";
+import type { VisualLayout } from "./wrap.ts";
 import type { PendingDraft, ViewerResult, ViewerState, ViewerViewport } from "./state.ts";
 
 export const HALF_PAGE = (vh: number) => Math.floor(vh / 2);
@@ -103,6 +105,33 @@ export function clearUnusedCount(res: ViewerResult, key: string, prev: ViewerSta
   return { ...res, state: { ...res.state, count: null } };
 }
 
+// The active visual layout for wrap-mode motion: the viewport's current
+// layout when wrap is on (undefined counts as on - missing flags mean ON)
+// and display layouts exist. Null selects the legacy nowrap path everywhere,
+// so a viewport without display layouts keeps the pre-wrap behavior.
+export function visualLayout(state: ViewerState, viewport: ViewerViewport): VisualLayout | null {
+  if (state.wrapOn === false || viewport.display === undefined) return null;
+  return viewport.display.current;
+}
+
+// Visual vertical following: scrollTop is a window over the wrapped rows and
+// the cursor's visual row is followed with the same clamp-and-nudge rules as
+// the logical path. Wrap mode never scrolls horizontally (h/l cross the soft
+// segments instead), so scrollLeft pins to 0.
+function keepVisibleVisual(state: ViewerState, lines: string[], viewport: ViewerViewport, layout: VisualLayout): ViewerState {
+  const vh = Math.max(1, viewport.height);
+  const maxScroll = Math.max(0, layout.rows.length - vh);
+  let scrollTop = Math.min(Math.max(state.scrollTop, 0), maxScroll);
+  const cursorRow = toVisualPosition(lines, layout, state.cursor).row;
+  if (cursorRow < scrollTop) scrollTop = cursorRow;
+  if (cursorRow > scrollTop + vh - 1) scrollTop = cursorRow - vh + 1;
+  return {
+    ...state,
+    scrollTop: Math.min(Math.max(scrollTop, 0), maxScroll),
+    scrollLeft: 0,
+  };
+}
+
 // Clamps scrollTop into [0, lines.length - vh], then nudges it so the cursor
 // line stays inside the visible window. Then the horizontal counterparts:
 // scrollLeft is clamped into [0, max(0, maxLineWidth - contentWidth + 1)]
@@ -111,7 +140,12 @@ export function clearUnusedCount(res: ViewerResult, key: string, prev: ViewerSta
 // rawColToDisplayCol) is followed with vim sidescrolloff=0 semantics:
 // left of the window -> pin to the window's left edge; at or past its right
 // edge -> pin to the window's right edge. Applied to every cursor-moving key.
+// Wrap mode (visualLayout non-null) swaps the vertical half for visual-row
+// following with scrollLeft pinned to 0; the nowrap path below stays the
+// single source of the legacy behavior.
 export function keepVisible(state: ViewerState, lines: string[], viewport: ViewerViewport): ViewerState {
+  const layout = visualLayout(state, viewport);
+  if (layout !== null) return keepVisibleVisual(state, lines, viewport, layout);
   const vh = Math.max(1, viewport.height);
   const maxScroll = Math.max(0, lines.length - vh);
   let scrollTop = Math.min(Math.max(state.scrollTop, 0), maxScroll);
@@ -137,6 +171,92 @@ export function moved(state: ViewerState, to: Position, lines: string[], viewpor
   // pre-clamp goal column survives in state.wantedCol, which the j/k arms
   // capture and re-aim on the next vertical move (vim curswant).
   return { state: keepVisible({ ...state, cursor: clampPosition(to, lines) }, lines, viewport) };
+}
+
+// Lands the cursor on a wrapped-grid cell: (row, displayCol) maps back to
+// the raw position via toRawPosition (visual columns survive jumps and the
+// mapping clamps out-of-range rows/columns), then the same clampPosition +
+// keepVisible pipeline as moved() runs - which follows visually because the
+// state is in wrap mode. wantedCol rides in the caller's state spread:
+// DISPLAY columns (row-local, prefix included) in wrap mode, unclamped
+// (vim curswant), while nowrap keeps raw columns.
+export function moveVisual(
+  state: ViewerState,
+  layout: VisualLayout,
+  lines: string[],
+  viewport: ViewerViewport,
+  row: number,
+  displayCol: number,
+): ViewerResult {
+  const to = toRawPosition(lines, layout, row, displayCol);
+  return { state: keepVisible({ ...state, cursor: clampPosition(to, lines) }, lines, viewport) };
+}
+
+// Vertical visual motion (j/k and the four arrows, count included): one
+// row-delta move that keeps the unclamped DISPLAY goal column alive across
+// short and prefixed rows. Null when wrap is off or layouts are missing:
+// the caller falls back to the legacy logical-line path.
+export function moveVisualRows(
+  state: ViewerState,
+  lines: string[],
+  viewport: ViewerViewport,
+  delta: number,
+): ViewerResult | null {
+  const layout = visualLayout(state, viewport);
+  if (layout === null) return null;
+  const pos = toVisualPosition(lines, layout, state.cursor);
+  const wanted = state.wantedCol ?? pos.col;
+  return consumeCount(moveVisual({ ...state, wantedCol: wanted }, layout, lines, viewport, pos.row + delta, wanted));
+}
+
+// zw: flips the soft-wrap flag without moving the raw cursor or anchor.
+// scrollTop is remapped between the logical and visual coordinate spaces so
+// the cursor keeps its viewport offset (each space spends one scrollTop unit
+// per viewport row); wantedCol (one j/k session per coordinate space) and
+// scrollLeft reset, and keepVisible re-runs in the new space. Without
+// display layouts both spaces are logical, so the remap is the identity and
+// keepVisible stays on the legacy path.
+export function toggleWrap(state: ViewerState, lines: string[], viewport: ViewerViewport): ViewerResult {
+  const wrapOn = state.wrapOn === false; // missing flag means ON: flip to false
+  const display = viewport.display;
+  let scrollTop = state.scrollTop;
+  if (display !== undefined) {
+    const cursorRow = toVisualPosition(lines, display.current, state.cursor).row;
+    scrollTop = wrapOn ? cursorRow - (state.cursor.line - state.scrollTop) : state.cursor.line - (cursorRow - state.scrollTop);
+  }
+  return {
+    state: keepVisible(
+      { ...state, wrapOn, pending: null, wantedCol: null, scrollLeft: 0, scrollTop },
+      lines,
+      viewport,
+    ),
+  };
+}
+
+// zr: flips the markdown-render flag through the viewport's alternate layout
+// (same wrap setting, render toggled - render changes the block prefixes and
+// with them the wrap geometry, so the row coordinates shift). Exact no-op
+// when render cannot toggle: the incoming state returns untouched, pending
+// stroke included. With wrap off both layouts map to the logical space, so
+// only the flag flips; with wrap on the cursor's row is measured in current
+// and re-aimed in alternate, keeping the viewport offset across the
+// geometry change.
+export function toggleRender(state: ViewerState, lines: string[], viewport: ViewerViewport): ViewerResult {
+  const display = viewport.display;
+  if (display === undefined || !display.canToggleRender) return { state };
+  const renderOn = state.renderOn === false;
+  let scrollTop = state.scrollTop;
+  if (state.wrapOn !== false) {
+    const offset = toVisualPosition(lines, display.current, state.cursor).row - state.scrollTop;
+    scrollTop = toVisualPosition(lines, display.alternate, state.cursor).row - offset;
+  }
+  return {
+    state: keepVisible(
+      { ...state, renderOn, pending: null, wantedCol: null, scrollLeft: 0, scrollTop },
+      lines,
+      viewport,
+    ),
+  };
 }
 
 // Marks a motion as having consumed the pending count: the state is left

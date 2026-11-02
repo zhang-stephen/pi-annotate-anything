@@ -2,9 +2,12 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 
 import { reduceViewer } from "../../src/viewer/state.ts";
-import type { PendingDraft, ViewerState } from "../../src/viewer/state.ts";
+import type { PendingDraft, ViewerState, ViewerViewport } from "../../src/viewer/state.ts";
 import { COMMANDS } from "../../src/viewer/commands.ts";
 import type { CommandSpec } from "../../src/viewer/commands.ts";
+import { buildDisplayLine } from "../../src/tui/display.ts";
+import { buildVisualLayout } from "../../src/viewer/wrap.ts";
+import type { VisualLayout } from "../../src/viewer/wrap.ts";
 
 // 30-line fixture: "line 0" .. "line 29" (col max 6 for single-digit lines).
 const LINES = Array.from({ length: 30 }, (_, i) => `line ${i}`);
@@ -742,4 +745,172 @@ test("command: Esc exits command mode with the completion active", () => {
   assert.equal(res.state.mode, "normal");
   assert.equal(res.state.command, null);
   assert.equal(res.effect, undefined);
+});
+
+// zw / zr display-mode toggles (real Task 5 layouts) ------------------------
+// zw flips soft wrap and zr flips markdown render; both preserve the raw
+// cursor and anchor, remap scrollTop between the logical and visual
+// coordinate spaces keeping the cursor's viewport offset, reset wantedCol
+// and scrollLeft, and re-run keepVisible in the new space.
+
+const TOGGLE_LINES = Array.from({ length: 6 }, () => "aaa bbb ccc"); // 12 visual rows at width 8
+const TOGGLE_LAYOUT = buildVisualLayout(TOGGLE_LINES, TOGGLE_LINES.map((l) => buildDisplayLine(l)), 8);
+
+// Markdown-ish pair for zr: the current layout carries "> " prefixes, the
+// alternate (render off) drops them, so line 1 starts at visual row 2 in
+// current space and row 1 in alternate space. Four lines keep both layouts
+// taller than the viewport so scrollTop clamping cannot mask the remap.
+const ZR_LINES = ["aaa bbb", "ccc ddd", "eee fff", "ggg hhh"];
+const ZR_CURRENT = buildVisualLayout(ZR_LINES, ZR_LINES.map((l) => buildDisplayLine(l, { prefix: "> " })), 8); // 8 rows
+const ZR_ALTERNATE = buildVisualLayout(ZR_LINES, ZR_LINES.map((l) => buildDisplayLine(l)), 8); // 4 rows
+
+const WRAP_LINES = ["aaa bbb ccc", "hi", "ddd eee fff"]; // 5 visual rows at width 8
+const WRAP_LAYOUT = buildVisualLayout(WRAP_LINES, WRAP_LINES.map((l) => buildDisplayLine(l)), 8);
+
+function zrVp(current: VisualLayout, alternate: VisualLayout, canToggleRender: boolean, height = 3): ViewerViewport {
+  return {
+    height,
+    contentWidth: 8,
+    maxLineWidth: Math.max(current.maxLineWidth, alternate.maxLineWidth),
+    display: { current, alternate, canToggleRender },
+  };
+}
+
+test("wrap toggle: z arms a pending stroke without moving", () => {
+  const res = view(viewer(), "z");
+  assert.equal(res.state.pending, "z");
+  assert.deepEqual(res.state.cursor, { line: 0, col: 0 });
+});
+
+test("wrap toggle: zw flips wrapOn preserving raw cursor and viewport offset", () => {
+  const vp = { height: 5, contentWidth: 8, maxLineWidth: TOGGLE_LAYOUT.maxLineWidth, display: { current: TOGGLE_LAYOUT, alternate: TOGGLE_LAYOUT, canToggleRender: false } };
+  // Cursor (4,3) sits on visual row 8; scrollTop 4 keeps it at viewport
+  // offset 4. The flip must keep that offset in logical lines: 4 - 4 = 0.
+  const st = viewer({ cursor: { line: 4, col: 3 }, scrollTop: 4, wantedCol: 7, scrollLeft: 2 });
+  let state = reduceViewer(st, "z", TOGGLE_LINES, vp).state;
+  assert.equal(state.pending, "z");
+  assert.deepEqual(state.cursor, { line: 4, col: 3 });
+  state = reduceViewer(state, "w", TOGGLE_LINES, vp).state;
+  assert.equal(state.wrapOn, false);
+  assert.equal(state.pending, null);
+  assert.deepEqual(state.cursor, { line: 4, col: 3 }); // raw cursor preserved
+  assert.equal(state.scrollTop, 0);
+  assert.equal(state.wantedCol, null); // goal session ended with the space
+  assert.equal(state.scrollLeft, 0); // reset: no horizontal follow after toggles
+});
+
+test("wrap toggle: zw from nowrap remaps scrollTop into visual rows", () => {
+  const vp = { height: 5, contentWidth: 8, maxLineWidth: TOGGLE_LAYOUT.maxLineWidth, display: { current: TOGGLE_LAYOUT, alternate: TOGGLE_LAYOUT, canToggleRender: false } };
+  // Logical offset: cursor line 4 - scrollTop 2 = 2. After the flip the
+  // cursor's first visual row is 8, so scrollTop becomes 8 - 2 = 6.
+  let state = viewer({ cursor: { line: 4, col: 3 }, scrollTop: 2, wrapOn: false });
+  state = reduceViewer(state, "z", TOGGLE_LINES, vp).state;
+  state = reduceViewer(state, "w", TOGGLE_LINES, vp).state;
+  assert.equal(state.wrapOn, true);
+  assert.deepEqual(state.cursor, { line: 4, col: 3 });
+  assert.equal(state.scrollTop, 6);
+  assert.equal(state.wantedCol, null);
+  assert.equal(state.scrollLeft, 0);
+});
+
+test("wrap toggle: zw twice round-trips scrollTop through both spaces", () => {
+  const vp = { height: 5, contentWidth: 8, maxLineWidth: TOGGLE_LAYOUT.maxLineWidth, display: { current: TOGGLE_LAYOUT, alternate: TOGGLE_LAYOUT, canToggleRender: false } };
+  let state = viewer({ cursor: { line: 4, col: 3 }, scrollTop: 4 });
+  state = reduceViewer(state, "z", TOGGLE_LINES, vp).state;
+  state = reduceViewer(state, "w", TOGGLE_LINES, vp).state; // -> logical: scrollTop 0
+  state = reduceViewer(state, "z", TOGGLE_LINES, vp).state;
+  state = reduceViewer(state, "w", TOGGLE_LINES, vp).state; // -> visual: 8 - 4
+  assert.equal(state.wrapOn, true);
+  assert.equal(state.scrollTop, 4);
+});
+
+test("wrap toggle: zw in visual mode preserves the raw anchor", () => {
+  const vp = { height: 5, contentWidth: 8, maxLineWidth: TOGGLE_LAYOUT.maxLineWidth, display: { current: TOGGLE_LAYOUT, alternate: TOGGLE_LAYOUT, canToggleRender: false } };
+  let state = viewer({ mode: "visual-char", visualMode: "char", cursor: { line: 4, col: 3 }, anchor: { line: 4, col: 3 }, scrollTop: 5 });
+  state = reduceViewer(state, "j", TOGGLE_LINES, vp).state; // row 9 -> raw (4,11)
+  assert.deepEqual(state.cursor, { line: 4, col: 11 });
+  state = reduceViewer(state, "z", TOGGLE_LINES, vp).state;
+  state = reduceViewer(state, "w", TOGGLE_LINES, vp).state;
+  assert.equal(state.wrapOn, false);
+  assert.deepEqual(state.cursor, { line: 4, col: 11 }); // raw cursor preserved
+  assert.deepEqual(state.anchor, { line: 4, col: 3 }); // raw anchor preserved
+  // Offset 4 (row 9 - scrollTop 5): line 4 - 4 = 0.
+  assert.equal(state.scrollTop, 0);
+});
+
+test("render toggle: zr flips renderOn and remaps through the alternate layout", () => {
+  const vp = zrVp(ZR_CURRENT, ZR_ALTERNATE, true);
+  // Cursor (1,0) is visual row 2 (current) / row 1 (alternate). scrollTop 1
+  // holds viewport offset 1 in current space; the flip holds it in alternate
+  // space: 1 - 1 = 0.
+  let state = viewer({ cursor: { line: 1, col: 0 }, scrollTop: 1, wantedCol: 5 });
+  state = reduceViewer(state, "z", ZR_LINES, vp).state;
+  state = reduceViewer(state, "r", ZR_LINES, vp).state;
+  assert.equal(state.renderOn, false);
+  assert.deepEqual(state.cursor, { line: 1, col: 0 }); // raw cursor preserved
+  assert.equal(state.scrollTop, 0);
+  assert.equal(state.wantedCol, null);
+  assert.equal(state.scrollLeft, 0);
+  // Back on: current space becomes the unprefixed layout, alternate the
+  // prefixed one; offset 1 restores scrollTop 1.
+  const vp2 = zrVp(ZR_ALTERNATE, ZR_CURRENT, true);
+  state = reduceViewer(state, "z", ZR_LINES, vp2).state;
+  state = reduceViewer(state, "r", ZR_LINES, vp2).state;
+  assert.equal(state.renderOn, true);
+  assert.equal(state.scrollTop, 1);
+});
+
+test("render toggle: zr is an exact no-op when render cannot toggle", () => {
+  const vp = zrVp(ZR_CURRENT, ZR_ALTERNATE, false);
+  const st = viewer({ cursor: { line: 1, col: 0 }, scrollTop: 1, pending: "z" });
+  const res = reduceViewer(st, "r", ZR_LINES, vp);
+  assert.deepEqual(res.state, st); // exact: even the pending stroke survives
+  assert.equal(res.effect, undefined);
+});
+
+test("wrap toggle: zw without display layouts flips the flag but keeps scroll state", () => {
+  // No layouts: both coordinate spaces are logical, so scrollTop remaps to
+  // itself and keepVisible stays on the legacy path.
+  const vp = { height: 5, contentWidth: 20, maxLineWidth: 7 };
+  let state = viewer({ cursor: { line: 4, col: 3 }, scrollTop: 2, wantedCol: 7, scrollLeft: 1 });
+  state = reduceViewer(state, "z", LINES, vp).state;
+  state = reduceViewer(state, "w", LINES, vp).state;
+  assert.equal(state.wrapOn, false);
+  assert.deepEqual(state.cursor, { line: 4, col: 3 });
+  assert.equal(state.scrollTop, 2);
+  assert.equal(state.wantedCol, null);
+  assert.equal(state.scrollLeft, 0);
+});
+
+test("wrap: missing wrapOn/renderOn flags behave as ON", () => {
+  // j from (0,0) moves to visual row 1 (same logical line), not line 1.
+  const vp = { height: 4, contentWidth: 8, maxLineWidth: WRAP_LAYOUT.maxLineWidth, display: { current: WRAP_LAYOUT, alternate: WRAP_LAYOUT, canToggleRender: false } };
+  const res = reduceViewer(viewer(), "j", WRAP_LINES, vp);
+  assert.deepEqual(res.state.cursor, { line: 0, col: 8 });
+  // zr with canToggleRender flips renderOn off from the implicit-on default.
+  let st = viewer({ cursor: { line: 0, col: 0 } });
+  st = reduceViewer(st, "z", ZR_LINES, zrVp(ZR_CURRENT, ZR_ALTERNATE, true)).state;
+  st = reduceViewer(st, "r", ZR_LINES, zrVp(ZR_CURRENT, ZR_ALTERNATE, true)).state;
+  assert.equal(st.renderOn, false);
+});
+
+test("wrap toggle: unmatched second strokes after z fall through", () => {
+  const vp = { height: 5, contentWidth: 20, maxLineWidth: 7 };
+  // zz falls through (z is not a known second stroke) and the fall-through
+  // "z" arms a fresh stroke - the same protocol as any key after "g" that
+  // is not a completion: regular normal handling applies.
+  let state = reduceViewer(viewer(), "z", LINES, vp).state;
+  state = reduceViewer(state, "z", LINES, vp).state;
+  assert.equal(state.pending, "z");
+  assert.deepEqual(state.cursor, { line: 0, col: 0 });
+  // z then x falls through to x's normal handling (no draft here: no-op).
+  state = reduceViewer(viewer(), "z", LINES, vp).state;
+  const res = reduceViewer(state, "x", LINES, vp);
+  assert.equal(res.state.pending, null);
+  assert.equal(res.effect, undefined);
+  // A digit while z is pending clears the stroke without arming a count.
+  state = reduceViewer(viewer(), "z", LINES, vp).state;
+  state = reduceViewer(state, "2", LINES, vp).state;
+  assert.equal(state.pending, null);
+  assert.equal(state.count ?? null, null);
 });

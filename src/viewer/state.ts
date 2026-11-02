@@ -12,13 +12,20 @@ import {
   cycleTarget,
   HALF_PAGE,
   keepVisible,
+  moveVisual,
+  moveVisualRows,
   moved,
   ordinalOf,
   resetCycleOnMove,
   resetWantedColOnModeChange,
   stackAtCursor,
+  toggleRender,
+  toggleWrap,
+  visualLayout,
 } from "./movement.ts";
 import { repeatSearch, searchStep } from "./search-mode.ts";
+import { toVisualPosition } from "./wrap.ts";
+import type { VisualLayout } from "./wrap.ts";
 
 export type ViewerMode = "normal" | "visual-char" | "visual-line" | "comment" | "search" | "command";
 
@@ -50,6 +57,21 @@ export interface ViewerState {
   // Hover preview toggle (normal-mode p). Card-session state: survives mode
   // changes but is deliberately not persisted; defaults to true.
   previewOn: boolean;
+  // Soft-wrap toggle (normal/visual zw). Card-session state like previewOn:
+  // never persisted. Optional so callers that construct this state without
+  // the field (pre-wrap callers) stay valid; undefined means ON. When on and
+  // the viewport carries display layouts, vertical motions run on the
+  // wrapped grid, scrollTop counts visual rows, and scrollLeft stays 0;
+  // otherwise the legacy nowrap behavior applies and scrollTop counts
+  // logical lines.
+  wrapOn?: boolean;
+  // Markdown render toggle (normal/visual zr), flipping the block prefixes
+  // and inline spans the scanner adds. Card-session state like previewOn:
+  // never persisted. Optional so callers that construct this state without
+  // the field (pre-render callers) stay valid; undefined means ON. Inert
+  // unless the viewport says the file can toggle render (zr is an exact
+  // no-op otherwise).
+  renderOn?: boolean;
   // Ordinal of the current cycle target within the stack of pending drafts
   // covering the cursor (see stackAtCursor; newest first), normal mode only:
   // 0 targets the most recent draft. Reset to 0 on cursor move, mode change,
@@ -125,6 +147,18 @@ export interface ViewerResult {
   effect?: ViewerEffect;
 }
 
+// Display layouts the viewer renders for this viewport: `current` matches
+// the state's effective wrap/render modes, `alternate` is the same wrap
+// setting with render toggled (zr remaps scrollTop through it), and
+// canToggleRender says whether zr applies at all (false on non-Markdown
+// files, where zr is an exact no-op). Layouts come from buildVisualLayout over the
+// rendered display lines.
+export interface ViewerDisplayModes {
+  current: VisualLayout;
+  alternate: VisualLayout;
+  canToggleRender: boolean;
+}
+
 // Viewport options for one reduce: the content row count, the content width
 // in display columns (inner width minus the gutter), and the maximum display
 // width across all loaded lines (computed once at file load). The horizontal
@@ -135,6 +169,10 @@ export interface ViewerViewport {
   height: number;
   contentWidth: number;
   maxLineWidth: number;
+  // Wrapped-grid layouts for wrap-mode motion and the zw/zr toggles.
+  // Optional: without it (legacy callers and tests) every reduce keeps the
+  // nowrap path - scrollTop stays logical and horizontal follow runs.
+  display?: ViewerDisplayModes;
 }
 
 function handleMode(state: ViewerState, key: string, lines: string[], viewport: ViewerViewport, pending: PendingDraft[]): ViewerResult {
@@ -150,6 +188,10 @@ function handleMode(state: ViewerState, key: string, lines: string[], viewport: 
     case "\x1b[C":
       return consumeCount(moved({ ...state, wantedCol: null }, { ...state.cursor, col: state.cursor.col + (state.count ?? 1) }, lines, viewport));
     case "j": {
+      // Wrap mode moves by visual row; h/l below stay raw-count motions in
+      // both modes (keepVisible pins scrollLeft to 0 when wrap runs).
+      const visual = moveVisualRows(state, lines, viewport, state.count ?? 1);
+      if (visual !== null) return visual;
       // Goal-column memory: aim at the stored goal (or the current column on
       // a fresh session); moved() lands on it clamped to the target line and
       // the unclamped goal rides in wantedCol for the next vertical move.
@@ -157,14 +199,20 @@ function handleMode(state: ViewerState, key: string, lines: string[], viewport: 
       return consumeCount(moved({ ...state, wantedCol: wanted }, { line: state.cursor.line + (state.count ?? 1), col: wanted }, lines, viewport));
     }
     case "\x1b[B": {
+      const visual = moveVisualRows(state, lines, viewport, state.count ?? 1);
+      if (visual !== null) return visual;
       const wanted = state.wantedCol ?? state.cursor.col;
       return consumeCount(moved({ ...state, wantedCol: wanted }, { line: state.cursor.line + (state.count ?? 1), col: wanted }, lines, viewport));
     }
     case "k": {
+      const visual = moveVisualRows(state, lines, viewport, -(state.count ?? 1));
+      if (visual !== null) return visual;
       const wanted = state.wantedCol ?? state.cursor.col;
       return consumeCount(moved({ ...state, wantedCol: wanted }, { line: state.cursor.line - (state.count ?? 1), col: wanted }, lines, viewport));
     }
     case "\x1b[A": {
+      const visual = moveVisualRows(state, lines, viewport, -(state.count ?? 1));
+      if (visual !== null) return visual;
       const wanted = state.wantedCol ?? state.cursor.col;
       return consumeCount(moved({ ...state, wantedCol: wanted }, { line: state.cursor.line - (state.count ?? 1), col: wanted }, lines, viewport));
     }
@@ -172,10 +220,28 @@ function handleMode(state: ViewerState, key: string, lines: string[], viewport: 
       return moved({ ...state, wantedCol: null }, { line: state.cursor.line, col: 0 }, lines, viewport);
     case "$": // end-exclusive convention: max clampable col equals line length
       return moved({ ...state, wantedCol: null }, { line: state.cursor.line, col: Number.MAX_SAFE_INTEGER }, lines, viewport);
+    case "^": {
+      // First raw non-whitespace character of the logical line, in both wrap
+      // modes (skip spaces and tabs; a blank line clamps to the raw length,
+      // i.e. the end-exclusive cursor cell on its last character).
+      const raw = lines[state.cursor.line] ?? "";
+      let col = 0;
+      while (col < raw.length && (raw[col] === " " || raw[col] === "\t")) col++;
+      return moved({ ...state, wantedCol: null }, { line: state.cursor.line, col }, lines, viewport);
+    }
     case "G": {
+      const cnt = state.count ?? null;
+      // Wrap mode: plain G targets the last visual row and {count}G the
+      // 1-based visual row, both carrying the current display column through
+      // toRawPosition and ending the goal-column session.
+      const layout = visualLayout(state, viewport);
+      if (layout !== null) {
+        const col = toVisualPosition(lines, layout, state.cursor).col;
+        const row = cnt === null ? layout.rows.length - 1 : Math.min(Math.max(cnt - 1, 0), layout.rows.length - 1);
+        return consumeCount(moveVisual({ ...state, wantedCol: null }, layout, lines, viewport, row, col));
+      }
       // {count}G goes to the 1-based line `count`, clamped into the file;
       // plain G keeps the last-line jump.
-      const cnt = state.count ?? null;
       const line = cnt === null ? lines.length - 1 : Math.min(Math.max(cnt - 1, 0), lines.length - 1);
       return consumeCount(moved({ ...state, wantedCol: null }, { line, col: state.cursor.col }, lines, viewport));
     }
@@ -199,19 +265,48 @@ function handleMode(state: ViewerState, key: string, lines: string[], viewport: 
       return repeatSearch({ ...state, wantedCol: null, searchHL: true }, key === "n" ? 1 : -1, state.count ?? 1, lines, viewport);
     case "g":
       return { state: { ...state, pending: "g" } };
+    case "z":
+      // Arms the zw/zr two-stroke family, same protocol as "g": a known
+      // second stroke completes, any other key falls through (pending
+      // cleared) to regular handling.
+      return { state: { ...state, pending: "z" } };
     case "\x04": { // ctrl+d: half page down; vertical family, aim at the goal
+      const layout = visualLayout(state, viewport);
+      if (layout !== null) {
+        const pos = toVisualPosition(lines, layout, state.cursor);
+        const wanted = state.wantedCol ?? pos.col;
+        return moveVisual({ ...state, wantedCol: wanted }, layout, lines, viewport, pos.row + HALF_PAGE(vh), wanted);
+      }
       const wanted = state.wantedCol ?? state.cursor.col;
       return moved({ ...state, wantedCol: wanted }, { line: state.cursor.line + HALF_PAGE(vh), col: wanted }, lines, viewport);
     }
     case "\x15": { // ctrl+u: half page up
+      const layout = visualLayout(state, viewport);
+      if (layout !== null) {
+        const pos = toVisualPosition(lines, layout, state.cursor);
+        const wanted = state.wantedCol ?? pos.col;
+        return moveVisual({ ...state, wantedCol: wanted }, layout, lines, viewport, pos.row - HALF_PAGE(vh), wanted);
+      }
       const wanted = state.wantedCol ?? state.cursor.col;
       return moved({ ...state, wantedCol: wanted }, { line: state.cursor.line - HALF_PAGE(vh), col: wanted }, lines, viewport);
     }
     case "\x1b[6~": { // PgDn
+      const layout = visualLayout(state, viewport);
+      if (layout !== null) {
+        const pos = toVisualPosition(lines, layout, state.cursor);
+        const wanted = state.wantedCol ?? pos.col;
+        return moveVisual({ ...state, wantedCol: wanted }, layout, lines, viewport, pos.row + vh, wanted);
+      }
       const wanted = state.wantedCol ?? state.cursor.col;
       return moved({ ...state, wantedCol: wanted }, { line: state.cursor.line + vh, col: wanted }, lines, viewport);
     }
     case "\x1b[5~": { // PgUp
+      const layout = visualLayout(state, viewport);
+      if (layout !== null) {
+        const pos = toVisualPosition(lines, layout, state.cursor);
+        const wanted = state.wantedCol ?? pos.col;
+        return moveVisual({ ...state, wantedCol: wanted }, layout, lines, viewport, pos.row - vh, wanted);
+      }
       const wanted = state.wantedCol ?? state.cursor.col;
       return moved({ ...state, wantedCol: wanted }, { line: state.cursor.line - vh, col: wanted }, lines, viewport);
     }
@@ -411,18 +506,34 @@ export function reduceViewer(
     }
   }
 
-  // Two-stroke sequences: "g" arms "gg". A second "g" completes the jump to
-  // line 0; any other key clears the pending and falls through to regular
+  // Two-stroke sequences: "g" arms "gg"; "z" arms "zw" (soft-wrap toggle)
+  // and "zr" (markdown-render toggle). The prefix key repeated completes
+  // gg; any other key clears the pending and falls through to regular
   // normal/visual handling.
   let current = state;
   let res: ViewerResult;
-  if (current.pending !== null) {
-    if (key === current.pending) {
-      res = moved({ ...current, pending: null, wantedCol: null }, { line: 0, col: current.cursor.col }, lines, viewport);
-    } else {
-      current = { ...current, pending: null };
-      res = handleMode(current, key, lines, viewport, pending);
-    }
+  if (current.pending === "g" && key === "g") {
+    // gg: wrap mode targets the first visual row (current display column
+    // preserved through toRawPosition); otherwise the legacy line-0 jump.
+    const layout = visualLayout(current, viewport);
+    res =
+      layout !== null
+        ? moveVisual(
+            { ...current, pending: null, wantedCol: null },
+            layout,
+            lines,
+            viewport,
+            0,
+            toVisualPosition(lines, layout, current.cursor).col,
+          )
+        : moved({ ...current, pending: null, wantedCol: null }, { line: 0, col: current.cursor.col }, lines, viewport);
+  } else if (current.pending === "z" && key === "w") {
+    res = toggleWrap(current, lines, viewport);
+  } else if (current.pending === "z" && key === "r") {
+    res = toggleRender(current, lines, viewport);
+  } else if (current.pending !== null) {
+    current = { ...current, pending: null };
+    res = handleMode(current, key, lines, viewport, pending);
   } else {
     res = handleMode(current, key, lines, viewport, pending);
   }
