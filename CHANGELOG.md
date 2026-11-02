@@ -1,5 +1,13 @@
 # Changelog
 
+## [2.0.1](https://github.com/zhang-stephen/pi-annotate-anything/compare/pi-annotate-anything-v2.0.0...pi-annotate-anything-v2.0.1) (2026-11-02)
+
+
+### Bug Fixes
+
+* **viewer:** keep vertical caret motion across full rows ([1a2d493](https://github.com/zhang-stephen/pi-annotate-anything/commit/1a2d49340171e022655ecfe6f0443bc2de24654a))
+* **viewer:** place comment caret at insertion point ([ea436c6](https://github.com/zhang-stephen/pi-annotate-anything/commit/ea436c6e8e4f75a21d765216a3f1d0cd5f5bda24))
+
 ## [2.0.0](https://github.com/zhang-stephen/pi-annotate-anything/compare/pi-annotate-anything-v1.5.2...pi-annotate-anything-v2.0.0) (2026-10-22)
 
 
