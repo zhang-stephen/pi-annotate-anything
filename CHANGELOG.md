@@ -1,5 +1,12 @@
 # Changelog
 
+## [2.1.0](https://github.com/zhang-stephen/pi-annotate-anything/compare/pi-annotate-anything-v2.0.1...pi-annotate-anything-v2.1.0) (2026-11-02)
+
+
+### Features
+
+* **composer:** restyle annotation pills ([782ee7a](https://github.com/zhang-stephen/pi-annotate-anything/commit/782ee7ad4f0e8c88d9e038215601b7bc4effaf9c))
+
 ## [2.0.1](https://github.com/zhang-stephen/pi-annotate-anything/compare/pi-annotate-anything-v2.0.0...pi-annotate-anything-v2.0.1) (2026-11-02)
 
 
