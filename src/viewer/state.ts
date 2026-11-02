@@ -147,12 +147,15 @@ export interface ViewerResult {
   effect?: ViewerEffect;
 }
 
-// Display layouts the viewer renders for this viewport: `current` matches
-// the state's effective wrap/render modes, `alternate` is the same wrap
-// setting with render toggled (zr remaps scrollTop through it), and
-// canToggleRender says whether zr applies at all (false on non-Markdown
-// files, where zr is an exact no-op). Layouts come from buildVisualLayout over the
-// rendered display lines.
+// Wrapped-grid layouts for the two markdown render modes at the viewport's
+// wrap width: `current` describes the render mode the state is in right
+// now, `alternate` the render mode a zr flip would switch to (zr measures
+// scrollTop in current, then follows and clamps in alternate as the target
+// space). Wrap-off motion ignores `current` (the logical space needs no
+// grid), but zw still measures through it to remap scrollTop into or out
+// of visual rows. canToggleRender says whether zr applies at all (false on
+// non-Markdown files, where zr is an exact no-op). Layouts come from
+// buildVisualLayout over the rendered display lines.
 export interface ViewerDisplayModes {
   current: VisualLayout;
   alternate: VisualLayout;

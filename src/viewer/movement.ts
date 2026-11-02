@@ -240,11 +240,14 @@ export function toggleWrap(state: ViewerState, lines: string[], viewport: Viewer
 // stroke included. With wrap off both layouts map to the logical space, so
 // only the flag flips; with wrap on the cursor's row is measured in current
 // and re-aimed in alternate, keeping the viewport offset across the
-// geometry change.
+// geometry change. The post-flip keepVisible runs with the alternate layout
+// in its usual "current" slot, so the follow and clamp land in the target
+// coordinate space instead of re-following against the stale layout.
 export function toggleRender(state: ViewerState, lines: string[], viewport: ViewerViewport): ViewerResult {
   const display = viewport.display;
   if (display === undefined || !display.canToggleRender) return { state };
   const renderOn = state.renderOn === false;
+  const followViewport: ViewerViewport = { ...viewport, display: { ...display, current: display.alternate } };
   let scrollTop = state.scrollTop;
   if (state.wrapOn !== false) {
     const offset = toVisualPosition(lines, display.current, state.cursor).row - state.scrollTop;
@@ -254,7 +257,7 @@ export function toggleRender(state: ViewerState, lines: string[], viewport: View
     state: keepVisible(
       { ...state, renderOn, pending: null, wantedCol: null, scrollLeft: 0, scrollTop },
       lines,
-      viewport,
+      followViewport,
     ),
   };
 }

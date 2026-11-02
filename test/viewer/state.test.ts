@@ -860,6 +860,31 @@ test("render toggle: zr flips renderOn and remaps through the alternate layout",
   assert.equal(state.scrollTop, 1);
 });
 
+test("render toggle: post-flip follow clamps in the target layout space", () => {
+  // Edge case from review: the cursor sits on line 3 (current-space row 6)
+  // with scrollTop 5 at the bottom of the prefixed layout; after flipping
+  // render off the alternate layout only has 4 rows (maxScroll 1 at vh 3).
+  // The remap lands scrollTop 2, and the follow must clamp against the
+  // TARGET (alternate) space to scrollTop 1 with the cursor visible at
+  // offset 2 - not re-follow in the stale 8-row current space (which
+  // pinned scrollTop 4 and pushed the cursor off-screen at offset -1).
+  const vp = zrVp(ZR_CURRENT, ZR_ALTERNATE, true);
+  let state = viewer({ cursor: { line: 3, col: 0 }, scrollTop: 5 });
+  state = reduceViewer(state, "z", ZR_LINES, vp).state;
+  state = reduceViewer(state, "r", ZR_LINES, vp).state;
+  assert.equal(state.renderOn, false);
+  assert.deepEqual(state.cursor, { line: 3, col: 0 });
+  assert.equal(state.scrollTop, 1); // alternate space: 4 rows - vh 3
+  // Flip back: offset 2 (alternate row 3 - scrollTop 1) carries into
+  // current space (row 6 - 2 = 4), and the follow clamps in the target
+  // (current) space, where scrollTop 4 is in range (maxScroll 5).
+  const vp2 = zrVp(ZR_ALTERNATE, ZR_CURRENT, true);
+  state = reduceViewer(state, "z", ZR_LINES, vp2).state;
+  state = reduceViewer(state, "r", ZR_LINES, vp2).state;
+  assert.equal(state.renderOn, true);
+  assert.equal(state.scrollTop, 4);
+});
+
 test("render toggle: zr is an exact no-op when render cannot toggle", () => {
   const vp = zrVp(ZR_CURRENT, ZR_ALTERNATE, false);
   const st = viewer({ cursor: { line: 1, col: 0 }, scrollTop: 1, pending: "z" });

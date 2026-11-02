@@ -1,7 +1,7 @@
 ---
 title: Viewer Markdown, Word Wrap, Pill Restyle, and Comment Caret - Implementation Plan
 status: in-progress
-progress: 5/9
+progress: 6/9
 spec: ../specs/2026-10-23-viewer-md-render-wrap-design.md
 ---
 
@@ -18,7 +18,7 @@ The existing token store and payload pipeline remain intact; only the composer l
 **Spec:** `docs/superpowers/specs/2026-10-23-viewer-md-render-wrap-design.md`, including the 2026-10-27 current-pill and comment-caret supplements plus the post-merge `^` correction.
 
 **Execution:** Worktree `.pi/worktrees/viewer-md-render-wrap/`, branch `viewer-md-render-wrap`.
-Tasks 1-5 are implemented, reviewed, and committed locally; Task 6 is next.
+Tasks 1-6 are implemented, reviewed, and committed locally; Task 7 is next.
 Push and final integration wait for user-confirmed real-terminal E2E.
 
 ## Global constraints
@@ -335,7 +335,7 @@ Update bookkeeping and commit `feat(viewer): add raw-mapped word wrap`.
 **Files:**
 - Modify `src/viewer/movement.ts`, `src/viewer/state.ts`, `test/viewer/movement.test.ts`, and `test/viewer/state.test.ts`.
 
-- [ ] **Step 1: Write failing visual-motion and toggle tests**
+- [x] **Step 1: Write failing visual-motion and toggle tests**
 
 Build small real layouts through Task 5 and pass them through the new optional viewport display field.
 Pin these behaviors:
@@ -349,12 +349,12 @@ Pin these behaviors:
 - `zr` performs the same remap through the alternate layout, while `zr` on a non-Markdown viewport is an exact no-op.
 - Missing optional flags mean ON, while a viewport with no display layouts retains every existing reducer test and horizontal-scroll expectation.
 
-- [ ] **Step 2: Run reducer tests and confirm RED**
+- [x] **Step 2: Run reducer tests and confirm RED**
 
 Run `node --test test/viewer/movement.test.ts test/viewer/state.test.ts`.
 Expect missing display-layout types, visual motion, and `z` handling.
 
-- [ ] **Step 3: Implement visual `keepVisible`, motions, and toggles**
+- [x] **Step 3: Implement visual `keepVisible`, motions, and toggles**
 
 Add optional `wrapOn` and `renderOn` state fields and this optional viewport field:
 
@@ -373,12 +373,13 @@ Use `wantedCol` as raw columns in nowrap mode and display columns in wrap mode, 
 Add `moveVisual()` for row deltas and visual goals, add the `^` raw first-non-whitespace arm, and generalize pending two-stroke handling for `gg`, `zw`, and `zr` without adding any g-family motion.
 `zw` uses the current layout for remapping and `zr` uses `current` versus `alternate`; both preserve raw cursor and anchor and re-run `keepVisible` after choosing the target coordinate space.
 
-- [ ] **Step 4: Run focused and full verification**
+- [x] **Step 4: Run focused and full verification**
 
 Run the Step 2 command, the full suite, and typecheck.
 Expect all new and pre-existing reducer tests to pass.
+Review required `fix(viewer): follow render toggles in target layout` so `zr` performs its final follow against the alternate-as-current viewport; the edge regression now covers both flip directions and exact offset preservation.
 
-- [ ] **Step 5: Review and commit**
+- [x] **Step 5: Review and commit**
 
 Update bookkeeping and commit `feat(viewer): add visual-row motions and display toggles`.
 
@@ -484,7 +485,8 @@ Update bookkeeping and commit `feat(viewer): preserve annotation mapping in visu
 
 - [ ] **Step 1: Update user documentation**
 
-Document default word wrap and Markdown styling, `zw`, `zr`, and `^` in Features and Keys, remove Basic Markdown from Roadmap, and update every composer pill example to the new NF-glyph basename format.
+Document default word wrap and Markdown styling, `zw`, `zr`, and `^` in Features and Keys, and remove Basic Markdown from Roadmap.
+Prepare the NF-glyph basename pill README update as a separate Task 2 release documentation change rather than bundling it into the Tasks 3-9 release.
 State that source selections and payload ranges remain raw and that wrap OFF plus render OFF restores the source-style view.
 Do not add a version bump or changelog entry.
 
@@ -516,3 +518,10 @@ Commit `docs: document viewer rendering acceptance` with the README and completi
 The user requires every task to be committed locally after implementation, automated verification, and review.
 Real-terminal E2E remains mandatory before push and final integration.
 Task 1 focused E2E is deferred to Task 9, so its Step 5 remains unchecked until that acceptance pass.
+
+## Amendment (post-merge): three releases with shared E2E
+
+The user selected three releases: Task 1, Task 2, and Tasks 3-9.
+All three releases wait for the same final real-terminal E2E pass; no early push or integration is required.
+After E2E, fast-forward and publish Task 1 at `1a2d493`, then Task 2 at `57ae0c9`, then the final Markdown commit, merging and publishing each release-please PR before pushing the next batch.
+The Task 2 pill README update may be committed on master at that release boundary; rebase the remaining branch and rerun tests plus typecheck before final Markdown integration.
