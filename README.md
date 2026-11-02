@@ -38,7 +38,7 @@ pi install npm:pi-annotate-anything
 - Cmdline and search carets render as the terminal's hardware cursor: the `:` and `/` inputs emit the same marker contract as the comment box, so caret style follows the terminal everywhere.
 - The goal column survives short lines (curswant): vertical moves keep aiming at the column you came from; horizontal moves, jumps, searches, and mode switches end the session.
 - Fuzzy path completion in the `/annotate` argument: session-relative paths, `~` expansion, directories first, and workspace-wide fuzzy matching backed by an async file index. Recommended host: pi >= 1.0 (older hosts report an explicit error and get no completion).
-- Composer pills like `[src/a.ts:10-20]` that expand into full quote-block-plus-comment payloads when the message is sent. `alt+o` in the composer jumps back: it opens the viewer centered on the last pill's range with every pending comment of that file replayed, ready for `c` (edit) or `x` (delete); with no pills it warns that there is nothing to jump back to.
+- Composer pills like `[ a.ts:10-20]` that expand into full quote-block-plus-comment payloads when the message is sent. `alt+o` in the composer jumps back: it opens the viewer centered on the last pill's range with every pending comment of that file replayed, ready for `c` (edit) or `x` (delete); with no pills it warns that there is nothing to jump back to.
 - Annotate-time snapshots: the payload carries the text you saw when annotating, never a silent re-read of the file.
 - Floating comment editor next to the selection with soft wrap and multiline support (`ctrl+j` / `shift+enter`), a movable caret (`Left`/`Right` by grapheme, `Up`/`Down` across wrapped rows with a goal column, `Home`/`End` to row edges), and hardware-cursor rendering: the caret follows the terminal's own cursor style, falling back to an inverse cell when the TUI hides hardware cursors.
 - Pending ranges marked with underlines plus a gutter marker (Nerd Font icon + count on each draft's start line, continuation lines get a dim bar).
@@ -108,7 +108,7 @@ When the cursor sits on a position covered by several pending drafts, exactly on
 
 ## Payload format
 
-A pill in the composer looks like `[src/a.ts:10-20]`. When the message is sent, it is expanded to:
+A pill in the composer looks like `[ a.ts:10-20]`. When the message is sent, it is expanded to:
 
 ````text
 In `src/a.ts` (lines 10-20):
@@ -120,10 +120,10 @@ Comment: this name is misleading, rename it?
 
 Label variants:
 
-- `[src/a.ts:10-20]` - line-wise range
-- `[src/a.ts:10]` - single line
-- `[src/a.ts:10:5-12:20]` - char-wise range (1-based line:column)
-- `[src/a.ts:10-20 ~2]` - suffix added when the identical label is already pending in the composer
+- `[ a.ts:10-20]` - line-wise range
+- `[ a.ts:10]` - single line
+- `[ a.ts:10:5-12:20]` - char-wise range (1-based line:column)
+- `[ a.ts:10-20~2]` - suffix added when the identical label is already pending in the composer
 
 ## Behavior notes
 
