@@ -142,7 +142,9 @@ function keepVisibleVisual(state: ViewerState, lines: string[], viewport: Viewer
 // edge -> pin to the window's right edge. Applied to every cursor-moving key.
 // Wrap mode (visualLayout non-null) swaps the vertical half for visual-row
 // following with scrollLeft pinned to 0; the nowrap path below preserves
-// legacy behavior and adds any current display-line prefix offset.
+// legacy behavior and adds the line's display-line prefix offset (the full
+// literal prefix when the layout records fullPrefixByLine, else the row's
+// truncated prefix).
 export function keepVisible(state: ViewerState, lines: string[], viewport: ViewerViewport): ViewerState {
   const layout = visualLayout(state, viewport);
   if (layout !== null) return keepVisibleVisual(state, lines, viewport, layout);
@@ -155,8 +157,16 @@ export function keepVisible(state: ViewerState, lines: string[], viewport: Viewe
   const cw = Math.max(1, viewport.contentWidth);
   const bound = Math.max(0, viewport.maxLineWidth - cw + 1);
   const clampedLeft = Math.min(Math.max(state.scrollLeft ?? 0, 0), bound);
-  const firstRow = viewport.display?.current.rows[viewport.display.current.firstRowByLine[state.cursor.line]];
-  const displayCol = (firstRow?.prefixWidth ?? 0) + rawColToDisplayCol(lines[state.cursor.line] ?? "", state.cursor.col);
+  const current = viewport.display?.current;
+  const firstRow = current?.rows[current.firstRowByLine[state.cursor.line]];
+  // Aim by the line's FULL literal prefix: the grid's rows carry only the
+  // cosmetically truncated prefix, so with a viewport narrower than the
+  // prefix the row prefix would under-scroll and park the cursor cell off
+  // window. Missing display layouts (no viewport.display) and plain files
+  // (prefix 0) keep legacy behavior; layouts without fullPrefixByLine fall
+  // back to the row's truncated prefix.
+  const prefix = current?.fullPrefixByLine?.[state.cursor.line] ?? firstRow?.prefixWidth ?? 0;
+  const displayCol = prefix + rawColToDisplayCol(lines[state.cursor.line] ?? "", state.cursor.col);
   let scrollLeft = clampedLeft;
   if (displayCol < scrollLeft) scrollLeft = displayCol;
   if (displayCol >= scrollLeft + cw) scrollLeft = displayCol - cw + 1;

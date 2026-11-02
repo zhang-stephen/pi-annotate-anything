@@ -423,3 +423,14 @@ test("keeps emoji-tab display spans and wrapped slices in the same grapheme geom
   assert.deepEqual(visual, { row: 1, col: 2 });
   assert.deepEqual(toRawPosition([raw], layout, visual.row, visual.col), { line: 0, col: 5 });
 });
+
+test("fullPrefixByLine keeps untruncated prefix widths when rows truncate cosmetically", () => {
+  const raw = "> " + "x".repeat(40);
+  const display = buildDisplayLine(raw, { prefix: "\u258E ", prefixStyle: "mdQuoteBorder" });
+  const degenerate = buildVisualLayout([raw], [display], 2);
+  assert.deepEqual(degenerate.fullPrefixByLine, [2], "untruncated literal prefix width per line");
+  assert.equal(degenerate.rows[0].prefixWidth, 1, "row rendering still truncates the prefix cosmetically");
+  const wide = buildVisualLayout([raw], [display], 20);
+  assert.deepEqual(wide.fullPrefixByLine, [2]);
+  assert.equal(wide.rows[0].prefixWidth, 2, "identical when no truncation happens");
+});

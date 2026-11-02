@@ -652,8 +652,11 @@ test("comment box caps at 8 rows and keeps the cursor's row visible", () => {
 test("comment box splices occluded rows ANSI-safely: no cut escapes, SGR state carried", () => {
   // A pending-marked, selected line styled with raw SGR runs; the fixed box
   // cuts mid-run, so the right sliver must re-open the carried SGR state.
+  // Nowrap: this is a legacy chrome splice test - wrap's open-below budget
+  // would move the box off the styled row it exists to cut.
   const lines = ["a".repeat(70), "second"];
   const h = makeCard({ lines });
+  turnWrapOff(h.card);
   h.pending.push({ startLine: 0, startCol: 0, endLine: 0, endCol: 70 });
   h.card.handleInput("v");
   h.card.handleInput("c");
@@ -1818,4 +1821,251 @@ test("resize clamps a bottom visual viewport without stale cached rows", () => {
   assert.equal(narrowBody.length, 5);
   assert.ok(narrowBody[3].includes("second"));
   assert.ok(narrowBody[4].includes("line"));
+});
+
+// Wrap-mode interaction geometry (Task 8) -------------------------------------
+//
+// Annotations, search, overlays, and focus ride the visual-row grid: stored
+// ranges and payloads stay raw, painting intersects each VisualRow's raw
+// window, comment/preview anchors map through toVisualPosition, and the
+// first actual-width render recenters a jump-back focus against the real
+// wrapped layout. Statusline coordinates stay raw logical (prefix-free).
+
+// Raw body rows (ANSI preserved: the interaction styles are asserted from
+// these bytes).
+function bodyRows(rows: string[]): string[] {
+  return rows.slice(1, -3);
+}
+
+// Visible text carried between an SGR open marker's first occurrence and the
+// last close marker (null when the style is absent; overlapping same-style
+// runs, e.g. selection + cursor cell, read as one run).
+function styledSlice(row: string, open: string, close: string): string | null {
+  const start = row.indexOf(open);
+  if (start === -1) return null;
+  const end = row.lastIndexOf(close);
+  return strip(row.slice(start + open.length, end === -1 ? row.length : end));
+}
+
+function boxTopRow(body: string[]): number {
+  const at = body.findIndex((row) => row.includes("╭─ Comment"));
+  assert.notEqual(at, -1, "comment box rendered");
+  return at;
+}
+
+// Quote prefix + tab + CJK at cw 10 (render 20): three visual rows
+// "▎ > ab    " / "▎ 你好 " / "▎ cdefgh" with raw windows [0,5) [5,8) [8,14).
+const WRAP_MD_LINES = ["> ab\t\u4f60\u597d cdefgh"];
+
+test("char selection across a wrap boundary submits the exact raw range and leaves the source untouched", () => {
+  const lines = ["alpha beta gamma delta epsilon"]; // wraps [0,6) / [6,11) / ... at cw 10
+  const h = makeCard({ lines });
+  h.card.render(20);
+  for (let i = 0; i < 3; i++) h.card.handleInput("l"); // cursor (0,3)
+  h.card.handleInput("v"); // anchor (0,3)
+  for (let i = 0; i < 6; i++) h.card.handleInput("l"); // cursor (0,9), across the [0,6) boundary
+  h.card.handleInput("c");
+  for (const ch of "note") h.card.handleInput(ch);
+  h.card.handleInput("\r");
+  assert.equal(h.calls.annotate.length, 1);
+  assert.deepEqual(h.calls.annotate[0].range, { startLine: 0, startCol: 3, endLine: 0, endCol: 10 });
+  assert.equal(h.calls.annotate[0].mode, "char");
+  assert.equal(h.calls.annotate[0].comment, "note");
+  assert.deepEqual(lines, ["alpha beta gamma delta epsilon"], "raw source unchanged");
+});
+
+test("selection inverse paints every visual segment across prefixes, tabs, and CJK", () => {
+  const h = makeCard({ path: "/work/a.md", lines: WRAP_MD_LINES });
+  h.card.render(20);
+  for (let i = 0; i < 2; i++) h.card.handleInput("l"); // cursor (0,2)
+  h.card.handleInput("v");
+  for (let i = 0; i < 7; i++) h.card.handleInput("l"); // cursor (0,9); selection [2,10) crosses rows
+  const body = bodyRows(h.card.render(20));
+  assert.equal(styledSlice(body[0], INVERSE_ON, INVERSE_OFF), "ab    ", "tab-expanded head segment");
+  assert.equal(styledSlice(body[1], INVERSE_ON, INVERSE_OFF), "\u4f60\u597d ", "continuation segment keeps the prefix");
+  assert.equal(styledSlice(body[2], INVERSE_ON, INVERSE_OFF), "cd", "third segment carries the tail");
+});
+
+test("pending underline and cycle-target emphasis paint each visual segment", () => {
+  const h = makeCard({ path: "/work/a.md", lines: WRAP_MD_LINES });
+  const range: Range = { startLine: 0, startCol: 2, endLine: 0, endCol: 10 };
+  h.pending.push(range);
+  h.drafts.push({ token: "[a.md:1]", range, comment: "note" });
+  h.card.render(20);
+  for (let i = 0; i < 2; i++) h.card.handleInput("l"); // cursor inside the draft -> cycle target
+  h.card.handleInput("p"); // hide the hover preview: it would occlude the underlined row
+  const body = bodyRows(h.card.render(20));
+  assert.equal(styledSlice(body[0], UNDERLINE_ON, UNDERLINE_OFF), "ab    ");
+  assert.equal(styledSlice(body[1], UNDERLINE_ON, UNDERLINE_OFF), "\u4f60\u597d ");
+  assert.equal(styledSlice(body[2], UNDERLINE_ON, UNDERLINE_OFF), "cd");
+  assert.ok(body[0].includes(BOLD_ON), "cycle target paints bold + underline on its segment");
+});
+
+test("cursor cell rides its own segment and the statusline stays raw and prefix-free", () => {
+  const h = makeCard({ path: "/work/a.md", lines: WRAP_MD_LINES });
+  h.card.render(20);
+  for (let i = 0; i < 8; i++) h.card.handleInput("l"); // cursor (0,8): display col 13, visual row 2
+  let rows = h.card.render(20);
+  let body = bodyRows(rows);
+  assert.equal(styledSlice(body[2], INVERSE_ON, INVERSE_OFF), "c", "cursor paints its visual cell on the continuation row");
+  assert.ok(!body[0].includes(INVERSE_ON) && !body[1].includes(INVERSE_ON));
+  const status = strip(rows[rows.length - 3]);
+  assert.ok(status.endsWith("1:14 │"), "statusline col = raw display col + 1 without the 2-cell prefix");
+  h.card.handleInput("v");
+  for (let i = 0; i < 3; i++) h.card.handleInput("l"); // selection [8,12): display 13..16
+  // The selection segment drops when it does not fit, so assert it on a
+  // wider frame of the same wrapped file.
+  const wideRows = h.card.render(40);
+  assert.ok(strip(wideRows[wideRows.length - 3]).includes("1:14-1:17"), "selection endpoints stay raw display cols");
+});
+
+test("current and ordinary search matches paint their visual segments", () => {
+  const h = makeCard({ path: "/work/a.md", lines: WRAP_MD_LINES });
+  h.card.render(20);
+  h.card.handleInput("/");
+  for (const ch of "[dh]") h.card.handleInput(ch);
+  h.card.handleInput("\r"); // submit jumps onto the first match (d, raw col 9, third segment)
+  const runs = (row: string) =>
+    row.split(BG_ON).slice(1).map((part) => {
+      const end = part.indexOf(BG_OFF);
+      return { text: strip(part.slice(0, end)), current: part.slice(0, end).includes("\x1b[7m") };
+    });
+  let body = bodyRows(h.card.render(20));
+  assert.deepEqual(runs(body[2]), [{ text: "d", current: true }, { text: "h", current: false }]);
+  assert.ok(!body[0].includes(BG_ON) && !body[1].includes(BG_ON), "no highlight leaks onto other segments");
+  h.card.handleInput("n"); // next match: the current level moves to h
+  body = bodyRows(h.card.render(20));
+  assert.deepEqual(runs(body[2]), [{ text: "d", current: false }, { text: "h", current: true }]);
+});
+
+test("comment editor anchors below the selection's last covered visual row", () => {
+  // At cw 70 each line wraps after 11 words: line 0 -> rows 0/1, line 2 -> rows 4/5.
+  const lines = [
+    "alpha ".repeat(14) + "end1",
+    "beta ".repeat(14) + "end2",
+    "gamma ".repeat(14) + "end3",
+  ];
+  const h = makeCard({ lines });
+  h.card.render(80); // contentW 76 > editor boxW 64, so the anchor column is observable
+  h.card.handleInput("v");
+  h.card.handleInput("j");
+  h.card.handleInput("j");
+  h.card.handleInput("j");
+  h.card.handleInput("j"); // j rides visual rows: cursor (2,0) on line 2's first visual row 4
+  h.card.handleInput("c");
+  const body = bodyRows(h.card.render(80));
+  assert.equal(boxTopRow(body), 5, "box opens below the selection's last covered visual row (row 4)");
+  // Stripped: the spliced border row carries splice/border SGR bytes, so a
+  // raw indexOf measures byte offsets, not display columns.
+  assert.equal(strip(body[5]).indexOf("╭─ Comment"), 2 + 6, "box aligns to the anchor cell with scrollLeft 0");
+});
+
+test("comment editor anchors below a continuation-row selection start", () => {
+  const lines = ["alpha ".repeat(14) + "end1", "filler"];
+  const h = makeCard({ lines });
+  h.card.render(80);
+  // l moves raw columns, so a count 66 lands the cursor on the continuation
+  // row's first cell (raw col 66 = line 0's second visual row).
+  h.card.handleInput("6");
+  h.card.handleInput("6");
+  h.card.handleInput("l"); // cursor (0,66): line 0's second visual row, row-local col 0
+  h.card.handleInput("v");
+  h.card.handleInput("c");
+  const body = bodyRows(h.card.render(80));
+  assert.equal(boxTopRow(body), 2, "box opens below the continuation row holding the anchor");
+  assert.equal(strip(body[2]).indexOf("╭─ Comment"), 2 + 6);
+});
+
+test("hover preview anchors to the cursor's visual row and the draft start's visual cell", () => {
+  const lines = ["alpha ".repeat(14) + "end1", "filler"];
+  const h = makeCard({ lines });
+  const range: Range = { startLine: 0, startCol: 68, endLine: 0, endCol: 72 };
+  h.pending.push(range);
+  h.drafts.push({ token: "[a.ts:1]", range, comment: "hi" });
+  h.card.render(80);
+  for (let i = 0; i < 68; i++) h.card.handleInput("l"); // cursor (0,68) on visual row 1
+  const body = bodyRows(h.card.render(80));
+  const top = boxTopRow(body);
+  assert.equal(top, 2, "preview opens below the cursor's visual row (row 1)");
+  assert.equal(strip(body[top]).indexOf("╭─ Comment"), 2 + 6 + 2, "box aligns to the draft start's row-local cell");
+});
+
+test("jump-back focus recenters against the first actual-width render's wrapped layout", () => {
+  const lines = Array.from({ length: 40 }, () => "aaa bbb ccc");
+  const h = makeCard({ lines, focus: { startLine: 30, startCol: 0, endLine: 30, endCol: 3 } });
+  assert.deepEqual(stateOf(h.card).cursor, { line: 30, col: 0 });
+  assert.equal(stateOf(h.card).scrollTop, 23, "constructor centers the logical cursor line");
+  h.card.render(20); // cw 9: 80 visual rows; line 30's first visual row is 60
+  assert.equal(stateOf(h.card).scrollTop, 53, "first render centers the target's visual row");
+  const body = bodyRows(h.card.render(20));
+  // Stripped: the cursor cell's inverse markup wraps the row's first "a", so
+  // the raw bytes do not carry the literal "aaa bbb " substring.
+  assert.ok(strip(body[7]).includes("aaa bbb "), "the wrapped target row sits mid-viewport");
+});
+
+test("jump-back focus keeps the logical centering when wrap is off", () => {
+  const lines = Array.from({ length: 40 }, () => "aaa bbb ccc");
+  const h = makeCard({ lines, focus: { startLine: 30, startCol: 0, endLine: 30, endCol: 3 } });
+  turnWrapOff(h.card);
+  h.card.render(20);
+  assert.equal(stateOf(h.card).scrollTop, 23);
+});
+
+test("jump-back focus recenter clamps fail-open on a file shortened on disk", () => {
+  const h = makeCard({
+    lines: ["alpha", "beta", "gamma"],
+    focus: { startLine: 500, startCol: 30, endLine: 500, endCol: 40 },
+  });
+  h.card.render(20);
+  const state = stateOf(h.card);
+  assert.deepEqual(state.cursor, { line: 2, col: 5 }, "clamped to EOF line, col to that line's length");
+  assert.equal(state.scrollTop, 0);
+});
+
+test("stale scrollTop from a tall wrapped viewport clamps on widening resize", () => {
+  const lines = Array.from({ length: 40 }, () => "aaa bbb ccc");
+  const h = makeCard({ lines });
+  h.card.render(20); // 80 visual rows
+  h.card.handleInput("G");
+  assert.equal(stateOf(h.card).scrollTop, 65, "G truly advances the visual-row viewport");
+  const wide = h.card.render(60); // 40 rows; stale 65 clamps at render time
+  const wideBody = bodyRows(wide);
+  assert.equal(wideBody.length, 1);
+  assert.ok(strip(wideBody[0]).includes("aaa bbb ccc"), "the clamped window still shows the cursor's line");
+  for (const row of wide) assert.equal(visibleWidth(row), 60, "no stale narrow rows leak into the wide frame");
+  h.card.handleInput("j"); // any motion re-follows against the wide layout
+  assert.equal(stateOf(h.card).scrollTop, 25);
+  assert.equal(bodyRows(h.card.render(60)).length, 15);
+});
+
+test("degenerate nowrap viewport follows the cursor by the full literal prefix", () => {
+  const h = makeCard({ path: "/work/a.md", lines: ["> " + "x".repeat(40)] });
+  turnWrapOff(h.card);
+  h.card.render(12); // cw 2: the wrapped grid truncates the 2-column prefix to 1 cell
+  h.card.handleInput("$");
+  const body = bodyRows(h.card.render(12));
+  assert.ok(body.some((row) => row.includes(INVERSE_ON)), "cursor stays inside the horizontal window");
+});
+
+test("mid-cluster cursor at line end paints the virtual cell through the shared mapping", () => {
+  const h = makeCard({ lines: ["\u{1F44D}"] });
+  h.card.handleInput("l"); // col 1: inside the only cluster (raw length 2)
+  assert.deepEqual(stateOf(h.card).cursor, { line: 0, col: 1 }, "stored raw coordinates unchanged");
+  const body = bodyRows(h.card.render(14));
+  assert.ok(body.some((row) => row.includes(INVERSE_ON)), "virtual EOL cell, matching nowrap");
+});
+
+test("mid-cluster cursor away from line end paints the next cluster's cell", () => {
+  const h = makeCard({ lines: ["\u{1F44D}a"] });
+  h.card.handleInput("l");
+  const body = bodyRows(h.card.render(14));
+  assert.equal(styledSlice(body[0], INVERSE_ON, INVERSE_OFF), "a", "no empty-cell cursor");
+});
+
+test("mid-cluster cursor at line end matches nowrap behavior", () => {
+  const h = makeCard({ lines: ["\u{1F44D}"] });
+  turnWrapOff(h.card);
+  h.card.handleInput("l");
+  const body = bodyRows(h.card.render(14));
+  assert.ok(body.some((row) => row.includes(INVERSE_ON)));
 });

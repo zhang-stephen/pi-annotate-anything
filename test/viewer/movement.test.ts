@@ -795,3 +795,22 @@ test("wrap: N jumps backward to the raw match", () => {
   const res = reduceViewer(viewer({ cursor: { line: 1, col: 0 }, lastSearch: "bbb" }), "N", BIG_LINES, vp);
   assert.deepEqual(res.state.cursor, { line: 0, col: 4 });
 });
+test("nowrap follow aims by the full literal prefix when the grid truncates it", () => {
+  // Degenerate viewport (contentWidth 2 < prefix width 2): buildVisualLayout
+  // truncates the row prefix to 1 cell, but the follow must aim by the full
+  // literal prefix (2) plus the raw display column (42), parking scrollLeft
+  // at 43 so the EOL cursor cell lands inside the 2-cell window.
+  const raw = "> " + "x".repeat(40);
+  const lines = [raw];
+  const display = buildDisplayLine(raw, { prefix: "\u258E ", prefixStyle: "mdQuoteBorder" });
+  const layout = buildVisualLayout(lines, [display], 2);
+  const vp: ViewerViewport = {
+    height: 4,
+    contentWidth: 2,
+    maxLineWidth: layout.maxLineWidth,
+    display: { current: layout, alternate: layout, canToggleRender: true },
+  };
+  const res = reduceViewer(viewer({ wrapOn: false }), "$", lines, vp);
+  assert.deepEqual(res.state.cursor, { line: 0, col: 42 });
+  assert.equal(res.state.scrollLeft, 43, "displayCol = full prefix 2 + 42 -> scrollLeft 43, not 42");
+});

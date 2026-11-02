@@ -23,7 +23,7 @@ import type { DisplayLine, DisplayScanLine, DisplayStyle } from "../tui/display.
 import { ANNOTATION_ICON, displayPath } from "../core/message.ts";
 import { compilePattern, findMatches } from "../core/search.ts";
 import { clampPosition, normalize } from "../core/selection.ts";
-import type { Range, VisualMode } from "../core/selection.ts";
+import type { Position, Range, VisualMode } from "../core/selection.ts";
 import { CHROME_ROWS, clampScrollLeft, COMMENT_BOX_TITLE, EDITOR_BOX_MAX_WIDTH, EDITOR_MAX_INNER_ROWS, MARKER_FIELD_WIDTH, MAX_VIEWPORT_ROWS, MIN_VIEWPORT_ROWS, PREVIEW_MAX_INNER_ROWS, gutterWidth } from "./layout.ts";
 import { applyStyleSpans, BOLD_ON, DIM_ON, INTENSITY_OFF, UNDERLINE_OFF, UNDERLINE_ON } from "./line-style.ts";
 import type { SpanStyle, StyleSpan } from "./line-style.ts";
@@ -31,7 +31,7 @@ import { pendingKeysOf, stackAtCursor } from "./movement.ts";
 import { scanMarkdown } from "./markdown.ts";
 import { reduceViewer } from "./state.ts";
 import type { PendingDraft, ViewerDisplayModes, ViewerMode, ViewerState } from "./state.ts";
-import { buildVisualLayout } from "./wrap.ts";
+import { buildVisualLayout, toVisualPosition } from "./wrap.ts";
 import type { VisualLayout, VisualRow } from "./wrap.ts";
 import { cardModeOf, renderCommandLine, renderStatusLine } from "./status-line.ts";
 import type { StatusLineInput } from "./status-line.ts";
@@ -131,6 +131,11 @@ export class AnnotateCard implements Component, Focusable {
   // Inner width of the latest render(width) call (null before the first
   // render); contentWidth() derives the reducer's horizontal budget from it.
   private renderedInner: number | null = null;
+  // Set when a jump-back focus asked for centering: the constructor centers
+  // the logical cursor line (no layout exists yet), and the FIRST actual-
+  // width render re-centers against that width's wrapped grid, then clears
+  // the flag so later resizes keep the user's scroll position.
+  private pendingFocusRecenter = false;
 
   // Fields are declared explicitly (not as parameter properties): node runs
   // TypeScript in strip-only mode, which rejects parameter property syntax.
@@ -245,11 +250,13 @@ export class AnnotateCard implements Component, Focusable {
     // into [0, lines - vh]) and the card opens at the nearest live position
     // when the file shortened or changed on disk. Centering aims at the
     // cursor line, so the range start sits mid-viewport when the file is
-    // tall enough to scroll.
+    // tall enough to scroll; the FIRST actual-width render re-centers the
+    // same way against the real wrapped layout (pendingFocusRecenter).
     if (focus !== null) {
       const cursor = clampPosition({ line: focus.startLine, col: focus.startCol }, file.lines);
       const vh = this.viewportHeight();
       const maxScroll = Math.max(0, file.lines.length - vh);
+      this.pendingFocusRecenter = true;
       this.state = {
         ...this.state,
         cursor,
@@ -273,6 +280,24 @@ export class AnnotateCard implements Component, Focusable {
     const wrapOn = this.state.wrapOn !== false;
     const visualRows = wrapOn ? modes.current.rows : null;
     const rowCount = visualRows?.length ?? lines.length;
+    // One-shot jump-back recenter on the first actual-width render: the
+    // constructor could only center the logical cursor line, so this render
+    // re-centers against THIS width's grid - the cursor's visual row
+    // mid-viewport when wrap is on, the unchanged logical centering when
+    // wrap is off. Stale scroll positions from earlier geometry still clamp
+    // through `first` below (and through the reducer's follow on any
+    // cursor-moving key).
+    if (this.pendingFocusRecenter) {
+      this.pendingFocusRecenter = false;
+      const target = wrapOn
+        ? toVisualPosition(lines, modes.current, this.state.cursor).row
+        : this.state.cursor.line;
+      const total = wrapOn ? modes.current.rows.length : lines.length;
+      this.state = {
+        ...this.state,
+        scrollTop: Math.min(Math.max(target - Math.floor(vh / 2), 0), Math.max(0, total - vh)),
+      };
+    }
     const first = Math.min(Math.max(this.state.scrollTop, 0), Math.max(0, rowCount - 1));
     const last = Math.min(rowCount, first + vh);
     const shownVisualRows = visualRows?.slice(first, last) ?? null;
@@ -370,9 +395,13 @@ export class AnnotateCard implements Component, Focusable {
         rows.push(this.renderRow(i, displays[i], selection, cursorOn, emphasis, matchSpans.get(i) ?? [], sl, cw, contentW));
       }
     }
-    const overlayFirst = shownVisualRows?.[0]?.line ?? first;
-    if (this.state.mode === "comment") this.overlayCommentBox(rows, overlayFirst, contentW, sl);
-    else if (this.state.mode === "normal" && this.state.previewOn) this.overlayPreview(rows, overlayFirst, contentW, sl);
+    // Overlays anchor against THIS frame's grid: wrap mode maps raw anchor
+    // positions through the current visual layout (visual rows, row-local
+    // columns), nowrap keeps the logical-line window. `first` is the index
+    // of the first rendered grid row in either space.
+    const overlayLayout = wrapOn ? modes.current : null;
+    if (this.state.mode === "comment") this.overlayCommentBox(rows, first, contentW, sl, overlayLayout);
+    else if (this.state.mode === "normal" && this.state.previewOn) this.overlayPreview(rows, first, contentW, sl, overlayLayout);
     else if (this.state.mode === "command") this.overlayCompletion(rows, contentW);
 
     const count = this.pending().length;
@@ -470,8 +499,14 @@ export class AnnotateCard implements Component, Focusable {
     }
     let content = applyStyleSpans(selected ? stripTerminalSequences(row.text) : row.text, spans, this.spanStyles);
     const gutter = row.continuation ? " ".repeat(gutterWidth(this.file.lines.length)) : this.gutter(row.line);
-    if (cursorOn && this.state.cursor.line === row.line && this.state.cursor.col >= raw.length && row.endCol === raw.length
-      && visibleWidth(gutter + content) < contentW) {
+    // Virtual EOL cell, shared with the nowrap mapping: a cursor inside a
+    // wide final grapheme maps to the line's display end (renderLine's
+    // dcol >= visibleWidth(base)), so the wrap path compares display
+    // columns, not raw cursor.col, and paints the cell only on the line's
+    // last visual row.
+    if (cursorOn && this.state.cursor.line === row.line
+      && rawColToDisplayCol(raw, this.state.cursor.col) >= rawColToDisplayCol(raw, raw.length)
+      && row.endCol === raw.length && visibleWidth(gutter + content) < contentW) {
       content += INVERSE_ON + " " + INVERSE_OFF;
     }
     const rendered = gutter + content + (content.includes("\x1b[") ? "\x1b[0m" : "");
@@ -486,7 +521,20 @@ export class AnnotateCard implements Component, Focusable {
     matchSpans: StyleSpan[],
   ): StyleSpan[] {
     const raw = this.file.lines[row.line] ?? "";
-    const spans: StyleSpan[] = [...matchSpans];
+    let cell: StyleSpan | null = null;
+    if (cursorOn && this.state.cursor.line === row.line) {
+      const dcol = rawColToDisplayCol(raw, this.state.cursor.col);
+      if (dcol < rawColToDisplayCol(raw, raw.length)) cell = { start: dcol, end: dcol + 1, style: "inverse" };
+    }
+    // The match holding the cursor (the "current" one) is the one case where
+    // the cursor cell composes inside another wrap: before the match spans,
+    // so matchCurrent's background pair stays outermost and the inverse
+    // lands inside it. Every other cell stays the outermost wrap (over
+    // selection and pending emphasis), matching the nowrap painter.
+    const onMatch = cell !== null && matchSpans.some((m) => m.start < cell.end && cell.start < m.end);
+    const spans: StyleSpan[] = [];
+    if (cell !== null && onMatch) spans.push(cell);
+    spans.push(...matchSpans);
     if (selection !== null && row.line >= selection.startLine && row.line <= selection.endLine) {
       const span = this.displaySpan(raw, row.line, selection);
       if (span !== null) spans.push({ start: span[0], end: span[1], style: "inverse" });
@@ -496,10 +544,7 @@ export class AnnotateCard implements Component, Focusable {
       const span = this.displaySpan(raw, row.line, p);
       if (span !== null) spans.push({ start: span[0], end: span[1], style: emphasis.get(p) ?? "underline" });
     }
-    if (cursorOn && this.state.cursor.line === row.line) {
-      const dcol = rawColToDisplayCol(raw, this.state.cursor.col);
-      if (dcol < rawColToDisplayCol(raw, raw.length)) spans.push({ start: dcol, end: dcol + 1, style: "inverse" });
-    }
+    if (cell !== null && !onMatch) spans.push(cell);
     return spans;
   }
 
@@ -636,19 +681,28 @@ export class AnnotateCard implements Component, Focusable {
   // Renders the floating comment box over the content rows: occluded rows
   // are replaced in place, not pushed down. Anchor: the active selection in
   // annotate flow; the cursor line when editing a pending draft (no
-  // selection). The editor box is fixed-width with soft-wrapped content and
-  // the caret painted by withCaret; placement is shared with the
-  // normal-mode preview via paintCommentBox.
-  private overlayCommentBox(rows: string[], first: number, contentW: number, sl: number): void {
+  // selection). Rows resolve through the frame's grid (anchorCell): wrap
+  // mode maps the raw start/end positions via toVisualPosition, so the box
+  // opens below the anchor's VISUAL row (a continuation row included) and
+  // aligns to its row-local cell. The editor box is fixed-width with
+  // soft-wrapped content and the caret painted by withCaret; placement is
+  // shared with the normal-mode preview via paintCommentBox.
+  private overlayCommentBox(rows: string[], first: number, contentW: number, sl: number, layout: VisualLayout | null): void {
     const sel = this.activeSelection();
-    const anchor = sel
-      ? { topLine: sel.startLine, bottomLine: sel.endLine, colLine: sel.startLine, rawCol: sel.startCol }
-      : {
-        topLine: this.state.cursor.line,
-        bottomLine: this.state.cursor.line,
-        colLine: this.state.cursor.line,
-        rawCol: this.state.cursor.col,
-      };
+    const startCell = this.anchorCell(
+      sel ? { line: sel.startLine, col: sel.startCol } : this.state.cursor,
+      first,
+      rows.length,
+      layout,
+      sl,
+    );
+    const endCell = this.anchorCell(
+      sel ? { line: sel.endLine, col: sel.endCol } : this.state.cursor,
+      first,
+      rows.length,
+      layout,
+      sl,
+    );
     // Fixed-width editor: the box never resizes while typing; the text
     // soft-wraps to the box's content budget (its width minus the 2 borders
     // and the PAD_X padding) instead. The caret (not the text end) locates
@@ -674,7 +728,7 @@ export class AnnotateCard implements Component, Focusable {
     if (cursorRow >= 0 && cursorRow < shown.length) {
       shown[cursorRow] = this.withCaret(shown[cursorRow], wrapped.cursorCol);
     }
-    this.paintCommentBox(rows, first, contentW, shown, boxW, anchor, COMMENT_BOX_TITLE, sl);
+    this.paintCommentBox(rows, contentW, shown, boxW, { top: startCell.row, bottom: endCell.row, col: startCell.col }, COMMENT_BOX_TITLE, layout !== null ? this.viewportHeight() : rows.length);
   }
 
   // The comment box caret (pi-tui's Focusable contract): while the card has
@@ -747,13 +801,14 @@ export class AnnotateCard implements Component, Focusable {
   // Normal-mode hover preview: read-only Comment box for the CURRENT cycle
   // target under the cursor (spec section 2). On a stack of 2+ drafts the
   // title gains a 1-based positional indicator "(i/n)" (newest = 1); a lone
-  // draft keeps the plain title. Anchored to the cursor line and aligned to
-  // the target's start display column; comment lines are capped at
+  // draft keeps the plain title. Anchored below the cursor's VISUAL row and
+  // aligned to the target's start cell in that row's wrapped grid
+  // (anchorCell); comment lines are capped at
   // PREVIEW_MAX_INNER_ROWS (head kept), the box stays content-sized, and no
   // cursor is rendered (read-only). The render caller gates on previewOn, so
   // preview-off renders nothing; comment mode never reaches here, so the
   // edit flow replaces the preview.
-  private overlayPreview(rows: string[], first: number, contentW: number, sl: number): void {
+  private overlayPreview(rows: string[], first: number, contentW: number, sl: number, layout: VisualLayout | null): void {
     const stack = stackAtCursor(this.state.cursor.line, this.state.cursor.col, this.pendingDrafts());
     if (stack.length === 0) return;
     // The same target the reducer edits via c/x: stack[ordinal % length].
@@ -763,50 +818,72 @@ export class AnnotateCard implements Component, Focusable {
     const capped = draft.comment.split("\n").slice(0, PREVIEW_MAX_INNER_ROWS);
     const widest = Math.max(...capped.map((l) => visibleWidth(l)), 0);
     const boxW = Math.min(contentW, Math.max(widest + 3 + 2 * PAD_X, title.length + 6));
-    this.paintCommentBox(rows, first, contentW, capped, boxW, {
-      topLine: this.state.cursor.line,
-      bottomLine: this.state.cursor.line,
-      colLine: draft.range.startLine,
-      rawCol: draft.range.startCol,
-    }, title, sl);
+    const cursorCell = this.anchorCell(this.state.cursor, first, rows.length, layout, sl);
+    const startCell = this.anchorCell({ line: draft.range.startLine, col: draft.range.startCol }, first, rows.length, layout, sl);
+    this.paintCommentBox(rows, contentW, capped, boxW, {
+      top: cursorCell.row,
+      bottom: cursorCell.row,
+      col: startCell.col,
+    }, title, layout !== null ? this.viewportHeight() : rows.length);
+  }
+
+  // Resolves one raw anchor position into the comment-box placement space:
+  // the viewport-local row (the anchor's visual row minus the window start
+  // in wrap mode, the logical line minus the window start in nowrap mode)
+  // and the content-local column (gutter cells plus the row-local display
+  // column, minus the frame's clamped scrollLeft). commentBoxPlacement
+  // clamps both, so an anchor scrolled off-screen pins to the nearest
+  // viewport edge instead of deforming the box.
+  private anchorCell(pos: Position, first: number, vh: number, layout: VisualLayout | null, sl: number): { row: number; col: number } {
+    if (layout !== null) {
+      const cell = toVisualPosition(this.file.lines, layout, pos);
+      return {
+        row: Math.min(Math.max(cell.row - first, 0), Math.max(0, vh - 1)),
+        col: gutterWidth(this.file.lines.length) + cell.col - sl,
+      };
+    }
+    return {
+      row: Math.min(Math.max(pos.line - first, 0), Math.max(0, vh - 1)),
+      col: gutterWidth(this.file.lines.length) + rawColToDisplayCol(this.file.lines[pos.line] ?? "", pos.col) - sl,
+    };
   }
 
   // Paints a floating Comment box of the given width over the content rows
   // at commentBoxPlacement: occluded rows are replaced in place, not pushed
-  // down. The anchor is expressed in file lines (clamped to the viewport
-  // here) plus a raw column resolved on colLine, so the editor (selection or
-  // cursor) and the preview (cursor line, draft start column) share one
-  // placement path. The column is scroll-corrected (minus the frame's
-  // clamped scrollLeft) so the box stays anchored to the anchor's on-screen
-  // cell instead of drifting right by the scrolled-away columns. The editor
-  // keeps the default title; the preview passes its positional
-  // "Comment (i/n)" title.
+  // down. The anchor arrives already resolved to the frame's grid (top and
+  // bottom viewport rows of the covered range, content-local anchor column;
+  // see anchorCell), so the editor (selection or cursor) and the preview
+  // (cursor row, draft start cell) share one placement path in either
+  // coordinate space. viewH is the placement budget: wrap mode budgets the
+  // full overlay viewport (the box anchors below its anchor's last covered
+  // visual row even when a short file cannot hold it, clipping past the
+  // content area instead of flipping above on a viewport the file does not
+  // fill); nowrap keeps the legacy rendered-rows budget. The editor keeps
+  // the default title; the preview passes its positional "Comment (i/n)"
+  // title.
   private paintCommentBox(
     rows: string[],
-    first: number,
     contentW: number,
     textLines: string[],
     boxW: number,
-    anchor: { topLine: number; bottomLine: number; colLine: number; rawCol: number },
+    anchor: { top: number; bottom: number; col: number },
     title: string = COMMENT_BOX_TITLE,
-    sl: number = 0,
+    viewH: number = rows.length,
   ): void {
-    const vh = rows.length;
     const box = frameCommentBox(textLines, boxW, this.colors, title);
-
-    const anchorRow = (line: number) => Math.min(Math.max(line - first, 0), Math.max(0, vh - 1));
-    const selTop = anchorRow(anchor.topLine);
-    const selBottom = anchorRow(anchor.bottomLine);
-    const selCol = gutterWidth(this.file.lines.length) + rawColToDisplayCol(this.file.lines[anchor.colLine] ?? "", anchor.rawCol) - sl;
-    // commentBoxPlacement clamps the box inside the viewport [0, viewH - boxH]
+    // commentBoxPlacement clamps the box inside the VIEWPORT [0, viewH - boxH]
     // and against the content budget, so border, padding, and footer rows
     // stay clear.
-    const place = commentBoxPlacement(selTop, selBottom, selCol, box.length, boxW, contentW, vh);
+    const place = commentBoxPlacement(anchor.top, anchor.bottom, anchor.col, box.length, boxW, contentW, viewH);
+    // The wrap budget can exceed a short file's rendered rows: pin the box's
+    // first row onto a visible content row so at least its border paints (a
+    // no-op for nowrap, whose budget already equals rows.length).
+    const top = Math.min(place.top, Math.max(0, rows.length - 1));
     // Degenerate viewports of 1-2 rows cannot fit the 3-row minimum box; the
     // placement clamps the top, and rows past the viewport stay untouched.
     for (let k = 0; k < box.length; k++) {
-      const idx = place.top + k;
-      if (idx >= vh) continue;
+      const idx = top + k;
+      if (idx >= rows.length) continue;
       const base = rows[idx];
       // The left sliver may end mid-SGR-run (e.g. an underline the box edge
       // cuts in half); close underline + inverse so the box border glyphs do

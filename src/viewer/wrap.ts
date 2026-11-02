@@ -35,6 +35,12 @@ export interface VisualLayout {
   rows: VisualRow[];
   firstRowByLine: number[];
   maxLineWidth: number;
+  // Per logical line, its display line's UNTRUNCATED literal prefix width:
+  // rows may cosmetically truncate or drop prefix cells, but nowrap cursor
+  // following must aim by the full prefix even when it exceeds the viewport.
+  // Optional so layouts built without it keep the row-prefix (legacy)
+  // behavior; consumers fall back to the row's prefixWidth.
+  fullPrefixByLine?: number[];
 }
 
 // Grapheme-cluster segmenter behind the wrap walk: rows break only at
@@ -164,6 +170,7 @@ function sliceRowSpans(
 export function buildVisualLayout(lines: string[], displays: DisplayLine[], width: number): VisualLayout {
   const rows: VisualRow[] = [];
   const firstRowByLine: number[] = [];
+  const fullPrefixByLine: number[] = [];
   let maxLineWidth = 0;
   const viewport = Math.max(1, width);
   for (let line = 0; line < displays.length; line++) {
@@ -171,6 +178,7 @@ export function buildVisualLayout(lines: string[], displays: DisplayLine[], widt
     const raw = line < lines.length ? lines[line] : display.raw;
     maxLineWidth = Math.max(maxLineWidth, visibleWidth(display.text));
     firstRowByLine.push(rows.length);
+    fullPrefixByLine.push(display.prefixWidth);
     const renderedPrefix = Math.min(display.prefixWidth, Math.max(0, viewport - 1));
     const contentWidth = Math.max(1, viewport - renderedPrefix);
     const graphemes = segmentGraphemes(display.raw);
@@ -212,7 +220,7 @@ export function buildVisualLayout(lines: string[], displays: DisplayLine[], widt
       i = breakIdx;
     } while (i < graphemes.length);
   }
-  return { rows, firstRowByLine, maxLineWidth };
+  return { rows, firstRowByLine, maxLineWidth, fullPrefixByLine };
 }
 
 // Maps a raw Position (logical line, raw UTF-16 column) into the wrapped
