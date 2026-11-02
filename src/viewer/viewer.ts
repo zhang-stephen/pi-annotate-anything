@@ -11,14 +11,15 @@
 import { getLanguageFromPath, highlightCode } from "@earendil-works/pi-coding-agent";
 import type { Theme } from "@earendil-works/pi-coding-agent";
 import type { Component, Focusable, TUI } from "@earendil-works/pi-tui";
-import { CURSOR_MARKER, matchesKey, parseKey, renderFakeCursor, visibleWidth } from "@earendil-works/pi-tui";
+import { CURSOR_MARKER, matchesKey, parseKey, renderFakeCursor, stripTerminalSequences, visibleWidth } from "@earendil-works/pi-tui";
 
 import { commentBoxPlacement, frameCommentBox, framePanel, PAD_X, spliceRow } from "../tui/card-chrome.ts";
 import type { ChromeColors } from "../tui/card-chrome.ts";
 import { completionCandidates, renderCompletionClosing, renderCompletionDivider, renderCompletionRows } from "./completion-panel.ts";
 import { INVERSE_OFF, INVERSE_ON, cursorCellAt, wrapCommentLines } from "../tui/comment-input.ts";
 import { commentBoxWrapWidth } from "./comment-mode.ts";
-import { rawColToDisplayCol, rawColsToDisplayCols, sliceWindow, tabExpanded } from "../tui/display.ts";
+import { buildDisplayLine, rawColToDisplayCol, rawColsToDisplayCols, sliceWindow, tabExpanded } from "../tui/display.ts";
+import type { DisplayLine, DisplayScanLine, DisplayStyle } from "../tui/display.ts";
 import { ANNOTATION_ICON, displayPath } from "../core/message.ts";
 import { compilePattern, findMatches } from "../core/search.ts";
 import { clampPosition, normalize } from "../core/selection.ts";
@@ -27,8 +28,11 @@ import { CHROME_ROWS, clampScrollLeft, COMMENT_BOX_TITLE, EDITOR_BOX_MAX_WIDTH, 
 import { applyStyleSpans, BOLD_ON, DIM_ON, INTENSITY_OFF, UNDERLINE_OFF, UNDERLINE_ON } from "./line-style.ts";
 import type { SpanStyle, StyleSpan } from "./line-style.ts";
 import { pendingKeysOf, stackAtCursor } from "./movement.ts";
+import { scanMarkdown } from "./markdown.ts";
 import { reduceViewer } from "./state.ts";
-import type { PendingDraft, ViewerMode, ViewerState } from "./state.ts";
+import type { PendingDraft, ViewerDisplayModes, ViewerMode, ViewerState } from "./state.ts";
+import { buildVisualLayout } from "./wrap.ts";
+import type { VisualLayout, VisualRow } from "./wrap.ts";
 import { cardModeOf, renderCommandLine, renderStatusLine } from "./status-line.ts";
 import type { StatusLineInput } from "./status-line.ts";
 
@@ -118,12 +122,11 @@ export class AnnotateCard implements Component, Focusable {
   private readonly pendingDrafts: () => PendingDraft[];
   private readonly cwd: string;
   private readonly colors: ChromeColors;
-  private readonly spanStyles: Record<SpanStyle, (s: string) => string>;
+  private readonly spanStyles: Partial<Record<DisplayStyle, (s: string) => string>>;
   private readonly highlighted: string[];
-  // Maximum display width across all loaded lines (tabs expanded, wide chars
-  // counted double), computed once at construction: the file is fixed for the
-  // card's lifetime, and the reducer clamps scrollLeft against it.
-  private readonly maxLineWidth: number;
+  private readonly markdownScans: DisplayScanLine[] | null;
+  private readonly displayLines = new Map<boolean, DisplayLine[]>();
+  private readonly layouts = new Map<string, VisualLayout>();
   private state: ViewerState;
   // Inner width of the latest render(width) call (null before the first
   // render); contentWidth() derives the reducer's horizontal budget from it.
@@ -189,6 +192,20 @@ export class AnnotateCard implements Component, Focusable {
       // pair (the runtime partitions fg/bg tokens, so swapping them throws;
       // SGR inverse is the only theme-safe inversion).
       matchCurrent: (s) => theme.bold(theme.inverse(theme.bg("searchMatchBg", theme.fg("searchMatchText", s)))),
+      mdDim: (s) => theme.fg("dim", s),
+      mdHeading: (s) => theme.fg("mdHeading", theme.bold(s)),
+      mdBold: (s) => theme.bold(s),
+      mdItalic: (s) => theme.italic(s),
+      mdStrike: (s) => theme.strikethrough(s),
+      mdCode: (s) => theme.fg("mdCode", s),
+      mdCodeBlock: (s) => theme.fg("mdCodeBlock", theme.bg("toolPendingBg", s)),
+      mdCodeBlockBorder: (s) => theme.fg("mdCodeBlockBorder", s),
+      mdLink: (s) => theme.fg("mdLink", theme.underline(s)),
+      mdLinkUrl: (s) => theme.fg("mdLinkUrl", s),
+      mdQuote: (s) => theme.fg("mdQuote", theme.italic(s)),
+      mdQuoteBorder: (s) => theme.fg("mdQuoteBorder", s),
+      mdHr: (s) => theme.fg("mdHr", s),
+      mdListBullet: (s) => theme.fg("mdListBullet", s),
     };
     // Tabs are expanded PER LINE before highlighting so display columns agree
     // between the highlighted content and the raw/selection rendering below
@@ -197,10 +214,13 @@ export class AnnotateCard implements Component, Focusable {
     // "\n" and shift the tab stops of every later line. The cache is
     // computed once and sliced per frame (theme is stable for the card's
     // lifetime, so invalidate() is a no-op).
-    this.highlighted = highlightCode(
-      file.lines.map((l) => tabExpanded(l)).join("\n"),
-      getLanguageFromPath(file.path),
-    );
+    const markdown = /\.md$/i.test(file.path);
+    // Markdown has its own raw-faithful scanner/theme path; peer language
+    // highlighting is neither needed nor allowed to reflow it.
+    this.highlighted = markdown
+      ? file.lines.map((line) => tabExpanded(line))
+      : highlightCode(file.lines.map((l) => tabExpanded(l)).join("\n"), getLanguageFromPath(file.path));
+    this.markdownScans = markdown ? scanMarkdown(file.lines) : null;
     this.state = {
       mode: "normal",
       cursor: { line: 0, col: 0 },
@@ -212,14 +232,13 @@ export class AnnotateCard implements Component, Focusable {
       visualMode: "char",
       editingDraftId: null,
       previewOn: true,
+      wrapOn: true,
+      renderOn: true,
       search: null,
       lastSearch: null,
       count: null,
       message: null,
     };
-    // A reduce loop, not Math.max(...lines.map(...)): the spread form throws
-    // RangeError past V8's argument-count limit on very large files.
-    this.maxLineWidth = file.lines.reduce((max, l) => Math.max(max, rawColToDisplayCol(l, l.length)), 0);
     // Jump-back focus: the range was computed against the file as it was
     // when the pill was made, so it is clamped fail-open (clampPosition pins
     // the cursor to the last line and that line's length; scrollTop clamps
@@ -248,8 +267,19 @@ export class AnnotateCard implements Component, Focusable {
     const contentW = inner - 2 * PAD_X;
     const vh = this.viewportHeight();
     const lines = this.file.lines;
-    const first = Math.min(Math.max(this.state.scrollTop, 0), Math.max(0, lines.length - 1));
-    const last = Math.min(lines.length, first + vh);
+    const gutterW = gutterWidth(lines.length);
+    const cw = Math.max(1, contentW - gutterW);
+    const modes = this.displayModes(cw);
+    const wrapOn = this.state.wrapOn !== false;
+    const visualRows = wrapOn ? modes.current.rows : null;
+    const rowCount = visualRows?.length ?? lines.length;
+    const first = Math.min(Math.max(this.state.scrollTop, 0), Math.max(0, rowCount - 1));
+    const last = Math.min(rowCount, first + vh);
+    const shownVisualRows = visualRows?.slice(first, last) ?? null;
+    const matchFirstLine = shownVisualRows?.[0]?.line ?? first;
+    const matchLastLine = shownVisualRows !== null && shownVisualRows.length > 0
+      ? shownVisualRows[shownVisualRows.length - 1].line + 1
+      : last;
     const selection = this.activeSelection();
     const cursorOn = this.state.mode !== "comment";
 
@@ -263,8 +293,8 @@ export class AnnotateCard implements Component, Focusable {
     // shows as the cmdline message). :nohlsearch (searchHL false) suppresses
     // the whole pass: the query resolves to null, so no spans compile and
     // searchStatus is never supplied; undefined means true, so the default
-    // path is byte-identical. Spans are built only for viewport rows
-    // [first, last): off-screen spans are never read. Zero-width matches
+    // path is byte-identical. Spans are built only for logical lines in the
+    // current viewport: off-screen spans are never read. Zero-width matches
     // render nothing (applyStyleSpans' end > start filter), so they are
     // skipped here - that keeps pathological patterns like a* cheap. Per
     // line the sorted match columns map in ONE left-to-right walk
@@ -292,7 +322,7 @@ export class AnnotateCard implements Component, Focusable {
           const line = matches[mi].line;
           let mj = mi + 1;
           while (mj < matches.length && matches[mj].line === line) mj++;
-          if (line >= first && line < last) {
+          if (line >= matchFirstLine && line < matchLastLine) {
             const cols: number[] = [];
             const refs: number[] = []; // global match index per kept span
             for (let g = mi; g < mj; g++) {
@@ -326,18 +356,23 @@ export class AnnotateCard implements Component, Focusable {
     // Horizontal window for this frame: the state's scrollLeft can be stale
     // (e.g. a terminal resize without a keypress), so it is re-clamped
     // against THIS frame's content width before slicing any row.
-    const gutterW = gutterWidth(lines.length);
-    const cw = Math.max(1, contentW - gutterW);
-    const sl = clampScrollLeft(this.state.scrollLeft ?? 0, this.maxLineWidth, cw);
-    // Content rows are windowed to the content width, then space-padded to
-    // it so the floating comment box can replace exact display-column
-    // slices below.
+    const sl = wrapOn ? 0 : clampScrollLeft(this.state.scrollLeft ?? 0, modes.current.maxLineWidth, cw);
+    // Visual rows never use horizontal slicing. Nowrap rows retain the
+    // legacy window, including its exact gutter and padding behavior.
     const rows: string[] = [];
-    for (let i = first; i < last; i++) {
-      rows.push(this.renderRow(i, selection, cursorOn, emphasis, matchSpans.get(i) ?? [], sl, cw, contentW));
+    if (shownVisualRows !== null) {
+      for (const row of shownVisualRows) {
+        rows.push(this.renderVisualRow(row, selection, cursorOn, emphasis, matchSpans.get(row.line) ?? [], contentW));
+      }
+    } else {
+      const displays = this.displayLinesFor(this.state.renderOn !== false);
+      for (let i = first; i < last; i++) {
+        rows.push(this.renderRow(i, displays[i], selection, cursorOn, emphasis, matchSpans.get(i) ?? [], sl, cw, contentW));
+      }
     }
-    if (this.state.mode === "comment") this.overlayCommentBox(rows, first, contentW, sl);
-    else if (this.state.mode === "normal" && this.state.previewOn) this.overlayPreview(rows, first, contentW, sl);
+    const overlayFirst = shownVisualRows?.[0]?.line ?? first;
+    if (this.state.mode === "comment") this.overlayCommentBox(rows, overlayFirst, contentW, sl);
+    else if (this.state.mode === "normal" && this.state.previewOn) this.overlayPreview(rows, overlayFirst, contentW, sl);
     else if (this.state.mode === "command") this.overlayCompletion(rows, contentW);
 
     const count = this.pending().length;
@@ -406,6 +441,67 @@ export class AnnotateCard implements Component, Focusable {
     return framePanel(rows, width, { title, footers: [statusline, cmdline], colors: this.colors });
   }
 
+  // One wrapped visual row. Interaction spans are still computed in raw
+  // display coordinates, then sliced by this row's raw UTF-16 boundaries;
+  // no annotation, search, or cursor positions are rewritten.
+  private renderVisualRow(
+    row: VisualRow,
+    selection: Range | null,
+    cursorOn: boolean,
+    emphasis: Map<Range, SpanStyle>,
+    matchSpans: StyleSpan[],
+    contentW: number,
+  ): string {
+    const raw = this.file.lines[row.line] ?? "";
+    const selected = selection !== null && row.line >= selection.startLine && row.line <= selection.endLine;
+    const spans = selected ? [] : [...row.spans];
+    const from = rawColToDisplayCol(raw, row.startCol);
+    const to = rawColToDisplayCol(raw, row.endCol);
+    for (const span of this.visualInteractionSpans(row, selection, cursorOn, emphasis, matchSpans)) {
+      const start = Math.max(span.start, from);
+      const end = Math.min(span.end, to);
+      if (end > start) {
+        spans.push({
+          start: row.prefixWidth + start - from,
+          end: row.prefixWidth + end - from,
+          style: span.style,
+        });
+      }
+    }
+    let content = applyStyleSpans(selected ? stripTerminalSequences(row.text) : row.text, spans, this.spanStyles);
+    if (cursorOn && this.state.cursor.line === row.line && this.state.cursor.col >= raw.length && row.endCol === raw.length) {
+      content += INVERSE_ON + " " + INVERSE_OFF;
+    }
+    const gutter = row.continuation ? " ".repeat(gutterWidth(this.file.lines.length)) : this.gutter(row.line);
+    const rendered = gutter + content + (content.includes("\x1b[") ? "\x1b[0m" : "");
+    return rendered + " ".repeat(Math.max(0, contentW - visibleWidth(rendered)));
+  }
+
+  private visualInteractionSpans(
+    row: VisualRow,
+    selection: Range | null,
+    cursorOn: boolean,
+    emphasis: Map<Range, SpanStyle>,
+    matchSpans: StyleSpan[],
+  ): StyleSpan[] {
+    const raw = this.file.lines[row.line] ?? "";
+    const spans: StyleSpan[] = [...matchSpans];
+    if (selection !== null && row.line >= selection.startLine && row.line <= selection.endLine) {
+      const span = this.displaySpan(raw, row.line, selection);
+      if (span !== null) spans.push({ start: span[0], end: span[1], style: "inverse" });
+    }
+    for (const p of this.pending()) {
+      if (row.line < p.startLine || row.line > p.endLine) continue;
+      const span = this.displaySpan(raw, row.line, p);
+      if (span !== null) spans.push({ start: span[0], end: span[1], style: emphasis.get(p) ?? "underline" });
+    }
+    if (cursorOn && this.state.cursor.line === row.line) {
+      const dcol = rawColToDisplayCol(raw, this.state.cursor.col);
+      if (dcol < rawColToDisplayCol(raw, raw.length)) spans.push({ start: dcol, end: dcol + 1, style: "inverse" });
+    }
+    return spans;
+  }
+
   // One content row, windowed horizontally: the gutter stays fixed while the
   // already-styled line is sliced to the display-column window [sl, sl+cw)
   // (strict, so a wide char straddling the left edge becomes a placeholder
@@ -417,6 +513,7 @@ export class AnnotateCard implements Component, Focusable {
   // (reduceViewer) guarantees it sits inside the window.
   private renderRow(
     line: number,
+    display: DisplayLine,
     selection: Range | null,
     cursorOn: boolean,
     emphasis: Map<Range, SpanStyle>,
@@ -425,7 +522,7 @@ export class AnnotateCard implements Component, Focusable {
     cw: number,
     contentW: number,
   ): string {
-    const styled = this.renderLine(line, selection, cursorOn, emphasis, matchSpans);
+    const styled = this.renderLine(line, display, selection, cursorOn, emphasis, matchSpans);
     const windowed = sliceWindow(styled, sl, Math.max(0, cw));
     // A span ending exactly at the window's right edge (e.g. the inverse
     // cursor cell on the last window cell) loses its closing SGR to the
@@ -452,11 +549,12 @@ export class AnnotateCard implements Component, Focusable {
         : this.state.mode === "comment"
           ? normalizeCommentMovement(data)
           : data;
+    const modes = this.displayModes(this.contentWidth());
     const result = reduceViewer(
       this.state,
       key,
       this.file.lines,
-      { height: this.viewportHeight(), contentWidth: this.contentWidth(), maxLineWidth: this.maxLineWidth },
+      { height: this.viewportHeight(), contentWidth: this.contentWidth(), maxLineWidth: modes.current.maxLineWidth, display: modes },
       this.pendingDrafts(),
     );
     this.state = result.state;
@@ -499,6 +597,39 @@ export class AnnotateCard implements Component, Focusable {
   private contentWidth(): number {
     const inner = this.renderedInner ?? Math.floor(this.tui.terminal.columns * 0.8) - 2;
     return Math.max(1, inner - 2 * PAD_X - gutterWidth(this.file.lines.length));
+  }
+
+  // The reducer and renderer always consume layouts from this one cache.
+  // Markdown scans and display lines are width-independent; only the visual
+  // rows need rebuilding when the content width changes.
+  private displayModes(width: number): ViewerDisplayModes {
+    const renderOn = this.state.renderOn !== false;
+    return {
+      current: this.layoutFor(width, renderOn),
+      alternate: this.layoutFor(width, !renderOn),
+      canToggleRender: this.markdownScans !== null,
+    };
+  }
+
+  private displayLinesFor(renderOn: boolean): DisplayLine[] {
+    const effective = renderOn && this.markdownScans !== null;
+    const cached = this.displayLines.get(effective);
+    if (cached) return cached;
+    const displays = this.file.lines.map((raw, line) =>
+      buildDisplayLine(raw, effective ? this.markdownScans?.[line] : undefined, this.highlighted[line] ?? ""));
+    this.displayLines.set(effective, displays);
+    return displays;
+  }
+
+  private layoutFor(width: number, renderOn: boolean): VisualLayout {
+    const effective = renderOn && this.markdownScans !== null;
+    const viewport = Math.max(1, width);
+    const key = `${viewport}:${effective ? "md" : "plain"}`;
+    const cached = this.layouts.get(key);
+    if (cached) return cached;
+    const layout = buildVisualLayout(this.file.lines, this.displayLinesFor(effective), viewport);
+    this.layouts.set(key, layout);
+    return layout;
   }
 
   // Renders the floating comment box over the content rows: occluded rows
@@ -741,34 +872,41 @@ export class AnnotateCard implements Component, Focusable {
   // cursor cell.
   private renderLine(
     line: number,
+    display: DisplayLine,
     selection: Range | null,
     cursorOn: boolean,
     emphasis: Map<Range, SpanStyle>,
     matchSpans: StyleSpan[],
   ): string {
     const raw = this.file.lines[line] ?? "";
-    // Search matches go first so the later spans wrap around them: inverse
-    // stays the outermost style on any cell it covers.
-    const spans: StyleSpan[] = [...matchSpans];
+    const prefix = display.prefixWidth;
+    // Markdown/display spans stay independent of interaction emphasis.
+    // Selection keeps the legacy behavior of replacing the styled base.
+    const spans: StyleSpan[] = matchSpans.map((span) => ({
+      start: span.start + prefix,
+      end: span.end + prefix,
+      style: span.style,
+    }));
 
     let base: string;
     if (selection !== null && line >= selection.startLine && line <= selection.endLine) {
-      base = tabExpanded(raw); // raw, tab-expanded, unhighlighted
+      base = stripTerminalSequences(display.text);
       const span = this.displaySpan(raw, line, selection);
-      if (span !== null) spans.push({ start: span[0], end: span[1], style: "inverse" });
+      if (span !== null) spans.push({ start: span[0] + prefix, end: span[1] + prefix, style: "inverse" });
     } else {
-      base = this.highlighted[line] ?? "";
+      base = display.text;
+      spans.unshift(...display.spans);
     }
 
     for (const p of this.pending()) {
       if (line < p.startLine || line > p.endLine) continue;
       const span = this.displaySpan(raw, line, p);
-      if (span !== null) spans.push({ start: span[0], end: span[1], style: emphasis.get(p) ?? "underline" });
+      if (span !== null) spans.push({ start: span[0] + prefix, end: span[1] + prefix, style: emphasis.get(p) ?? "underline" });
     }
 
     let virtualCursorCell = false;
     if (cursorOn && this.state.cursor.line === line) {
-      const dcol = rawColToDisplayCol(raw, this.state.cursor.col);
+      const dcol = prefix + rawColToDisplayCol(raw, this.state.cursor.col);
       if (dcol < visibleWidth(base)) {
         spans.push({ start: dcol, end: dcol + 1, style: "inverse" });
       } else {

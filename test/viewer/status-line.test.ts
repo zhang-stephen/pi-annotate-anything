@@ -167,7 +167,7 @@ test("cardModeOf maps kebab ViewerMode keys to the camel FOOTER_HINTS keys", () 
 test("renderCommandLine renders the mode hints dim and pads to the inner width", () => {
   const row = renderCommandLine({ kind: "hints", mode: "normal" }, 100, colors);
   const hints = FOOTER_HINTS.normal.hints;
-  assert.equal(row, "d(" + hints + ")" + " ".repeat(100 - hints.length));
+  assert.equal(row, "d(" + hints.slice(0, 100) + ")");
   assert.equal(visibleWidth(renderCommandLine({ kind: "hints", mode: "normal" }, 100, plain)), 100);
 });
 
@@ -221,7 +221,7 @@ test("cmdline hints: message right-aligned in accent, hints truncate first", () 
 test("FOOTER_HINTS normal mode carries the NORMAL badge and the full hint line", () => {
   const { badge, hints } = FOOTER_HINTS.normal;
   assert.equal(badge, "-- NORMAL --");
-  assert.equal(hints, "hjkl move  v/V select  / search  n/N next/prev  c/x comment/delete  p preview  :q close");
+  assert.equal(hints, "hjkl move  v/V select  / search  n/N next/prev  c/x comment/delete  p preview  ^ first-non-blank  zw wrap  zr md  :q close");
   assert.ok(hints.includes("/ search"), "normal hints mention / search");
   assert.ok(hints.includes("n/N next/prev"), "normal hints mention n/N next/prev");
   assert.ok(hints.includes("c/x"), "normal hints mention c/x");

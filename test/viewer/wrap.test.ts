@@ -403,3 +403,23 @@ test("round-trips raw positions through visual rows across tabs, prefixes, astra
     }
   });
 });
+
+test("keeps emoji-tab display spans and wrapped slices in the same grapheme geometry", () => {
+  const emoji = "\u{1F44D}\u{1F3FD}";
+  const raw = `${emoji}\tX`;
+  const display = buildDisplayLine(raw, { spans: [{ startCol: 5, endCol: 6, style: "mdBold" }] });
+  assert.equal(display.text, `${emoji}  X`);
+  const layout = buildVisualLayout([raw], [display], 3);
+  assert.deepEqual(
+    layout.rows.map((row) => [row.startCol, row.endCol, row.text]),
+    [
+      [0, 4, emoji],
+      [4, 6, "  X"],
+    ],
+  );
+  assert.deepEqual(layout.rows[0].spans, []);
+  assert.deepEqual(layout.rows[1].spans, [{ start: 2, end: 3, style: "mdBold" }]);
+  const visual = toVisualPosition([raw], layout, { line: 0, col: 5 });
+  assert.deepEqual(visual, { row: 1, col: 2 });
+  assert.deepEqual(toRawPosition([raw], layout, visual.row, visual.col), { line: 0, col: 5 });
+});

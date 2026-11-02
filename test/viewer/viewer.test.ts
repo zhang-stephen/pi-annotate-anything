@@ -175,6 +175,8 @@ function makeCard(opts: { lines: string[]; path?: string; cwd?: string; rows?: n
       return BG_ON + text + BG_OFF;
     },
     bold: (text: string) => BOLD_ON + text + INTENSITY_OFF,
+    italic: (text: string) => "\x1b[3m" + text + "\x1b[23m",
+    strikethrough: (text: string) => "\x1b[9m" + text + "\x1b[29m",
     underline: (text: string) => UNDERLINE_ON + text + UNDERLINE_OFF,
     inverse: (text: string) => "\x1b[7m" + text + "\x1b[27m",
   } as unknown as Theme;
@@ -201,6 +203,11 @@ function makeCard(opts: { lines: string[]; path?: string; cwd?: string; rows?: n
     opts.focus ?? null,
   );
   return { card, fgCalls, bgCalls, pending, drafts, calls };
+}
+
+function turnWrapOff(card: AnnotateCard): void {
+  card.handleInput("z");
+  card.handleInput("w");
 }
 
 const strip = (row: string) => stripTerminalSequences(row);
@@ -251,14 +258,14 @@ test("chrome colors come from the theme: fg tokens; background transparent by de
 
 test("statusline and cmdline follow the mode: badge in accent, hints in dim", () => {
   const normal = makeCard({ lines: ["alpha", "beta"] });
-  // Width 100 so the 90-column normal hints fit whole and reach the dim
+  // Width 160 so the expanded normal hints fit whole and reach the dim
   // token untruncated.
-  let bare = normal.card.render(100).map(strip);
+  let bare = normal.card.render(160).map(strip);
   assert.ok(bare[bare.length - 3].startsWith("│ -- NORMAL --"));
   assert.ok(bare[bare.length - 3].endsWith("1:1 │"));
   assert.ok(bare[bare.length - 2].startsWith("│ hjkl move  v/V select"));
   assert.ok(normal.fgCalls.some((c) => c.token === "accent" && c.text === "-- NORMAL --"));
-  assert.ok(normal.fgCalls.some((c) => c.token === "dim" && c.text === "hjkl move  v/V select  / search  n/N next/prev  c/x comment/delete  p preview  :q close"));
+  assert.ok(normal.fgCalls.some((c) => c.token === "dim" && c.text === "hjkl move  v/V select  / search  n/N next/prev  c/x comment/delete  p preview  ^ first-non-blank  zw wrap  zr md  :q close"));
 
   // Visual-char: the statusline carries the selection range as L:C-L:C.
   const visual = makeCard({ lines: ["alpha", "beta"] });
@@ -326,6 +333,7 @@ test("cmdline shows pending keys right-aligned, following state the same frame",
 
 test("content rows clip to the content width (borders + padding take 4 columns)", () => {
   const h = makeCard({ lines: ["x".repeat(60)] });
+  turnWrapOff(h.card);
   const width = 30;
   const bare = h.card.render(width).map(strip);
   assert.equal(bare.length, 5);
@@ -364,6 +372,7 @@ const digitLine = (n: number) => Array.from({ length: n }, (_, i) => String(i % 
 
 test("render windows the content at scrollLeft behind a fixed gutter", () => {
   const h = makeCard({ lines: [digitLine(100)] });
+  turnWrapOff(h.card);
   h.card.render(30); // inner 28, padding 2, gutter 6, content width 20
   for (let i = 0; i < 30; i++) h.card.handleInput("l"); // cursor 30 -> scrollLeft 11
   const rows = h.card.render(30);
@@ -376,6 +385,7 @@ test("render windows the content at scrollLeft behind a fixed gutter", () => {
 
 test("rows are cut at the window's right edge without indicators", () => {
   const h = makeCard({ lines: [digitLine(100)] });
+  turnWrapOff(h.card);
   const rows = h.card.render(30).map(strip);
   // No scroll: window [0, 20), plain cut - no dots.
   assert.equal(rows[1], "│ 1     " + digitLine(20) + " │");
@@ -383,6 +393,7 @@ test("rows are cut at the window's right edge without indicators", () => {
 
 test("the inverse cursor cell stays visible inside the window", () => {
   const h = makeCard({ lines: [digitLine(100)] });
+  turnWrapOff(h.card);
   h.card.render(30);
   for (let i = 0; i < 30; i++) h.card.handleInput("l"); // cursor 30, scrollLeft 9
   for (let i = 0; i < 4; i++) h.card.handleInput("h"); // cursor 26: inside [10, 28)
@@ -393,6 +404,7 @@ test("the inverse cursor cell stays visible inside the window", () => {
 test("wide chars straddling the window edge are dropped whole, rows keep exact width", () => {
   const wide = "a" + "中".repeat(20) + "b"; // display width 42
   const h = makeCard({ lines: [wide] });
+  turnWrapOff(h.card);
   // scrollLeft 0: the 中 straddling the right edge (cols 19-20 vs window
   // [0, 20)) is dropped whole, and the row still fills exactly 30 columns.
   let rows = h.card.render(30);
@@ -410,6 +422,7 @@ test("wide chars straddling the window edge are dropped whole, rows keep exact w
 
 test("render-time clamp: stale scrollLeft beyond the bound renders without overflow", () => {
   const h = makeCard({ lines: ["x".repeat(100)] });
+  turnWrapOff(h.card);
   h.card.render(30); // contentWidth 20
   h.card.handleInput("$"); // cursor 100 -> scrollLeft 81 (the clamp bound)
   // Re-render wider: contentWidth 110 shrinks the bound to 0, so the window
@@ -422,6 +435,7 @@ test("render-time clamp: stale scrollLeft beyond the bound renders without overf
 
 test("comment box anchors to the scroll-corrected display column", () => {
   const h = makeCard({ lines: ["x".repeat(120)] });
+  turnWrapOff(h.card);
   h.card.render(100); // inner 98, padding 2, gutter 6, content width 90
   for (let i = 0; i < 20; i++) h.card.handleInput("l"); // cursor 20, scrollLeft 0
   h.card.handleInput("v"); // anchor at col 20
@@ -1644,4 +1658,101 @@ test("no focus keeps the opening-at-top state every pre-existing caller gets", (
   const state = stateOf(h.card);
   assert.deepEqual(state.cursor, { line: 0, col: 0 });
   assert.equal(state.scrollTop, 0);
+});
+
+// Markdown and visual-row rendering ------------------------------------------
+
+test("Markdown renders every phase-1 token without reflowing raw source lines", () => {
+  const lines = [
+    "# H1",
+    "plain **bold** *em* ~~del~~ `code` [label](https://a.test) & <b>",
+    "> quote **b**",
+    "  - item *i*",
+    "    - sub",
+    "      continuation",
+    "---",
+    "",
+    "```ts",
+    "const x = \"**no**\";",
+    "```",
+    "",
+    "Setext",
+    "======",
+    "    indented **plain**",
+    "| a | b |",
+    "[ref]: https://a.test \"t\"",
+    "![alt](img.png)",
+  ];
+  const h = makeCard({ path: "/work/README.md", lines, rows: 60 });
+  const rows = h.card.render(120);
+  const bare = rows.map(strip);
+  assert.equal(rows.length, lines.length + 4, "one visual row per raw line when everything fits");
+  const text = bare.join("\n");
+  for (const raw of ["& <b>", "| a | b |", "[ref]: https://a.test", "![alt](img.png)", "const x ="]) {
+    assert.ok(text.includes(raw), `raw text remains visible: ${raw}`);
+  }
+  assert.ok(text.includes("# H1") && text.includes("Setext"));
+  assert.ok(text.includes("\u258e > quote"));
+  const fgTokens = new Set(h.fgCalls.map((call) => call.token));
+  for (const token of ["mdHeading", "mdCode", "mdLink", "mdLinkUrl", "mdCodeBlockBorder", "mdQuoteBorder", "mdHr", "mdListBullet", "dim"]) {
+    assert.ok(fgTokens.has(token), `Markdown style uses theme token ${token}`);
+  }
+  assert.ok(h.bgCalls.some((call) => call.token === "toolPendingBg"));
+  assert.ok(rows.some((row) => row.includes("\x1b[3m")), "italic theme method is used");
+  assert.ok(rows.some((row) => row.includes("\x1b[9m")), "strikethrough theme method is used");
+  for (const row of rows) assert.equal(visibleWidth(row), 120);
+});
+
+test("wrap renders visual rows, rebuilds on resize, and zw switches to logical nowrap", () => {
+  const h = makeCard({ lines: ["alpha beta gamma"] });
+  const body = (rows: string[]) => rows.slice(1, -3).map(strip);
+  const narrow = h.card.render(18);
+  const narrowBody = body(narrow);
+  assert.equal(narrowBody.length, 3);
+  assert.ok(narrowBody[0].includes("alpha "));
+  assert.ok(narrowBody[1].includes("beta "));
+  assert.ok(narrowBody[2].includes("gamma"));
+  const wideBody = body(h.card.render(24));
+  assert.equal(wideBody.length, 2);
+  assert.deepEqual(body(h.card.render(18)), narrowBody, "returning to the same width reuses the correct geometry");
+  h.card.handleInput("z");
+  h.card.handleInput("w");
+  assert.equal(body(h.card.render(18)).length, 1, "zw off keeps one logical row");
+  h.card.handleInput("z");
+  h.card.handleInput("w");
+  assert.deepEqual(body(h.card.render(18)), narrowBody, "zw on restores the wrapped layout");
+});
+
+test("zr toggles Markdown styling only for Markdown files", () => {
+  const md = makeCard({ path: "/work/README.md", lines: ["# H1"] });
+  md.card.render(60);
+  assert.ok(md.fgCalls.some((call) => call.token === "mdHeading"));
+  const initialCalls = md.fgCalls.length;
+  md.card.handleInput("z");
+  md.card.handleInput("r");
+  md.card.render(60);
+  assert.ok(!md.fgCalls.slice(initialCalls).some((call) => call.token === "mdHeading"), "render OFF drops Markdown heading styling");
+  const plainCalls = md.fgCalls.length;
+  md.card.handleInput("z");
+  md.card.handleInput("r");
+  md.card.render(60);
+  assert.ok(md.fgCalls.slice(plainCalls).some((call) => call.token === "mdHeading"), "render ON restores Markdown styling");
+  const plain = makeCard({ path: "/work/a.ts", lines: ["# H1"] });
+  const before = plain.card.render(60).slice(1, -3);
+  plain.card.handleInput("z");
+  plain.card.handleInput("r");
+  assert.deepEqual(plain.card.render(60).slice(1, -3), before, "zr is inert for non-Markdown content");
+});
+
+test("continuation gutters stay blank and virtual EOL cursor appears only on the final segment", () => {
+  const h = makeCard({ lines: ["abcdef"] });
+  h.pending.push({ startLine: 0, startCol: 0, endLine: 0, endCol: 6 });
+  h.card.handleInput("$");
+  const body = h.card.render(14).slice(1, -3);
+  assert.equal(body.length, 2);
+  assert.ok(body[0].includes(PENDING_ICON));
+  assert.ok(!body[1].includes(PENDING_ICON), "continuation does not duplicate the pending count");
+  assert.ok(!body[0].includes(INVERSE_ON));
+  assert.ok(body[1].includes(INVERSE_ON), "logical EOL inverse cell rides on the final visual segment");
+  for (const row of body) assert.ok(visibleWidth(row) <= 14);
 });

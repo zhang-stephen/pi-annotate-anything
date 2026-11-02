@@ -68,15 +68,11 @@ interface Grapheme {
 // Segments raw into graphemes width'ed in display.text's grapheme space, so
 // row fitting, row text slicing, and both mapping directions share one
 // geometry. Non-tab clusters render verbatim and keep their whole-cluster
-// width; a tab's width is the number of spaces tui/display's tabExpanded
-// replaced it with -- its tab stop over the code-point width tabExpanded
-// accumulates (visibleWidth per code point, so each code point of a
-// multi-code-point cluster counts separately there even though the whole
-// cluster renders at its whole-cluster width). Mirrors tabExpanded exactly,
-// keeping the walk's geometry equal to the rendered line's geometry.
+// width; tabs advance over the same whole-grapheme expansion counter used
+// by tui/display's tabExpanded.
 function segmentGraphemes(raw: string): Grapheme[] {
   const out: Grapheme[] = [];
-  let expandedWidth = 0; // tabExpanded's code-point width counter
+  let expandedWidth = 0; // tabExpanded's whole-grapheme width counter
   for (const seg of GRAPHEMES.segment(raw)) {
     let width: number;
     if (seg.segment === "\t") {
@@ -85,7 +81,7 @@ function segmentGraphemes(raw: string): Grapheme[] {
       expandedWidth = stop;
     } else {
       width = visibleWidth(seg.segment);
-      for (const ch of seg.segment) expandedWidth += visibleWidth(ch);
+      expandedWidth += width;
     }
     out.push({ start: seg.index, end: seg.index + seg.segment.length, width });
   }

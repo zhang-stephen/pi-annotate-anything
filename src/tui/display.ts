@@ -23,6 +23,8 @@ export function sliceWindow(styled: string, start: number, len: number): string 
 
 export const DEFAULT_TAB_SIZE = 4;
 
+const GRAPHEMES = new Intl.Segmenter(undefined, { granularity: "grapheme" });
+
 // Smallest multiple of tabSize strictly greater than width (tab behavior).
 function nextTabStop(width: number, tabSize: number): number {
   const size = Math.max(1, tabSize);
@@ -30,36 +32,36 @@ function nextTabStop(width: number, tabSize: number): number {
 }
 
 // Replaces every tab in s with spaces advancing to the next multiple of
-// tabSize (default 4). Widths after a tab account for wide chars, so the
-// result's visibleWidth matches rawColToDisplayCol(s, s.length).
+// tabSize (default 4). Widths after a tab account for whole graphemes, so
+// the result's visibleWidth matches rawColToDisplayCol(s, s.length).
 export function tabExpanded(s: string, tabSize: number = DEFAULT_TAB_SIZE): string {
   if (!s.includes("\t")) return s;
   let out = "";
   let width = 0;
-  for (const ch of s) {
-    if (ch === "\t") {
+  for (const seg of GRAPHEMES.segment(s)) {
+    if (seg.segment === "\t") {
       const next = nextTabStop(width, tabSize);
       out += " ".repeat(next - width);
       width = next;
     } else {
-      out += ch;
-      width += visibleWidth(ch);
+      out += seg.segment;
+      width += visibleWidth(seg.segment);
     }
   }
   return out;
 }
 
 // Maps a raw column (UTF-16 code-unit index, the Position.col convention of
-// selection.ts) to its display column after tab expansion; wide chars count
-// as 2 columns. Columns outside the line clamp to the line's display width.
+// selection.ts) to its display column after tab expansion. Whole graphemes
+// use peer visible width; a column inside one resolves to its far edge.
+// Columns outside the line clamp to the line's display width.
 export function rawColToDisplayCol(line: string, col: number, tabSize: number = DEFAULT_TAB_SIZE): number {
   const bounded = Math.min(Math.max(col, 0), line.length);
   let width = 0;
-  let i = 0;
-  while (i < bounded) {
-    const ch = String.fromCodePoint(line.codePointAt(i) as number);
-    width = ch === "\t" ? nextTabStop(width, tabSize) : width + visibleWidth(ch);
-    i += ch.length;
+  for (const seg of GRAPHEMES.segment(line)) {
+    if (bounded <= seg.index) break;
+    width = seg.segment === "\t" ? nextTabStop(width, tabSize) : width + visibleWidth(seg.segment);
+    if (bounded < seg.index + seg.segment.length) break;
   }
   return width;
 }
@@ -71,14 +73,15 @@ export function rawColToDisplayCol(line: string, col: number, tabSize: number = 
 // rawColToDisplayCol. Duplicate columns are fine.
 export function rawColsToDisplayCols(line: string, cols: number[], tabSize: number = DEFAULT_TAB_SIZE): number[] {
   const out = new Array<number>(cols.length);
+  const segments = Array.from(GRAPHEMES.segment(line));
   let width = 0;
-  let i = 0;
+  let index = 0;
   for (let k = 0; k < cols.length; k++) {
     const target = Math.min(Math.max(cols[k], 0), line.length);
-    while (i < target) {
-      const ch = String.fromCodePoint(line.codePointAt(i) as number);
-      width = ch === "\t" ? nextTabStop(width, tabSize) : width + visibleWidth(ch);
-      i += ch.length;
+    while (index < segments.length && target > segments[index].index) {
+      const seg = segments[index];
+      width = seg.segment === "\t" ? nextTabStop(width, tabSize) : width + visibleWidth(seg.segment);
+      index++;
     }
     out[k] = width;
   }

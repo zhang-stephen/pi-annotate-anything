@@ -67,3 +67,15 @@ test("buildDisplayLine omits zero-width raw spans", () => {
   });
   assert.deepEqual(line.spans, [{ start: 0, end: 2, style: "mdDim" }]);
 });
+
+test("uses whole-grapheme columns for multi-code-point emoji before tabs and styled text", () => {
+  for (const [emoji, xCol] of [
+    ["\u{1F44D}\u{1F3FD}", 5],
+    ["\u{1F468}\u200D\u{1F469}\u200D\u{1F467}", 9],
+  ] as const) {
+    const raw = `${emoji}\tX`;
+    const line = buildDisplayLine(raw, { spans: [{ startCol: xCol, endCol: xCol + 1, style: "mdBold" }] });
+    assert.equal(line.text, `${emoji}  X`);
+    assert.deepEqual(line.spans, [{ start: 4, end: 5, style: "mdBold" }]);
+  }
+});
